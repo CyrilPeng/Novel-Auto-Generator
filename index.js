@@ -419,7 +419,8 @@ function getAIMessagesInfo() {
 }
 
 function hasActiveGeneration() {
-    return ['#mes_stop:not([style*="display: none"])', '#send_but[disabled]', '.mes.generating'].some(s => document.querySelector(s));
+    // 只检测最可靠的指标：是否有正在生成的消息
+    return !!document.querySelector('.mes.generating');
 }
 
 async function waitForNewResponse(prevCount) {
