@@ -32,11 +32,15 @@ const defaultSettings = {
         extract: true,
         advanced: true,
     },
-    // 🆕 DOM稳定性检查配置（用于兼容总结等后处理插件）
+    // DOM稳定性检查配置
     enableDomStabilityCheck: true,
     domQuietPeriod: 3000,
     domStabilityTimeout: 120000,
     postProcessWaitTime: 1000,
+    // 弹窗检测配置
+    enableToastDetection: true,
+    toastWaitTimeout: 300000,
+    toastCheckInterval: 500,
 };
 
 let settings = {};
@@ -257,6 +261,30 @@ function showHelp(topic) {
     <li>非常保守：安静8秒，额外等待3秒</li>
 </ul>
         `,
+        toastDetection: `
+<h3>💬 弹窗检测说明</h3>
+<h4>📌 什么是弹窗检测？</h4>
+<p>检测页面上是否有活跃的通知弹窗（如总结插件的进度提示），等待弹窗消失后再继续下一章。</p>
+
+<h4>📌 为什么需要？</h4>
+<p>总结插件在处理时会显示弹窗（如"正在处理 自动 更新..."），弹窗消失通常意味着插件处理完成。</p>
+
+<h4>📌 与 DOM 稳定性检查的区别</h4>
+<ul>
+    <li><b>弹窗检测</b>：通过弹窗判断插件是否在工作，更直观</li>
+    <li><b>DOM 稳定性检查</b>：通过内容变化判断，更精确</li>
+    <li><b>推荐</b>：两者同时启用，弹窗检测先执行</li>
+</ul>
+
+<h4>📌 参数说明</h4>
+<ul>
+    <li><b>等待超时</b>：最长等待弹窗消失的时间（默认5分钟）</li>
+    <li><b>检查间隔</b>：检查弹窗是否存在的间隔（默认500ms）</li>
+</ul>
+
+<h4>📌 处理流程</h4>
+<pre>AI生成完成 → 基础稳定性检查 → 弹窗检测 → DOM稳定性检查 → 下一章</pre>
+        `,
         advanced: `
 <h3>⚙️ 高级设置说明</h3>
 
@@ -274,9 +302,6 @@ function showHelp(topic) {
     <li><b>最大重试</b>：单章生成失败后的最大重试次数</li>
     <li><b>最小章节长度</b>：AI回复少于此字数视为失败，触发重试</li>
 </ul>
-
-<h4>📌 DOM稳定性检查</h4>
-<p>用于兼容总结插件等后处理插件，详见该区块的帮助按钮。</p>
 
 <h4>📌 推荐配置</h4>
 <table style="width:100%; font-size:12px; border-collapse:collapse;">
@@ -336,10 +361,8 @@ function showHelp(topic) {
     modal.on('click', function(e) { if (e.target === modal[0]) closeModal(e); });
     $(document).one('keydown.nagModal', function(e) { if (e.key === 'Escape') closeModal(e); });
     
-    // ✅ 修复：添加到 body 而不是 #nag-container，保持弹窗始终在最中间。
     $('body').append(modal);
 }
-
 
 // ============================================
 // 预览
@@ -468,6 +491,85 @@ async function sendMessage(text) {
 }
 
 // ============================================
+// 弹窗检测（兼容总结等后处理插件）
+// ============================================
+
+/**
+ * 检测是否有活跃的 toastr 弹窗
+ * @returns {boolean}
+ */
+function hasActiveToast() {
+    // 检测 toastr 容器中的通知
+    const toastContainer = document.querySelector('#toast-container');
+    if (toastContainer) {
+        const toasts = toastContainer.querySelectorAll('.toast');
+        if (toasts.length > 0) {
+            return true;
+        }
+    }
+    
+    // 检测可能的其他弹窗形式
+    const customToasts = document.querySelectorAll('.toast-message, .toast-info, .toast-warning, .toast-success, .toast-error');
+    if (customToasts.length > 0) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * 获取当前弹窗的文本内容（用于日志）
+ * @returns {string}
+ */
+function getToastText() {
+    const toastContainer = document.querySelector('#toast-container');
+    if (toastContainer) {
+        const toast = toastContainer.querySelector('.toast');
+        if (toast) {
+            return toast.textContent?.trim().substring(0, 50) || '(未知内容)';
+        }
+    }
+    return '';
+}
+
+/**
+ * 等待所有弹窗消失
+ * @param {number} timeout - 超时时间(ms)
+ * @param {number} checkInterval - 检查间隔(ms)
+ * @returns {Promise<boolean>}
+ */
+async function waitForToastsClear(timeout, checkInterval) {
+    const startTime = Date.now();
+    let lastLogTime = 0;
+    
+    while (hasActiveToast()) {
+        const elapsed = Date.now() - startTime;
+        
+        // 检查超时
+        if (elapsed > timeout) {
+            log(`弹窗等待超时 (${Math.round(timeout/1000)}秒)，继续执行`, 'warning');
+            return false;
+        }
+        
+        // 检查用户中止
+        if (abortGeneration) {
+            throw new Error('用户中止');
+        }
+        
+        // 每5秒输出一次日志
+        if (elapsed - lastLogTime >= 5000) {
+            const toastText = getToastText();
+            log(`等待弹窗消失... (${Math.round(elapsed/1000)}s) - ${toastText}`, 'debug');
+            lastLogTime = elapsed;
+        }
+        
+        await sleep(checkInterval);
+    }
+    
+    return true;
+}
+
+// ============================================
 // DOM 稳定性检测（兼容总结等后处理插件）
 // ============================================
 
@@ -512,17 +614,16 @@ async function waitForDomStable(targetElement, quietPeriod, timeout) {
         
         // 创建变化观察者
         observer = new MutationObserver((mutations) => {
-            // 检测到任何变化，重置计时器
             lastChangeTime = Date.now();
             log(`检测到DOM变化 (${mutations.length}处)，重置稳定计时`, 'debug');
         });
         
         // 监听所有类型的变化
         observer.observe(targetElement, {
-            childList: true,      // 子节点增删
-            subtree: true,        // 所有后代节点
-            characterData: true,  // 文本内容变化
-            attributes: true,     // 属性变化
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
         });
         
         // 定期检查是否已稳定
@@ -533,7 +634,6 @@ async function waitForDomStable(targetElement, quietPeriod, timeout) {
             const timeSinceLastChange = now - lastChangeTime;
             const totalElapsed = now - startTime;
             
-            // 检查是否超时
             if (totalElapsed > timeout) {
                 cleanup();
                 resolved = true;
@@ -542,7 +642,6 @@ async function waitForDomStable(targetElement, quietPeriod, timeout) {
                 return;
             }
             
-            // 检查是否用户中止
             if (abortGeneration) {
                 cleanup();
                 resolved = true;
@@ -550,7 +649,6 @@ async function waitForDomStable(targetElement, quietPeriod, timeout) {
                 return;
             }
             
-            // 检查是否已稳定足够长时间
             if (timeSinceLastChange >= quietPeriod) {
                 cleanup();
                 resolved = true;
@@ -559,7 +657,6 @@ async function waitForDomStable(targetElement, quietPeriod, timeout) {
                 return;
             }
             
-            // 每5秒输出一次等待状态
             if (totalElapsed % 5000 < 500) {
                 log(`等待DOM稳定... (已等待 ${Math.round(totalElapsed/1000)}s, 距上次变化 ${Math.round(timeSinceLastChange/1000)}s)`, 'debug');
             }
@@ -574,7 +671,7 @@ async function waitForDomStable(targetElement, quietPeriod, timeout) {
 async function waitForNewResponse(prevCount) {
     const start = Date.now();
     
-    // 阶段1：等待生成开始（只在这个阶段可以中止）
+    // 阶段1：等待生成开始
     log('等待生成开始...', 'debug');
     
     while (true) {
@@ -604,7 +701,7 @@ async function waitForNewResponse(prevCount) {
         await sleep(500);
     }
     
-    // 阶段2：等待生成完成（生成已开始，让它完成，不再检查中止）
+    // 阶段2：等待生成完成
     log('等待AI生成完成...', 'debug');
     await sleep(500);
     
@@ -615,7 +712,7 @@ async function waitForNewResponse(prevCount) {
         await sleep(300);
     }
     
-    // 阶段3：基础稳定性检查（内容长度稳定）
+    // 阶段3：基础稳定性检查
     log('进行基础稳定性检查...', 'debug');
     let lastLen = 0, stable = 0;
     while (stable < settings.stabilityRequiredCount) {
@@ -634,9 +731,24 @@ async function waitForNewResponse(prevCount) {
         await sleep(settings.stabilityCheckInterval);
     }
     
-    // 阶段4：DOM稳定性检查（等待后处理插件完成）
+    // 阶段4：等待弹窗消失
+    if (settings.enableToastDetection && hasActiveToast()) {
+        log('检测到活跃弹窗，等待后处理插件完成...', 'info');
+        try {
+            await waitForToastsClear(
+                settings.toastWaitTimeout,
+                settings.toastCheckInterval
+            );
+            log('弹窗已消失，后处理插件应已完成', 'success');
+        } catch (e) {
+            if (e.message === '用户中止') throw e;
+            log(`弹窗等待异常: ${e.message}`, 'warning');
+        }
+    }
+    
+    // 阶段5：DOM稳定性检查
     if (settings.enableDomStabilityCheck) {
-        log('等待后处理插件完成（DOM稳定性检查）...', 'info');
+        log('等待DOM稳定...', 'info');
         
         const lastMsg = getLastAIMessageElement();
         if (lastMsg) {
@@ -652,7 +764,6 @@ async function waitForNewResponse(prevCount) {
             }
         }
         
-        // 额外等待时间（确保所有后处理完成）
         if (settings.postProcessWaitTime > 0) {
             log(`额外等待 ${settings.postProcessWaitTime}ms...`, 'debug');
             await sleep(settings.postProcessWaitTime);
@@ -693,7 +804,6 @@ async function startGeneration() {
     
     try {
         for (let i = settings.currentChapter; i < settings.totalChapters; i++) {
-            // 检查点1：循环开始时
             if (abortGeneration) {
                 log('检测到停止信号，退出生成循环', 'info');
                 break;
@@ -701,7 +811,6 @@ async function startGeneration() {
             
             while (settings.isPaused && !abortGeneration) await sleep(500);
             
-            // 检查点2：暂停恢复后
             if (abortGeneration) {
                 log('检测到停止信号，退出生成循环', 'info');
                 break;
@@ -736,7 +845,6 @@ async function startGeneration() {
                 }
             }
             
-            // 检查点3：重试循环结束后
             if (abortGeneration) {
                 log('检测到停止信号，退出生成循环', 'info');
                 break;
@@ -847,9 +955,13 @@ function updateUI() {
     $('#nag-set-start-floor, #nag-set-end-floor').prop('disabled', settings.exportAll);
     $('#nag-floor-inputs').toggleClass('disabled', settings.exportAll);
     
-    // 更新DOM稳定性检查相关控件的禁用状态
+    // DOM稳定性检查控件
     $('#nag-set-dom-quiet, #nag-set-dom-timeout, #nag-set-post-wait').prop('disabled', !settings.enableDomStabilityCheck);
     $('#nag-dom-settings').toggleClass('disabled', !settings.enableDomStabilityCheck);
+    
+    // 弹窗检测控件
+    $('#nag-set-toast-timeout, #nag-set-toast-interval').prop('disabled', !settings.enableToastDetection);
+    $('#nag-toast-settings').toggleClass('disabled', !settings.enableToastDetection);
 }
 
 function toggleTagSettings() {
@@ -1009,7 +1121,32 @@ function createUI() {
                         <hr class="nag-divider">
                         
                         <div class="nag-subsection-header">
-                            <span>🔍 DOM稳定性检查（兼容总结插件）</span>
+                            <span>💬 弹窗检测（兼容总结插件）</span>
+                            <span class="nag-help-btn" data-help="toastDetection" title="帮助">❓</span>
+                        </div>
+                        <div class="nag-checkbox-group">
+                            <label class="nag-checkbox-label">
+                                <input type="checkbox" id="nag-set-toast-detection">
+                                <span>启用弹窗检测</span>
+                            </label>
+                        </div>
+                        <div id="nag-toast-settings">
+                            <div class="nag-setting-row">
+                                <div class="nag-setting-item">
+                                    <label>等待超时 (ms)</label>
+                                    <input type="number" id="nag-set-toast-timeout" min="10000" step="10000">
+                                </div>
+                                <div class="nag-setting-item">
+                                    <label>检查间隔 (ms)</label>
+                                    <input type="number" id="nag-set-toast-interval" min="100" step="100">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr class="nag-divider">
+                        
+                        <div class="nag-subsection-header">
+                            <span>🔍 DOM稳定性检查</span>
                             <span class="nag-help-btn" data-help="domStability" title="帮助">❓</span>
                         </div>
                         <div class="nag-checkbox-group">
@@ -1035,7 +1172,7 @@ function createUI() {
                             </div>
                         </div>
                         
-                        <div style="margin-top:10px;font-size:11px;opacity:0.5">控制台调试: <code>nagDebug()</code></div>
+                        <div style="margin-top:15px;font-size:11px;opacity:0.5">控制台调试: <code>nagDebug()</code></div>
                     </div>
                 </div>
                 
@@ -1108,6 +1245,21 @@ function bindEvents() {
         saveSettings(); 
     });
     
+    // 弹窗检测相关事件
+    $('#nag-set-toast-detection').on('change', function() { 
+        settings.enableToastDetection = $(this).prop('checked'); 
+        updateUI();
+        saveSettings(); 
+    });
+    $('#nag-set-toast-timeout').on('change', function() { 
+        settings.toastWaitTimeout = +$(this).val() || 300000; 
+        saveSettings(); 
+    });
+    $('#nag-set-toast-interval').on('change', function() { 
+        settings.toastCheckInterval = +$(this).val() || 500; 
+        saveSettings(); 
+    });
+    
     const map = {
         '#nag-set-total':'totalChapters',
         '#nag-set-prompt':'prompt',
@@ -1153,6 +1305,11 @@ function syncUI() {
     $('#nag-set-dom-quiet').val(settings.domQuietPeriod);
     $('#nag-set-dom-timeout').val(settings.domStabilityTimeout);
     $('#nag-set-post-wait').val(settings.postProcessWaitTime);
+    
+    // 弹窗检测相关
+    $('#nag-set-toast-detection').prop('checked', settings.enableToastDetection);
+    $('#nag-set-toast-timeout').val(settings.toastWaitTimeout);
+    $('#nag-set-toast-interval').val(settings.toastCheckInterval);
     
     toggleTagSettings();
     updateUI();

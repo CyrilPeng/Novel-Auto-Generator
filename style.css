@@ -1,5 +1,5 @@
 /* ============================================
-   Novel Auto Generator - 样式表 (修正版)
+   Novel Auto Generator - 样式表
    ============================================ */
 
 #nag-container {
@@ -472,6 +472,10 @@
     word-break: break-all;
 }
 
+/* ============================================
+   高级设置样式
+   ============================================ */
+
 /* 分隔线 */
 .nag-divider {
     border: none;
@@ -491,12 +495,18 @@
 }
 
 /* 禁用状态的设置区域 */
-#nag-dom-settings.disabled {
+#nag-dom-settings.disabled,
+#nag-toast-settings.disabled {
     opacity: 0.5;
     pointer-events: none;
 }
 
-#nag-dom-settings.disabled input {
+#nag-dom-settings.disabled input,
+#nag-toast-settings.disabled input {
     background-color: var(--SmartThemeBlurTintColor, #333);
 }
 
+#nag-floor-inputs.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}

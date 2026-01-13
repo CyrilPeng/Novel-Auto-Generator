@@ -6,6 +6,6 @@
     "js": "index.js",
     "css": "style.css",
     "author": "AutoNovel",
-    "version": "1.0.4",
+    "version": "1.1.0",
     "description": "自动挂机生成长篇小说，支持断点续传"
 }
