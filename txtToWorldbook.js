@@ -27,15 +27,81 @@
     let incrementalOutputMode = true;
 
     // ========== 默认设置 ==========
+    // 默认提示词模板 - 世界书词条（核心，必需）
+    const defaultWorldbookPrompt = `你是专业的小说世界书生成专家。请仔细阅读提供的小说内容，提取其中的关键信息，生成高质量的世界书条目。
+
+## 重要要求
+1. **必须基于提供的具体小说内容**，不要生成通用模板
+2. **只提取文中明确出现的角色、地点、组织等信息**
+3. **关键词必须是文中实际出现的名称**，用逗号分隔
+4. **内容必须基于原文描述**，不要添加原文没有的信息
+5. **内容使用markdown格式**，可以层层嵌套或使用序号标题
+
+## 📤 输出格式
+请生成标准JSON格式，确保能被JavaScript正确解析：
+
+\`\`\`json
+{
+"角色": {
+"角色真实姓名": {
+"关键词": ["真实姓名", "称呼1", "称呼2", "绰号"],
+"内容": "基于原文的角色描述，包含但不限于**名称**:（必须要）、**性别**:、**MBTI(必须要，如变化请说明背景)**:、**貌龄**:、**年龄**:、**身份**:、**背景**:、**性格**:、**外貌**:、**技能**:、**重要事件**:、**话语示例**:、**弱点**:、**背景故事**:等（实际嵌套或者排列方式按合理的逻辑）"
+}
+},
+"地点": {
+"地点真实名称": {
+"关键词": ["地点名", "别称", "俗称"],
+"内容": "基于原文的地点描述，包含但不限于**名称**:（必须要）、**位置**:、**特征**:、**重要事件**:等（实际嵌套或者排列方式按合理的逻辑）"
+}
+},
+"组织": {
+"组织真实名称": {
+"关键词": ["组织名", "简称", "代号"],
+"内容": "基于原文的组织描述，包含但不限于**名称**:（必须要）、**性质**:、**成员**:、**目标**:等（实际嵌套或者排列方式按合理的逻辑）"
+}
+}
+}
+\`\`\`
+
+## 重要提醒
+- 直接输出JSON，不要包含代码块标记
+- 所有信息必须来源于原文，不要编造
+- 关键词必须是文中实际出现的词语
+- 内容描述要完整但简洁`;
+
+    // 默认提示词模板 - 剧情大纲（可选）
+    const defaultPlotPrompt = `"剧情大纲": {
+"主线剧情": {
+"关键词": ["主线", "核心剧情", "故事线"],
+"内容": "## 故事主线\\n**核心冲突**: 故事的中心矛盾\\n**主要目标**: 主角追求的目标\\n**阻碍因素**: 实现目标的障碍\\n\\n## 剧情阶段\\n**第一幕 - 起始**: 故事开端，世界观建立\\n**第二幕 - 发展**: 冲突升级，角色成长\\n**第三幕 - 高潮**: 决战时刻，矛盾爆发\\n**第四幕 - 结局**: [如已完结] 故事收尾\\n\\n## 关键转折点\\n1. **转折点1**: 描述和影响\\n2. **转折点2**: 描述和影响\\n3. **转折点3**: 描述和影响\\n\\n## 伏笔与暗线\\n**已揭示的伏笔**: 已经揭晓的铺垫\\n**未解之谜**: 尚未解答的疑问\\n**暗线推测**: 可能的隐藏剧情线"
+},
+"支线剧情": {
+"关键词": ["支线", "副线", "分支剧情"],
+"内容": "## 主要支线\\n**支线1标题**: 简要描述\\n**支线2标题**: 简要描述\\n**支线3标题**: 简要描述\\n\\n## 支线与主线的关联\\n**交织点**: 支线如何影响主线\\n**独立价值**: 支线的独特意义"
+}
+}`;
+
+    // 默认提示词模板 - 文风配置（可选）
+    const defaultStylePrompt = `"文风配置": {
+"作品文风": {
+"关键词": ["文风", "写作风格", "叙事特点"],
+"内容": "## 叙事视角\\n**视角类型**: 第一人称/第三人称/全知视角\\n**叙述者特点**: 叙述者的语气和态度\\n\\n## 语言风格\\n**用词特点**: 华丽/简洁/口语化/书面化\\n**句式特点**: 长句/短句/对话多/描写多\\n**修辞手法**: 常用的修辞手法\\n\\n## 情感基调\\n**整体氛围**: 轻松/沉重/悬疑/浪漫\\n**情感表达**: 直接/含蓄/细腻/粗犷"
+}
+}`;
+
     const defaultSettings = {
         apiProvider: 'gemini',
         apiKey: '',
         apiEndpoint: '',
         apiModel: 'gemini-2.5-flash',
         chunkSize: 15000,
+        enablePlotOutline: false,
         enableLiteraryStyle: false,
-        enablePlotOutline: true,
-        language: 'zh'
+        language: 'zh',
+        // 自定义提示词（留空使用默认）
+        customWorldbookPrompt: '',
+        customPlotPrompt: '',
+        customStylePrompt: ''
     };
 
     let settings = { ...defaultSettings };
@@ -1088,67 +1154,25 @@
 
         updateProgress(progress, `正在处理: ${memory.title} (${index + 1}/${memoryQueue.length})${retryCount > 0 ? ` (重试 ${retryCount}/${maxRetries})` : ''}`);
 
-        const enableLiteraryStyle = settings.enableLiteraryStyle;
-        const enablePlotOutline = settings.enablePlotOutline;
+        // 获取系统提示词（已包含世界书词条、剧情大纲、文风配置）
+        let basePrompt = getSystemPrompt();
 
-        let prompt = getLanguagePrefix() + `你是专业的小说世界书生成专家。请仔细阅读提供的小说内容，提取其中的关键信息，生成高质量的世界书条目。
+        // 构建完整提示词
+        let prompt = getLanguagePrefix() + basePrompt;
 
-## 重要要求
-1. **必须基于提供的具体小说内容**，不要生成通用模板
-2. **只提取文中明确出现的角色、地点、组织等信息**
-3. **关键词必须是文中实际出现的名称**，用逗号分隔
-4. **内容必须基于原文描述**，不要添加原文没有的信息
-5. **内容使用markdown格式**，可以层层嵌套或使用序号标题
+        // 添加额外提醒
+        let additionalReminders = '';
+        if (settings.enablePlotOutline) {
+            additionalReminders += '\n- 剧情大纲是必需项，必须生成';
+        }
+        if (settings.enableLiteraryStyle) {
+            additionalReminders += '\n- 文风配置字段为可选项，如果能够分析出明确的文风特征则生成，否则可以省略';
+        }
+        if (additionalReminders) {
+            prompt += additionalReminders;
+        }
 
-## 📤 输出格式
-请生成标准JSON格式，确保能被JavaScript正确解析：
-
-\`\`\`json
-{
-"角色": {
-"角色真实姓名": {
-"关键词": ["真实姓名", "称呼1", "称呼2", "绰号"],
-"内容": "基于原文的角色描述，包含但不限于**名称**:（必须要）、**性别**:、**MBTI(必须要，如变化请说明背景)**:、**貌龄**:、**年龄**:、**身份**:、**背景**:、**性格**:、**外貌**:、**技能**:、**重要事件**:、**话语示例**:、**弱点**:、**背景故事**:等（实际嵌套或者排列方式按合理的逻辑）"
-}
-},
-"地点": {
-"地点真实名称": {
-"关键词": ["地点名", "别称", "俗称"],
-"内容": "基于原文的地点描述，包含但不限于**名称**:（必须要）、**位置**:、**特征**:、**重要事件**:等（实际嵌套或者排列方式按合理的逻辑）"
-}
-},
-"组织": {
-"组织真实名称": {
-"关键词": ["组织名", "简称", "代号"],
-"内容": "基于原文的组织描述，包含但不限于**名称**:（必须要）、**性质**:、**成员**:、**目标**:等（实际嵌套或者排列方式按合理的逻辑）"
-}
-}${enablePlotOutline ? `,
-"剧情大纲": {
-"主线剧情": {
-"关键词": ["主线", "核心剧情", "故事线"],
-"内容": "## 故事主线\\n**核心冲突**: 故事的中心矛盾\\n**主要目标**: 主角追求的目标\\n**阻碍因素**: 实现目标的障碍\\n\\n## 剧情阶段\\n**第一幕 - 起始**: 故事开端，世界观建立\\n**第二幕 - 发展**: 冲突升级，角色成长\\n**第三幕 - 高潮**: 决战时刻，矛盾爆发\\n**第四幕 - 结局**: [如已完结] 故事收尾\\n\\n## 关键转折点\\n1. **转折点1**: 描述和影响\\n2. **转折点2**: 描述和影响\\n3. **转折点3**: 描述和影响\\n\\n## 伏笔与暗线\\n**已揭示的伏笔**: 已经揭晓的铺垫\\n**未解之谜**: 尚未解答的疑问\\n**暗线推测**: 可能的隐藏剧情线"
-},
-"支线剧情": {
-"关键词": ["支线", "副线", "分支剧情"],
-"内容": "## 主要支线\\n**支线1标题**: 简要描述\\n**支线2标题**: 简要描述\\n**支线3标题**: 简要描述\\n\\n## 支线与主线的关联\\n**交织点**: 支线如何影响主线\\n**独立价值**: 支线的独特意义"
-}
-}` : ''}${enableLiteraryStyle ? `,
-"文风配置": {
-"作品文风": {
-"关键词": ["文风", "写作风格", "叙事特点"],
-"内容": "基于原文分析的文风配置..."
-}
-}` : ''}
-}
-\`\`\`
-
-## 重要提醒
-- 直接输出JSON，不要包含代码块标记
-- 所有信息必须来源于原文，不要编造
-- 关键词必须是文中实际出现的词语
-- 内容描述要完整但简洁${enablePlotOutline ? '\n- 剧情大纲是必需项，必须生成' : ''}${enableLiteraryStyle ? '\n- 文风配置字段为可选项，如果能够分析出明确的文风特征则生成，否则可以省略' : ''}
-
-`;
+        prompt += '\n\n';
 
         if (index > 0) {
             prompt += `这是你上一次阅读的结尾部分：
@@ -2086,14 +2110,82 @@ ${cleanResponse}
                                     <input type="checkbox" id="ttw-incremental-mode" checked>
                                     <span>📝 增量输出模式</span>
                                 </label>
-                                <label class="ttw-checkbox-label">
-                                    <input type="checkbox" id="ttw-enable-plot">
-                                    <span>📖 生成剧情大纲</span>
-                                </label>
-                                <label class="ttw-checkbox-label">
-                                    <input type="checkbox" id="ttw-enable-style">
-                                    <span>🎨 生成文风配置</span>
-                                </label>
+                            </div>
+                            <!-- 提示词配置区域 -->
+                            <div class="ttw-prompt-config">
+                                <div class="ttw-prompt-config-header">
+                                    <span>📝 提示词配置</span>
+                                    <button id="ttw-preview-prompt" class="ttw-btn ttw-btn-small">👁️ 预览最终提示词</button>
+                                </div>
+
+                                <!-- 世界书词条（核心，必需） -->
+                                <div class="ttw-prompt-section ttw-prompt-worldbook">
+                                    <div class="ttw-prompt-header" data-target="ttw-worldbook-content">
+                                        <div class="ttw-prompt-header-left">
+                                            <span class="ttw-prompt-icon">📚</span>
+                                            <span class="ttw-prompt-title">世界书词条</span>
+                                            <span class="ttw-prompt-badge ttw-badge-required">必需</span>
+                                        </div>
+                                        <span class="ttw-collapse-icon">▶</span>
+                                    </div>
+                                    <div class="ttw-prompt-content" id="ttw-worldbook-content" style="display: none;">
+                                        <div class="ttw-prompt-hint">
+                                            核心提示词，用于提取角色、地点、组织等信息。留空使用默认提示词。
+                                        </div>
+                                        <textarea id="ttw-worldbook-prompt" rows="8" placeholder="留空使用默认提示词..."></textarea>
+                                        <div class="ttw-prompt-actions">
+                                            <button class="ttw-btn ttw-btn-small ttw-reset-prompt" data-type="worldbook">🔄 恢复默认</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 剧情大纲（可选） -->
+                                <div class="ttw-prompt-section ttw-prompt-plot">
+                                    <div class="ttw-prompt-header" data-target="ttw-plot-content">
+                                        <div class="ttw-prompt-header-left">
+                                            <label class="ttw-prompt-enable-label">
+                                                <input type="checkbox" id="ttw-enable-plot">
+                                                <span class="ttw-prompt-icon">📖</span>
+                                                <span class="ttw-prompt-title">剧情大纲</span>
+                                            </label>
+                                            <span class="ttw-prompt-badge ttw-badge-optional">可选</span>
+                                        </div>
+                                        <span class="ttw-collapse-icon">▶</span>
+                                    </div>
+                                    <div class="ttw-prompt-content" id="ttw-plot-content" style="display: none;">
+                                        <div class="ttw-prompt-hint">
+                                            启用后将提取主线剧情、支线剧情等信息。留空使用默认提示词。
+                                        </div>
+                                        <textarea id="ttw-plot-prompt" rows="6" placeholder="留空使用默认提示词..."></textarea>
+                                        <div class="ttw-prompt-actions">
+                                            <button class="ttw-btn ttw-btn-small ttw-reset-prompt" data-type="plot">🔄 恢复默认</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 文风配置（可选） -->
+                                <div class="ttw-prompt-section ttw-prompt-style">
+                                    <div class="ttw-prompt-header" data-target="ttw-style-content">
+                                        <div class="ttw-prompt-header-left">
+                                            <label class="ttw-prompt-enable-label">
+                                                <input type="checkbox" id="ttw-enable-style">
+                                                <span class="ttw-prompt-icon">🎨</span>
+                                                <span class="ttw-prompt-title">文风配置</span>
+                                            </label>
+                                            <span class="ttw-prompt-badge ttw-badge-optional">可选</span>
+                                        </div>
+                                        <span class="ttw-collapse-icon">▶</span>
+                                    </div>
+                                    <div class="ttw-prompt-content" id="ttw-style-content" style="display: none;">
+                                        <div class="ttw-prompt-hint">
+                                            启用后将分析作品文风特点。留空使用默认提示词。
+                                        </div>
+                                        <textarea id="ttw-style-prompt" rows="6" placeholder="留空使用默认提示词..."></textarea>
+                                        <div class="ttw-prompt-actions">
+                                            <button class="ttw-btn ttw-btn-small ttw-reset-prompt" data-type="style">🔄 恢复默认</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2391,6 +2483,141 @@ ${cleanResponse}
                 accent-color: #e67e22;
             }
 
+            /* 提示词配置区域 */
+            .ttw-prompt-config {
+                margin-top: 16px;
+                border: 1px solid var(--SmartThemeBorderColor, #444);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .ttw-prompt-config-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 14px;
+                background: rgba(230, 126, 34, 0.15);
+                border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+                font-weight: 500;
+            }
+
+            .ttw-prompt-section {
+                border-bottom: 1px solid var(--SmartThemeBorderColor, #333);
+            }
+
+            .ttw-prompt-section:last-child {
+                border-bottom: none;
+            }
+
+            .ttw-prompt-worldbook .ttw-prompt-header {
+                background: rgba(52, 152, 219, 0.1);
+            }
+
+            .ttw-prompt-plot .ttw-prompt-header {
+                background: rgba(155, 89, 182, 0.1);
+            }
+
+            .ttw-prompt-style .ttw-prompt-header {
+                background: rgba(46, 204, 113, 0.1);
+            }
+
+            .ttw-prompt-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 14px;
+                cursor: pointer;
+                font-size: 13px;
+                transition: background 0.2s;
+            }
+
+            .ttw-prompt-header:hover {
+                filter: brightness(1.1);
+            }
+
+            .ttw-prompt-header-left {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .ttw-prompt-enable-label {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                cursor: pointer;
+            }
+
+            .ttw-prompt-enable-label input {
+                width: 16px;
+                height: 16px;
+                accent-color: #e67e22;
+                cursor: pointer;
+            }
+
+            .ttw-prompt-icon {
+                font-size: 14px;
+            }
+
+            .ttw-prompt-title {
+                font-weight: 500;
+            }
+
+            .ttw-prompt-badge {
+                font-size: 10px;
+                padding: 2px 6px;
+                border-radius: 10px;
+                font-weight: 500;
+            }
+
+            .ttw-badge-required {
+                background: rgba(52, 152, 219, 0.3);
+                color: #5dade2;
+            }
+
+            .ttw-badge-optional {
+                background: rgba(149, 165, 166, 0.3);
+                color: #bdc3c7;
+            }
+
+            .ttw-prompt-content {
+                padding: 12px 14px;
+                background: rgba(0, 0, 0, 0.15);
+            }
+
+            .ttw-prompt-hint {
+                font-size: 11px;
+                color: #888;
+                margin-bottom: 10px;
+                line-height: 1.4;
+            }
+
+            .ttw-prompt-config textarea {
+                width: 100%;
+                min-height: 120px;
+                padding: 10px;
+                border: 1px solid var(--SmartThemeBorderColor, #444);
+                border-radius: 4px;
+                background: var(--SmartThemeBlurTintColor, #1e1e2e);
+                color: inherit;
+                font-family: monospace;
+                font-size: 12px;
+                line-height: 1.5;
+                resize: vertical;
+                box-sizing: border-box;
+            }
+
+            .ttw-prompt-config textarea:focus {
+                outline: none;
+                border-color: #e67e22;
+            }
+
+            .ttw-prompt-actions {
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+            }
+
             .ttw-upload-area {
                 border: 2px dashed var(--SmartThemeBorderColor, #555);
                 border-radius: 8px;
@@ -2622,18 +2849,33 @@ ${cleanResponse}
     }
 
     function bindModalEvents() {
+        // 阻止弹窗内部点击冒泡
+        const modal = modalContainer.querySelector('.ttw-modal');
+        modal.addEventListener('click', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        modal.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        modal.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
         // 关闭按钮
         modalContainer.querySelector('.ttw-modal-close').addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
             closeModal();
-        });
+        }, false);
 
         // 帮助按钮
         modalContainer.querySelector('.ttw-help-btn').addEventListener('click', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             showHelpModal();
-        });
+        }, false);
 
         // 点击背景关闭
         modalContainer.addEventListener('click', (e) => {
@@ -2642,10 +2884,21 @@ ${cleanResponse}
                 e.preventDefault();
                 closeModal();
             }
-        });
+        }, false);
 
-        // ESC 关闭
-        document.addEventListener('keydown', handleEscKey);
+        // 阻止容器的mousedown和touchstart冒泡
+        modalContainer.addEventListener('mousedown', (e) => {
+            if (e.target === modalContainer) {
+                e.stopPropagation();
+            }
+        }, false);
+
+        modalContainer.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // ESC 关闭 - 使用捕获阶段
+        document.addEventListener('keydown', handleEscKey, true);
 
         // API 提供商变化
         document.getElementById('ttw-api-provider').addEventListener('change', handleProviderChange);
@@ -2665,6 +2918,49 @@ ${cleanResponse}
                 el.addEventListener('change', saveCurrentSettings);
             }
         });
+
+        // 提示词区域折叠 - 为每个提示词section绑定折叠事件
+        document.querySelectorAll('.ttw-prompt-header[data-target]').forEach(header => {
+            header.addEventListener('click', (e) => {
+                // 如果点击的是checkbox，不触发折叠
+                if (e.target.type === 'checkbox') return;
+
+                const targetId = header.getAttribute('data-target');
+                const content = document.getElementById(targetId);
+                const icon = header.querySelector('.ttw-collapse-icon');
+                if (content.style.display === 'none') {
+                    content.style.display = 'block';
+                    icon.textContent = '▼';
+                } else {
+                    content.style.display = 'none';
+                    icon.textContent = '▶';
+                }
+            });
+        });
+
+        // 自定义提示词变化时保存
+        ['ttw-worldbook-prompt', 'ttw-plot-prompt', 'ttw-style-prompt'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', saveCurrentSettings);
+            }
+        });
+
+        // 恢复默认提示词按钮
+        document.querySelectorAll('.ttw-reset-prompt').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const type = btn.getAttribute('data-type');
+                const textareaId = `ttw-${type}-prompt`;
+                const textarea = document.getElementById(textareaId);
+                if (textarea) {
+                    textarea.value = '';
+                    saveCurrentSettings();
+                }
+            });
+        });
+
+        // 预览提示词
+        document.getElementById('ttw-preview-prompt').addEventListener('click', showPromptPreview);
 
         // 拉取模型按钮
         document.getElementById('ttw-fetch-models').addEventListener('click', handleFetchModels);
@@ -2735,6 +3031,7 @@ ${cleanResponse}
         if (e.key === 'Escape' && modalContainer) {
             e.stopPropagation();
             e.preventDefault();
+            e.stopImmediatePropagation();
             closeModal();
         }
     }
@@ -2893,6 +3190,11 @@ ${cleanResponse}
         settings.enablePlotOutline = document.getElementById('ttw-enable-plot').checked;
         settings.enableLiteraryStyle = document.getElementById('ttw-enable-style').checked;
 
+        // 保存自定义提示词
+        settings.customWorldbookPrompt = document.getElementById('ttw-worldbook-prompt').value;
+        settings.customPlotPrompt = document.getElementById('ttw-plot-prompt').value;
+        settings.customStylePrompt = document.getElementById('ttw-style-prompt').value;
+
         // 保存到 localStorage
         try {
             localStorage.setItem('txtToWorldbookSettings', JSON.stringify(settings));
@@ -2922,7 +3224,110 @@ ${cleanResponse}
         document.getElementById('ttw-enable-plot').checked = settings.enablePlotOutline;
         document.getElementById('ttw-enable-style').checked = settings.enableLiteraryStyle;
 
+        // 加载自定义提示词
+        document.getElementById('ttw-worldbook-prompt').value = settings.customWorldbookPrompt || '';
+        document.getElementById('ttw-plot-prompt').value = settings.customPlotPrompt || '';
+        document.getElementById('ttw-style-prompt').value = settings.customStylePrompt || '';
+
         handleProviderChange();
+    }
+
+    // 获取系统提示词（组合三个部分）
+    function getSystemPrompt() {
+        // 获取世界书词条提示词（必需）
+        const worldbookPrompt = settings.customWorldbookPrompt?.trim() || defaultWorldbookPrompt;
+
+        // 收集需要添加的额外部分
+        const additionalParts = [];
+
+        // 如果启用了剧情大纲
+        if (settings.enablePlotOutline) {
+            const plotPrompt = settings.customPlotPrompt?.trim() || defaultPlotPrompt;
+            additionalParts.push(plotPrompt);
+        }
+
+        // 如果启用了文风配置
+        if (settings.enableLiteraryStyle) {
+            const stylePrompt = settings.customStylePrompt?.trim() || defaultStylePrompt;
+            additionalParts.push(stylePrompt);
+        }
+
+        // 如果没有额外部分，直接返回世界书提示词
+        if (additionalParts.length === 0) {
+            return worldbookPrompt;
+        }
+
+        // 在JSON结构的最后一个大括号前插入额外部分
+        // 查找 "组织" 部分后的闭合大括号
+        let fullPrompt = worldbookPrompt;
+
+        // 使用更可靠的方式：在 ``` 代码块结束前插入
+        const insertContent = ',\n' + additionalParts.join(',\n');
+        fullPrompt = fullPrompt.replace(
+            /(\}\s*)\n\`\`\`/,
+            `${insertContent}\n$1\n\`\`\``
+        );
+
+        return fullPrompt;
+    }
+
+    // 预览提示词
+    function showPromptPreview() {
+        const prompt = getSystemPrompt();
+
+        // 构建状态信息
+        const statusItems = [
+            `📚 世界书词条: ${settings.customWorldbookPrompt?.trim() ? '自定义' : '默认'}`,
+            `📖 剧情大纲: ${settings.enablePlotOutline ? (settings.customPlotPrompt?.trim() ? '✅ 启用 (自定义)' : '✅ 启用 (默认)') : '❌ 禁用'}`,
+            `🎨 文风配置: ${settings.enableLiteraryStyle ? (settings.customStylePrompt?.trim() ? '✅ 启用 (自定义)' : '✅ 启用 (默认)') : '❌ 禁用'}`
+        ];
+
+        const previewModal = document.createElement('div');
+        previewModal.className = 'ttw-modal-container';
+        previewModal.id = 'ttw-prompt-preview-modal';
+        previewModal.innerHTML = `
+            <div class="ttw-modal" style="max-width: 800px;">
+                <div class="ttw-modal-header">
+                    <span class="ttw-modal-title">👁️ 最终提示词预览</span>
+                    <button class="ttw-modal-close" type="button">✕</button>
+                </div>
+                <div class="ttw-modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.15); border-radius: 6px; font-size: 12px;">
+                        ${statusItems.map(item => `<span style="padding: 4px 8px; background: rgba(0,0,0,0.2); border-radius: 4px;">${item}</span>`).join('')}
+                    </div>
+                    <pre style="white-space: pre-wrap; word-wrap: break-word; font-size: 12px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; max-height: 50vh; overflow-y: auto;">${prompt.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                </div>
+                <div class="ttw-modal-footer">
+                    <button class="ttw-btn ttw-btn-primary ttw-close-preview">关闭</button>
+                </div>
+            </div>
+        `;
+
+        // 阻止弹窗内部点击冒泡
+        const modal = previewModal.querySelector('.ttw-modal');
+        modal.addEventListener('click', (e) => e.stopPropagation(), false);
+        modal.addEventListener('mousedown', (e) => e.stopPropagation(), false);
+        modal.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+
+        previewModal.querySelector('.ttw-modal-close').addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            previewModal.remove();
+        });
+        previewModal.querySelector('.ttw-close-preview').addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            previewModal.remove();
+        });
+        previewModal.addEventListener('click', (e) => {
+            if (e.target === previewModal) {
+                e.stopPropagation();
+                e.preventDefault();
+                previewModal.remove();
+            }
+        });
+
+        document.body.appendChild(previewModal);
     }
 
     async function checkAndRestoreState() {
@@ -3666,7 +4071,7 @@ ${evolutionText}
             modalContainer.remove();
             modalContainer = null;
         }
-        document.removeEventListener('keydown', handleEscKey);
+        document.removeEventListener('keydown', handleEscKey, true);
     }
 
     function open() {
