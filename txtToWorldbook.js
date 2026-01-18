@@ -396,12 +396,51 @@
 
     // ========== 工具函数 ==========
     async function calculateFileHash(content) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(content);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        // 方案 A: 尝试使用标准的 Web Crypto API (仅在 HTTPS 或 localhost/127.0.0.1 有效)
+        if (window.crypto && window.crypto.subtle) {
+            try {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(content);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (e) {
+                console.warn('Crypto API 存在但调用失败，将回退到简单哈希:', e);
+            }
+        }
+
+        // 方案 B: 简易哈希回退 (适用于局域网 HTTP 环境)
+        // 使用简单的字符累加位移算法生成唯一ID
+        console.log('当前环境不支持 crypto.subtle (可能是局域网HTTP)，使用简易哈希算法');
+        
+        let hash = 0;
+        if (content.length === 0) return 'hash-empty';
+        
+        // 限制采样长度以提高大文件处理速度（取前中后各一部分参与计算）
+        // 如果文件小于 100k 全量计算，大于则采样
+        const len = content.length;
+        if (len < 100000) {
+            for (let i = 0; i < len; i++) {
+                const char = content.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+        } else {
+            // 采样计算：前1000字 + 中间1000字 + 后1000字 + 长度
+            const sample = content.slice(0, 1000) + 
+                           content.slice(Math.floor(len/2), Math.floor(len/2) + 1000) + 
+                           content.slice(-1000);
+            for (let i = 0; i < sample.length; i++) {
+                const char = sample.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+        }
+
+        // 返回 hex 格式的伪哈希，加上长度确保唯一性
+        return 'simple-' + Math.abs(hash).toString(16) + '-' + len;
     }
+
 
     function getLanguagePrefix() {
         return settings.language === 'zh' ? '请用中文回复。\n\n' : '';
