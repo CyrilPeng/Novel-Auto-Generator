@@ -551,7 +551,7 @@
                         model: model,
                         messages: [{ role: 'user', content: prompt }],
                         temperature: 0.3,
-                        max_tokens: 65536
+                        max_tokens: 64000
                     }),
                 };
                 break;
