@@ -558,13 +558,52 @@ async function sendMessage(text) {
 }
 
 /**
+ * 获取AI消息数量（双重检测：DOM + chat数组）
+ */
+function getAIMessageCountRobust() {
+    // 方法1: DOM 查询
+    const domCount = document.querySelectorAll('#chat .mes[is_user="false"]').length;
+
+    // 方法2: chat 数组查询
+    let chatCount = 0;
+    const stChat = getSTChat();
+    if (stChat) {
+        chatCount = stChat.filter(msg => msg && !msg.is_user && !msg.is_human).length;
+    }
+
+    // 返回较大的值，确保能检测到新消息
+    return Math.max(domCount, chatCount);
+}
+
+/**
  * 等待AI回复完成
  */
 async function waitForAIResponse(prevCount) {
-    // 阶段1：等待AI消息数量增加
+    // 阶段1：等待AI消息数量增加（带超时）
     log('等待AI开始回复...', 'debug');
-    while (getAIMessageCount() <= prevCount) {
+    const waitStartTime = Date.now();
+    const maxWaitForStart = 120000; // 最多等待2分钟让AI开始回复
+
+    while (getAIMessageCountRobust() <= prevCount) {
         if (abortGeneration) throw new Error('用户中止');
+
+        const elapsed = Date.now() - waitStartTime;
+        if (elapsed > maxWaitForStart) {
+            log(`等待AI开始回复超时 (${Math.round(elapsed/1000)}s)，可能AI已回复但未检测到`, 'warning');
+            // 尝试用 chat 数组再检查一次
+            const stChat = getSTChat();
+            if (stChat && stChat.length > prevCount) {
+                log('通过 chat 数组检测到新消息，继续处理', 'info');
+                break;
+            }
+            throw new Error('等待AI开始回复超时');
+        }
+
+        // 每10秒输出一次等待日志
+        if (elapsed > 0 && elapsed % 10000 < 500) {
+            log(`仍在等待AI开始回复... (${Math.round(elapsed/1000)}s)`, 'debug');
+        }
+
         await sleep(500);
     }
     log('检测到新的AI回复', 'success');
@@ -631,7 +670,7 @@ async function waitForAIResponse(prevCount) {
  * 生成单章
  */
 async function generateSingleChapter(num) {
-    const prevCount = getAIMessageCount();
+    const prevCount = getAIMessageCountRobust();
     
     // 发送消息
     await sendMessage(settings.prompt);
