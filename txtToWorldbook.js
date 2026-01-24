@@ -26,6 +26,417 @@
     let currentProcessingIndex = 0;
     let incrementalOutputMode = true;
 
+    // ========== 自定义分类系统 ==========
+    // 默认的世界书分类模板配置
+    const DEFAULT_WORLDBOOK_CATEGORIES = [
+        {
+            name: "角色",
+            enabled: true,
+            isBuiltin: true,
+            entryExample: "角色真实姓名",
+            keywordsExample: ["真实姓名", "称呼1", "称呼2", "绰号"],
+            contentGuide: "基于原文的角色描述，包含但不限于**名称**:（必须要）、**性别**:、**MBTI(必须要，如变化请说明背景)**:、**貌龄**:、**年龄**:、**身份**:、**背景**:、**性格**:、**外貌**:、**技能**:、**重要事件**:、**话语示例**:、**弱点**:、**背景故事**:等（实际嵌套或者排列方式按合理的逻辑）"
+        },
+        {
+            name: "地点",
+            enabled: true,
+            isBuiltin: true,
+            entryExample: "地点真实名称",
+            keywordsExample: ["地点名", "别称", "俗称"],
+            contentGuide: "基于原文的地点描述，包含但不限于**名称**:（必须要）、**位置**:、**特征**:、**重要事件**:等（实际嵌套或者排列方式按合理的逻辑）"
+        },
+        {
+            name: "组织",
+            enabled: true,
+            isBuiltin: true,
+            entryExample: "组织真实名称",
+            keywordsExample: ["组织名", "简称", "代号"],
+            contentGuide: "基于原文的组织描述，包含但不限于**名称**:（必须要）、**性质**:、**成员**:、**目标**:等（实际嵌套或者排列方式按合理的逻辑）"
+        },
+        {
+            name: "道具",
+            enabled: false,
+            isBuiltin: false,
+            entryExample: "道具名称",
+            keywordsExample: ["道具名", "别名"],
+            contentGuide: "基于原文的道具描述，包含但不限于**名称**:、**类型**:、**功能**:、**来源**:、**持有者**:等"
+        },
+        {
+            name: "玩法",
+            enabled: false,
+            isBuiltin: false,
+            entryExample: "玩法名称",
+            keywordsExample: ["玩法名", "规则名"],
+            contentGuide: "基于原文的玩法/规则描述，包含但不限于**名称**:、**规则说明**:、**参与条件**:、**奖惩机制**:等"
+        },
+        {
+            name: "章节剧情",
+            enabled: false,
+            isBuiltin: false,
+            entryExample: "第X章",
+            keywordsExample: ["章节名", "章节号"],
+            contentGuide: "该章节的剧情概要，包含但不限于**章节标题**:、**主要事件**:、**出场角色**:、**关键转折**:、**伏笔线索**:等"
+        },
+        {
+            name: "角色内心",
+            enabled: false,
+            isBuiltin: false,
+            entryExample: "角色名-内心世界",
+            keywordsExample: ["角色名", "内心", "心理"],
+            contentGuide: "角色的内心想法和心理活动，包含但不限于**内心独白**:、**情感变化**:、**动机分析**:、**心理矛盾**:等"
+        }
+    ];
+
+    // 当前使用的世界书分类配置
+    let customWorldbookCategories = JSON.parse(JSON.stringify(DEFAULT_WORLDBOOK_CATEGORIES));
+
+    // 剧情大纲和文风配置开关
+    let enablePlotOutline = true;
+    let enableLiteraryStyle = false;
+
+    // 保存自定义分类配置到localStorage
+    function saveCustomCategories() {
+        try {
+            localStorage.setItem('ttw_custom_categories', JSON.stringify(customWorldbookCategories));
+            console.log('自定义分类配置已保存');
+        } catch (error) {
+            console.error('保存自定义分类配置失败:', error);
+        }
+    }
+
+    // 从localStorage加载自定义分类配置
+    function loadCustomCategories() {
+        try {
+            const saved = localStorage.getItem('ttw_custom_categories');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    customWorldbookCategories = parsed;
+                }
+            }
+        } catch (error) {
+            console.error('加载自定义分类配置失败:', error);
+        }
+    }
+
+    // 重置为默认分类配置
+    function resetToDefaultCategories() {
+        customWorldbookCategories = JSON.parse(JSON.stringify(DEFAULT_WORLDBOOK_CATEGORIES));
+        saveCustomCategories();
+        console.log('已重置为默认分类配置');
+    }
+
+    // 获取启用的分类列表
+    function getEnabledCategories() {
+        return customWorldbookCategories.filter(cat => cat.enabled);
+    }
+
+    // 获取启用分类的描述
+    function getEnabledCategoriesDescription() {
+        const enabledCategories = getEnabledCategories();
+        return enabledCategories.map(cat => cat.name).join('、');
+    }
+
+    // 生成主提示词的JSON模板部分
+    function generateMainPromptJsonTemplate() {
+        const enabledCategories = getEnabledCategories();
+
+        let template = '{\n';
+        const parts = [];
+
+        for (const cat of enabledCategories) {
+            parts.push(`"${cat.name}": {
+"${cat.entryExample}": {
+"关键词": ${JSON.stringify(cat.keywordsExample)},
+"内容": "${cat.contentGuide}"
+}
+}`);
+        }
+
+        // 添加剧情大纲（如果启用）
+        if (enablePlotOutline) {
+            parts.push(`"剧情大纲": {
+"主线剧情": {
+"关键词": ["主线", "核心剧情", "故事线"],
+"内容": "## 故事主线\\n**核心冲突**: 故事的中心矛盾\\n**主要目标**: 主角追求的目标\\n**阻碍因素**: 实现目标的障碍\\n\\n## 剧情阶段\\n**第一幕 - 起始**: 故事开端，世界观建立\\n**第二幕 - 发展**: 冲突升级，角色成长\\n**第三幕 - 高潮**: 决战时刻，矛盾爆发\\n**第四幕 - 结局**: [如已完结] 故事收尾\\n\\n## 关键转折点\\n1. **转折点1**: 描述和影响\\n2. **转折点2**: 描述和影响"
+},
+"支线剧情": {
+"关键词": ["支线", "副线", "分支剧情"],
+"内容": "## 主要支线\\n**支线1标题**: 简要描述\\n**支线2标题**: 简要描述\\n\\n## 支线与主线的关联\\n**交织点**: 支线如何影响主线\\n**独立价值**: 支线的独特意义"
+}
+}`);
+        }
+
+        // 添加文风配置（如果启用）
+        if (enableLiteraryStyle) {
+            parts.push(`"文风配置": {
+"作品文风": {
+"关键词": ["文风", "写作风格", "叙事特点"],
+"内容": "基于原文分析的文风配置，包含叙事系统、表达系统、美学系统等"
+}
+}`);
+        }
+
+        template += parts.join(',\n');
+        template += '\n}';
+
+        return template;
+    }
+
+    // 生成简化版JSON模板
+    function generateSimpleJsonTemplate() {
+        const enabledCategories = getEnabledCategories();
+        const parts = [];
+
+        for (const cat of enabledCategories) {
+            parts.push(`"${cat.name}": { "${cat.entryExample}": { "关键词": ["..."], "内容": "..." } }`);
+        }
+
+        if (enablePlotOutline) {
+            parts.push(`"剧情大纲": { "主线剧情": { "关键词": ["主线"], "内容": "..." } }`);
+        }
+
+        if (enableLiteraryStyle) {
+            parts.push(`"文风配置": { "作品文风": { "关键词": ["文风"], "内容": "..." } }`);
+        }
+
+        return '{\n' + parts.join(',\n') + '\n}';
+    }
+
+    // 渲染分类列表
+    function renderCategoriesList() {
+        const listContainer = document.getElementById('ttw-categories-list');
+        if (!listContainer) return;
+
+        listContainer.innerHTML = '';
+
+        customWorldbookCategories.forEach((cat, index) => {
+            const item = document.createElement('div');
+            item.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 5px;';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = cat.enabled;
+            checkbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+            checkbox.addEventListener('change', function() {
+                customWorldbookCategories[index].enabled = this.checked;
+                saveCustomCategories();
+            });
+
+            const label = document.createElement('span');
+            label.style.cssText = 'flex: 1; color: #f0f0f0; font-size: 13px;';
+            label.textContent = cat.name;
+            if (cat.isBuiltin) {
+                label.innerHTML += ' <span style="color: #888; font-size: 11px;">(内置)</span>';
+            }
+
+            const editBtn = document.createElement('button');
+            editBtn.textContent = '✏️';
+            editBtn.title = '编辑';
+            editBtn.className = 'ttw-btn ttw-btn-small';
+            editBtn.style.cssText = 'background: #3498db; padding: 3px 8px; font-size: 11px;';
+            editBtn.addEventListener('click', () => showEditCategoryModal(index));
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.title = '删除';
+            deleteBtn.className = 'ttw-btn ttw-btn-small';
+            deleteBtn.style.cssText = 'background: #dc3545; padding: 3px 8px; font-size: 11px;';
+            deleteBtn.disabled = cat.isBuiltin;
+            if (cat.isBuiltin) {
+                deleteBtn.style.opacity = '0.5';
+                deleteBtn.style.cursor = 'not-allowed';
+            }
+            deleteBtn.addEventListener('click', () => {
+                if (!cat.isBuiltin && confirm(`确定要删除分类"${cat.name}"吗？`)) {
+                    customWorldbookCategories.splice(index, 1);
+                    saveCustomCategories();
+                    renderCategoriesList();
+                }
+            });
+
+            item.appendChild(checkbox);
+            item.appendChild(label);
+            item.appendChild(editBtn);
+            item.appendChild(deleteBtn);
+            listContainer.appendChild(item);
+        });
+    }
+
+    // 显示添加分类弹窗
+    function showAddCategoryModal() {
+        showCategoryModal(null, '添加新分类');
+    }
+
+    // 显示编辑分类弹窗
+    function showEditCategoryModal(index) {
+        showCategoryModal(index, '编辑分类');
+    }
+
+    // 通用的分类编辑弹窗
+    function showCategoryModal(editIndex, title) {
+        const isEdit = editIndex !== null;
+        const cat = isEdit ? customWorldbookCategories[editIndex] : {
+            name: '',
+            enabled: true,
+            isBuiltin: false,
+            entryExample: '',
+            keywordsExample: [],
+            contentGuide: ''
+        };
+
+        // 移除已存在的弹窗
+        const existingModal = document.getElementById('ttw-category-edit-modal');
+        if (existingModal) existingModal.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'ttw-category-edit-modal';
+        modal.className = 'ttw-modal-container';
+        modal.style.zIndex = '100000';
+
+        modal.innerHTML = `
+            <div class="ttw-modal" style="max-width: 500px;">
+                <div class="ttw-modal-header">
+                    <span class="ttw-modal-title">${title}</span>
+                    <button class="ttw-modal-close" type="button">✕</button>
+                </div>
+                <div class="ttw-modal-body">
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; color: #e67e22; margin-bottom: 5px; font-size: 13px;">分类名称 *</label>
+                        <input type="text" id="ttw-cat-name" value="${cat.name}" placeholder="如：道具、玩法、章节剧情"
+                            style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; color: #e67e22; margin-bottom: 5px; font-size: 13px;">条目名称示例</label>
+                        <input type="text" id="ttw-cat-entry" value="${cat.entryExample}" placeholder="如：道具名称、第X章"
+                            style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; color: #e67e22; margin-bottom: 5px; font-size: 13px;">关键词示例（逗号分隔）</label>
+                        <input type="text" id="ttw-cat-keywords" value="${cat.keywordsExample.join(', ')}" placeholder="如：道具名, 别名, 俗称"
+                            style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; color: #e67e22; margin-bottom: 5px; font-size: 13px;">内容提取指南</label>
+                        <textarea id="ttw-cat-guide" placeholder="描述AI应该提取哪些信息，如：包含**名称**:、**类型**:、**功能**:等"
+                            style="width: 100%; height: 100px; padding: 8px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: white; resize: vertical; box-sizing: border-box;">${cat.contentGuide}</textarea>
+                    </div>
+                </div>
+                <div class="ttw-modal-footer">
+                    <button class="ttw-btn" id="ttw-cat-cancel">取消</button>
+                    <button class="ttw-btn ttw-btn-primary" id="ttw-cat-save">保存</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // 关闭弹窗函数
+        const closeCategoryModal = (e) => {
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            modal.remove();
+            document.removeEventListener('keydown', categoryEscHandler, true);
+        };
+
+        // ESC 关闭 - 使用捕获阶段
+        const categoryEscHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                closeCategoryModal();
+            }
+        };
+        document.addEventListener('keydown', categoryEscHandler, true);
+
+        // 关闭按钮
+        modal.querySelector('.ttw-modal-close').addEventListener('click', (e) => {
+            closeCategoryModal(e);
+        }, false);
+
+        // 取消按钮
+        modal.querySelector('#ttw-cat-cancel').addEventListener('click', (e) => {
+            closeCategoryModal(e);
+        }, false);
+
+        // 阻止弹窗内部点击冒泡
+        const modalInner = modal.querySelector('.ttw-modal');
+        modalInner.addEventListener('click', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        modalInner.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        modalInner.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeCategoryModal(e);
+            }
+        }, false);
+
+        modal.addEventListener('mousedown', (e) => {
+            if (e.target === modal) {
+                e.stopPropagation();
+            }
+        }, false);
+
+        modal.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        modal.querySelector('#ttw-cat-save').addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            const name = document.getElementById('ttw-cat-name').value.trim();
+            const entryExample = document.getElementById('ttw-cat-entry').value.trim();
+            const keywordsStr = document.getElementById('ttw-cat-keywords').value.trim();
+            const contentGuide = document.getElementById('ttw-cat-guide').value.trim();
+
+            if (!name) {
+                alert('请输入分类名称');
+                return;
+            }
+
+            // 检查名称是否重复
+            const duplicateIndex = customWorldbookCategories.findIndex((c, i) => c.name === name && i !== editIndex);
+            if (duplicateIndex !== -1) {
+                alert('该分类名称已存在');
+                return;
+            }
+
+            const keywordsExample = keywordsStr ? keywordsStr.split(/[,，]/).map(k => k.trim()).filter(k => k) : [];
+
+            const newCat = {
+                name,
+                enabled: isEdit ? cat.enabled : true,
+                isBuiltin: isEdit ? cat.isBuiltin : false,
+                entryExample: entryExample || name + '名称',
+                keywordsExample: keywordsExample.length > 0 ? keywordsExample : [name + '名'],
+                contentGuide: contentGuide || `基于原文的${name}描述`
+            };
+
+            if (isEdit) {
+                customWorldbookCategories[editIndex] = newCat;
+            } else {
+                customWorldbookCategories.push(newCat);
+            }
+
+            saveCustomCategories();
+            renderCategoriesList();
+            closeCategoryModal();
+        }, false);
+    }
+
     // ========== 默认设置 ==========
     // 默认提示词模板 - 世界书词条（核心，必需）
     const defaultWorldbookPrompt = `你是专业的小说世界书生成专家。请仔细阅读提供的小说内容，提取其中的关键信息，生成高质量的世界书条目。
@@ -1989,7 +2400,7 @@ ${cleanResponse}
         helpModal.innerHTML = `
             <div class="ttw-modal" style="max-width: 600px;">
                 <div class="ttw-modal-header">
-                    <span class="ttw-modal-title">❓ TXT转世界书 使用帮助</span>
+                    <span class="ttw-modal-title">❓ TXT转世界书使用帮助</span>
                     <button class="ttw-modal-close" type="button">✕</button>
                 </div>
                 <div class="ttw-modal-body" style="max-height: 70vh; overflow-y: auto;">
@@ -2071,11 +2482,67 @@ ${cleanResponse}
 
         document.body.appendChild(helpModal);
 
-        helpModal.querySelector('.ttw-modal-close').addEventListener('click', () => helpModal.remove());
-        helpModal.querySelector('#ttw-close-help').addEventListener('click', () => helpModal.remove());
+        // 关闭弹窗函数
+        const closeHelpModal = (e) => {
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            helpModal.remove();
+            document.removeEventListener('keydown', helpEscHandler, true);
+        };
+
+        // ESC 关闭 - 使用捕获阶段，优先处理
+        const helpEscHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                closeHelpModal();
+            }
+        };
+        document.addEventListener('keydown', helpEscHandler, true);
+
+        // 关闭按钮点击
+        helpModal.querySelector('.ttw-modal-close').addEventListener('click', (e) => {
+            closeHelpModal(e);
+        }, false);
+
+        // "我知道了" 按钮点击
+        helpModal.querySelector('#ttw-close-help').addEventListener('click', (e) => {
+            closeHelpModal(e);
+        }, false);
+
+        // 阻止弹窗内部点击冒泡
+        const helpModalInner = helpModal.querySelector('.ttw-modal');
+        helpModalInner.addEventListener('click', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        helpModalInner.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        helpModalInner.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // 点击容器背景关闭
         helpModal.addEventListener('click', (e) => {
-            if (e.target === helpModal) helpModal.remove();
-        });
+            if (e.target === helpModal) {
+                closeHelpModal(e);
+            }
+        }, false);
+
+        helpModal.addEventListener('mousedown', (e) => {
+            if (e.target === helpModal) {
+                e.stopPropagation();
+            }
+        }, false);
+
+        helpModal.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
     }
 
     // ========== UI 相关 ==========
@@ -2149,6 +2616,18 @@ ${cleanResponse}
                                     <input type="checkbox" id="ttw-incremental-mode" checked>
                                     <span>📝 增量输出模式</span>
                                 </label>
+                            </div>
+                            <!-- 自定义提取分类 -->
+                            <div class="ttw-custom-categories" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                    <span style="color: #e67e22; font-weight: bold;">🏷️ 自定义提取分类</span>
+                                    <div>
+                                        <button class="ttw-btn ttw-btn-small" id="ttw-add-category-btn" style="background: #e67e22; margin-right: 5px;">➕ 添加</button>
+                                        <button class="ttw-btn ttw-btn-small" id="ttw-reset-categories-btn" style="background: #6c757d;">🔄 重置</button>
+                                    </div>
+                                </div>
+                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #888;">勾选要提取的分类，可自定义添加道具、玩法、章节剧情等</p>
+                                <div id="ttw-categories-list" style="max-height: 200px; overflow-y: auto;"></div>
                             </div>
                             <!-- 提示词配置区域 -->
                             <div class="ttw-prompt-config">
@@ -2958,6 +3437,31 @@ ${cleanResponse}
             }
         });
 
+        // 自定义分类功能
+        loadCustomCategories();
+        renderCategoriesList();
+
+        const addCategoryBtn = document.getElementById('ttw-add-category-btn');
+        if (addCategoryBtn) {
+            addCategoryBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                showAddCategoryModal();
+            }, false);
+        }
+
+        const resetCategoriesBtn = document.getElementById('ttw-reset-categories-btn');
+        if (resetCategoriesBtn) {
+            resetCategoriesBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (confirm('确定要重置为默认分类配置吗？这将清除所有自定义分类。')) {
+                    resetToDefaultCategories();
+                    renderCategoriesList();
+                }
+            }, false);
+        }
+
         // 提示词区域折叠 - 为每个提示词section绑定折叠事件
         document.querySelectorAll('.ttw-prompt-header[data-target]').forEach(header => {
             header.addEventListener('click', (e) => {
@@ -3752,6 +4256,8 @@ ${cleanResponse}
                     </div>
                 </div>
                 <div class="ttw-modal-footer">
+                    <button class="ttw-btn" id="ttw-view-evolution" style="background: #3498db;">📊 条目演变</button>
+                    <button class="ttw-btn" id="ttw-optimize-worldbook" style="background: #9b59b6;">🤖 AI优化世界书</button>
                     <button class="ttw-btn ttw-btn-warning" id="ttw-clear-history">🗑️ 清空历史</button>
                     <button class="ttw-btn" id="ttw-close-history">关闭</button>
                 </div>
@@ -3768,6 +4274,14 @@ ${cleanResponse}
                 historyModal.remove();
                 showHistoryView();
             }
+        });
+        historyModal.querySelector('#ttw-view-evolution').addEventListener('click', async () => {
+            historyModal.remove();
+            await showEntryEvolutionModal(historyList);
+        });
+        historyModal.querySelector('#ttw-optimize-worldbook').addEventListener('click', async () => {
+            historyModal.remove();
+            await showOptimizeWorldbookModal(historyList);
         });
         historyModal.addEventListener('click', (e) => {
             if (e.target === historyModal) historyModal.remove();
@@ -3830,8 +4344,9 @@ ${cleanResponse}
         <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #444;">
             <h4 style="color: #e67e22; margin: 0 0 10px 0;">📝 ${history.memoryTitle || `记忆块 ${history.memoryIndex + 1}`}</h4>
             <div style="font-size: 12px; color: #888;">时间: ${time}</div>
-            <div style="margin-top: 10px;">
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
                 <button class="ttw-btn ttw-btn-warning ttw-btn-small" onclick="window.TxtToWorldbook._rollbackToHistory(${historyId})">⏪ 回退到此版本前</button>
+                <button class="ttw-btn ttw-btn-small" onclick="window.TxtToWorldbook._exportHistoryWorldbook(${historyId})" style="background: #27ae60;">📥 导出此版本世界书</button>
             </div>
         </div>
         <div style="font-size: 14px; font-weight: bold; color: #9b59b6; margin-bottom: 10px;">变更内容 (${history.changedEntries?.length || 0}项)</div>
@@ -3904,6 +4419,378 @@ ${cleanResponse}
             console.error('回退失败:', error);
             alert('回退失败: ' + error.message);
         }
+    }
+
+    // 全局自定义优化prompt变量
+    let customOptimizationPrompt = null;
+    const DEFAULT_BATCH_CHANGES = 50;
+
+    // 从历史记录视图打开的AI优化世界书模态框
+    async function showOptimizeWorldbookModal(historyList) {
+        const existingModal = document.getElementById('ttw-optimize-worldbook-modal');
+        if (existingModal) existingModal.remove();
+
+        // 从localStorage加载上次保存的自定义prompt
+        try {
+            const savedPrompt = localStorage.getItem('ttw_custom_optimization_prompt');
+            if (savedPrompt) {
+                customOptimizationPrompt = savedPrompt;
+                console.log('📝 已加载上次保存的自定义Prompt');
+            }
+        } catch (e) {
+            console.error('加载自定义Prompt失败:', e);
+        }
+
+        const entryEvolution = aggregateEntryEvolution(historyList);
+        const entryCount = Object.keys(entryEvolution).length;
+        let totalChanges = 0;
+        for (const key in entryEvolution) {
+            totalChanges += entryEvolution[key].changes.length;
+        }
+
+        const modal = document.createElement('div');
+        modal.id = 'ttw-optimize-worldbook-modal';
+        modal.className = 'ttw-modal-container';
+        modal.innerHTML = `
+            <div class="ttw-modal" style="max-width: 800px;">
+                <div class="ttw-modal-header">
+                    <span class="ttw-modal-title">🤖 AI优化世界书</span>
+                    <button class="ttw-modal-close" type="button">✕</button>
+                </div>
+                <div class="ttw-modal-body">
+                    <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="color: #e67e22; font-weight: bold; margin-bottom: 10px;">📊 当前数据统计</div>
+                        <div style="color: #aaa; font-size: 14px;">
+                            <div>• 条目数量: <span style="color: #27ae60;">${entryCount}</span> 个</div>
+                            <div>• 历史变更: <span style="color: #3498db;">${totalChanges}</span> 对</div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="color: #9b59b6; font-weight: bold; margin-bottom: 10px;">⚙️ 优化设置</div>
+                        <label style="color: #aaa; font-size: 14px;">每批处理变更数:</label>
+                        <input type="number" id="ttw-batch-changes-input" value="${DEFAULT_BATCH_CHANGES}" min="10" max="200"
+                            style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #555; border-radius: 4px; color: white; margin-top: 5px; margin-bottom: 15px;">
+
+                        <div style="margin-top: 15px;">
+                            <label style="color: #aaa; font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <input type="checkbox" id="ttw-use-custom-prompt" style="width: 16px; height: 16px;">
+                                <span>使用自定义Prompt设定</span>
+                            </label>
+                            <div id="ttw-custom-prompt-container" style="display: none;">
+                                <textarea id="ttw-custom-prompt-textarea" placeholder="在此输入自定义的优化Prompt...
+
+提示：可以使用 {{条目}} 作为占位符，系统会自动替换为实际条目内容。"
+                                    style="width: 100%; min-height: 150px; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid #555; border-radius: 4px; color: white; font-family: monospace; font-size: 13px; resize: vertical; margin-bottom: 10px;">${customOptimizationPrompt || ''}</textarea>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <button class="ttw-btn ttw-btn-small" id="ttw-reset-prompt-btn" style="background: #3498db;">📄 显示默认提示词</button>
+                                    <span id="ttw-prompt-status" style="color: #888; font-size: 12px;"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,100,0,0.1); border: 1px solid #27ae60; padding: 15px; border-radius: 8px;">
+                        <div style="color: #27ae60; font-weight: bold; margin-bottom: 10px;">✨ 优化目标</div>
+                        <div style="color: #ccc; font-size: 13px; line-height: 1.6;">
+                            • 将条目优化为<strong>常态描述</strong>（适合RPG）<br>
+                            • 人物状态设为正常，忽略临时变化<br>
+                            • 优化后将<strong>覆盖</strong>现有世界书条目
+                        </div>
+                    </div>
+                </div>
+                <div class="ttw-modal-footer">
+                    <button class="ttw-btn" id="ttw-cancel-optimize-wb">取消</button>
+                    <button class="ttw-btn ttw-btn-primary" id="ttw-start-optimize-wb">🚀 开始优化</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // 绑定自定义prompt开关
+        const useCustomPromptCheckbox = modal.querySelector('#ttw-use-custom-prompt');
+        const customPromptContainer = modal.querySelector('#ttw-custom-prompt-container');
+        const customPromptTextarea = modal.querySelector('#ttw-custom-prompt-textarea');
+
+        useCustomPromptCheckbox.addEventListener('change', () => {
+            customPromptContainer.style.display = useCustomPromptCheckbox.checked ? 'block' : 'none';
+        });
+
+        // 监听textarea内容变化，自动保存到localStorage
+        let saveTimeout = null;
+        customPromptTextarea.addEventListener('input', () => {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                const promptText = customPromptTextarea.value.trim();
+                try {
+                    localStorage.setItem('ttw_custom_optimization_prompt', promptText);
+                    console.log('💾 已自动保存自定义Prompt');
+                } catch (error) {
+                    console.error('保存自定义Prompt失败:', error);
+                }
+            }, 1000);
+        });
+
+        // 绑定显示默认提示词按钮
+        modal.querySelector('#ttw-reset-prompt-btn').addEventListener('click', () => {
+            const defaultPrompt = `你是RPG世界书优化专家。为每个条目生成**常态描述**。
+
+**要求：**
+1. 人物状态必须是常态（活着、正常），不能是死亡等临时状态
+2. 提取核心特征、背景、能力等持久性信息
+3. 越详尽越好
+4. **对于角色类条目**,必须生成完整的结构化JSON,包含以下字段:
+   - name: 角色名称【必填】
+   - gender: 性别【必填】
+   - age_appearance: 外观年龄
+   - origin: 出身背景（position职位、背景描述等）
+   - affiliation: 所属组织/阵营
+   - appearance: 外观描述（发色、发型、瞳色、肤色、体型、服装、配件、特征等）【必填】
+   - personality: 性格特征【必填】,必须包含:
+     * core_traits: 核心特质
+     * speech_style: 说话风格【必填】- 详细描述语气、用词习惯、表达方式
+     * sample_dialogue: 示例对话【必填】- 至少5条典型对话示例
+     * background_psychology: 心理背景
+     * social_style: 社交风格
+   - role_illustration: 角色定位说明
+   - support_relations: 与其他角色的关系
+   - style_tags: 风格标签
+5. **对于非角色条目**（地点、物品、设定等），生成简洁的描述性内容
+
+**输出JSON格式：**
+{
+  "条目名1": {
+    "关键词": ["关键词1", "关键词2"],
+    "内容": "对于角色，这里应该是完整的JSON字符串；对于非角色，这里是描述文本"
+  }
+}
+
+**条目：**
+{{条目}}
+直接输出JSON。`;
+
+            customPromptTextarea.value = defaultPrompt;
+            modal.querySelector('#ttw-prompt-status').textContent = '已加载默认提示词';
+            modal.querySelector('#ttw-prompt-status').style.color = '#3498db';
+        });
+
+        modal.querySelector('.ttw-modal-close').addEventListener('click', () => modal.remove());
+        modal.querySelector('#ttw-cancel-optimize-wb').addEventListener('click', () => {
+            modal.remove();
+            showHistoryView();
+        });
+        modal.querySelector('#ttw-start-optimize-wb').addEventListener('click', async () => {
+            const batchSize = parseInt(modal.querySelector('#ttw-batch-changes-input').value) || DEFAULT_BATCH_CHANGES;
+
+            // 保存自定义prompt
+            if (useCustomPromptCheckbox.checked) {
+                const promptText = customPromptTextarea.value.trim();
+                customOptimizationPrompt = promptText || null;
+            } else {
+                customOptimizationPrompt = null;
+            }
+
+            modal.remove();
+            await startBatchOptimizationAdvanced(entryEvolution, batchSize);
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+    }
+
+    // 高级批量优化函数（支持自定义prompt和批处理）
+    async function startBatchOptimizationAdvanced(entryEvolution, batchSize) {
+        const entries = Object.entries(entryEvolution);
+        if (entries.length === 0) {
+            alert('没有可优化的条目');
+            showHistoryView();
+            return;
+        }
+
+        // 按批次分组
+        const batches = [];
+        let currentBatch = [], currentBatchChanges = 0;
+        for (const [key, data] of entries) {
+            const entryChanges = data.changes.length;
+            if (currentBatchChanges + entryChanges > batchSize && currentBatch.length > 0) {
+                batches.push([...currentBatch]);
+                currentBatch = [];
+                currentBatchChanges = 0;
+            }
+            currentBatch.push({ key, data });
+            currentBatchChanges += entryChanges;
+        }
+        if (currentBatch.length > 0) batches.push(currentBatch);
+
+        // 保存优化前的世界书状态
+        const previousWorldbook = JSON.parse(JSON.stringify(generatedWorldbook));
+
+        showProgressSection(true);
+        updateProgress(0, `AI优化世界书中... (批次 0/${batches.length})`);
+
+        let completedBatches = 0, optimizedEntries = 0;
+        const allChangedEntries = [];
+
+        for (let i = 0; i < batches.length; i++) {
+            if (isProcessingStopped) break;
+            updateProgress(((i + 1) / batches.length) * 100, `AI优化中... (批次 ${i + 1}/${batches.length})`);
+
+            try {
+                const batchPrompt = buildBatchOptimizationPrompt(batches[i]);
+                const entryNames = batches[i].map(b => b.data.entryName).join(', ');
+                console.log(`📤 [AI优化世界书] 批次 ${i + 1}/${batches.length} 条目: ${entryNames}`);
+
+                const response = await callAPI(batchPrompt);
+                console.log(`📥 [AI优化世界书] 批次 ${i + 1}/${batches.length} 响应:`, response);
+
+                const batchChanges = await applyBatchOptimizationResult(response, batches[i], previousWorldbook);
+                allChangedEntries.push(...batchChanges);
+                optimizedEntries += batches[i].length;
+            } catch (error) {
+                console.error(`批次 ${i + 1} 优化失败:`, error);
+            }
+            completedBatches++;
+        }
+
+        // 保存修改历史
+        if (allChangedEntries.length > 0) {
+            try {
+                await MemoryHistoryDB.saveHistory(
+                    -1,
+                    '记忆-优化',
+                    previousWorldbook,
+                    generatedWorldbook,
+                    allChangedEntries
+                );
+                console.log(`📚 已保存优化历史: ${allChangedEntries.length} 个条目`);
+            } catch (error) {
+                console.error('保存优化历史失败:', error);
+            }
+        }
+
+        updateProgress(100, `优化完成！优化了 ${optimizedEntries} 个条目`);
+        await MemoryHistoryDB.saveState(memoryQueue.length);
+        updateWorldbookPreview();
+
+        alert(`优化完成！优化了 ${optimizedEntries} 个条目`);
+    }
+
+    // 构建批量优化prompt
+    function buildBatchOptimizationPrompt(batch) {
+        // 构建条目内容部分
+        let entriesContent = '';
+        batch.forEach(({ data }) => {
+            entriesContent += `\n--- ${data.entryName} [${data.category}] ---\n`;
+            data.changes.forEach((change, i) => {
+                if (change.newValue?.['内容']) {
+                    entriesContent += `${change.newValue['内容'].substring(0, 300)}...\n`;
+                }
+            });
+        });
+
+        // 如果有自定义prompt，使用自定义prompt
+        if (customOptimizationPrompt) {
+            // 替换占位符
+            let prompt = customOptimizationPrompt.replace(/\{\{条目\}\}/g, entriesContent);
+            console.log('📝 使用自定义Prompt');
+            return getLanguagePrefix() + prompt;
+        }
+
+        // 否则使用默认prompt
+        return getLanguagePrefix() + `你是RPG世界书优化专家。为每个条目生成**常态描述**。
+
+**要求：**
+1. 人物状态必须是常态（活着、正常），不能是死亡等临时状态
+2. 提取核心特征、背景、能力等持久性信息
+3. 越详尽越好
+4. **对于角色类条目**,必须生成完整的结构化JSON,包含以下字段:
+   - name: 角色名称【必填】
+   - gender: 性别【必填】
+   - age_appearance: 外观年龄
+   - origin: 出身背景（position职位、背景描述等）
+   - affiliation: 所属组织/阵营
+   - appearance: 外观描述（发色、发型、瞳色、肤色、体型、服装、配件、特征等）【必填】
+   - personality: 性格特征【必填】,必须包含:
+     * core_traits: 核心特质
+     * speech_style: 说话风格【必填】- 详细描述语气、用词习惯、表达方式
+     * sample_dialogue: 示例对话【必填】- 至少5条典型对话示例
+     * background_psychology: 心理背景
+     * social_style: 社交风格
+   - role_illustration: 角色定位说明
+   - support_relations: 与其他角色的关系
+   - style_tags: 风格标签
+5. **对于非角色条目**（地点、物品、设定等），生成简洁的描述性内容
+
+**输出JSON格式：**
+{
+  "条目名1": {
+    "关键词": ["关键词1", "关键词2"],
+    "内容": "对于角色，这里应该是完整的JSON字符串；对于非角色，这里是描述文本"
+  }
+}
+
+**条目：**
+${entriesContent}
+直接输出JSON。`;
+    }
+
+    // 应用批量优化结果
+    async function applyBatchOptimizationResult(response, batch, previousWorldbook) {
+        let result;
+
+        try {
+            // 清理响应
+            let cleanResponse = response.trim().replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+            const firstBrace = cleanResponse.indexOf('{');
+            const lastBrace = cleanResponse.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                cleanResponse = cleanResponse.substring(firstBrace, lastBrace + 1);
+            }
+
+            result = JSON.parse(cleanResponse);
+        } catch (e) {
+            console.error('解析优化结果失败:', e);
+            return [];
+        }
+
+        const changedEntries = [];
+
+        // 更新世界书中的条目
+        for (const { key, data } of batch) {
+            const entryName = data.entryName;
+            const category = data.category;
+
+            // 查找匹配的优化结果
+            const optimized = result[entryName];
+            if (optimized) {
+                // 确保分类存在
+                if (!generatedWorldbook[category]) {
+                    generatedWorldbook[category] = {};
+                }
+
+                // 记录旧值
+                const oldValue = previousWorldbook[category]?.[entryName] || null;
+
+                // 更新条目
+                const newValue = {
+                    '关键词': optimized['关键词'] || data.changes[data.changes.length - 1]?.newValue?.['关键词'] || [],
+                    '内容': optimized['内容'] || ''
+                };
+                generatedWorldbook[category][entryName] = newValue;
+
+                // 记录变更
+                changedEntries.push({
+                    category: category,
+                    entryName: entryName,
+                    type: oldValue ? 'modify' : 'add',
+                    oldValue: oldValue,
+                    newValue: newValue
+                });
+
+                console.log(`✅ 已优化条目: [${category}] ${entryName}`);
+            }
+        }
+
+        return changedEntries;
     }
 
     async function showOptimizeModal() {
@@ -4084,7 +4971,7 @@ ${cleanResponse}
 
     function buildOptimizationPrompt(entryData) {
         let evolutionText = `条目名称: ${entryData.entryName}\n分类: ${entryData.category}\n\n`;
-        
+
         entryData.changes.forEach((change, i) => {
             if (change.newValue?.['内容']) {
                 evolutionText += `版本${i + 1}: ${change.newValue['内容'].substring(0, 500)}...\n\n`;
@@ -4097,7 +4984,15 @@ ${cleanResponse}
 1. 人物状态必须是常态（活着、正常），不能是死亡等临时状态
 2. 提取核心特征、背景、能力等持久性信息
 3. 越详尽越好
-4. 直接输出内容，不要包含任何解释或JSON格式
+4. **对于角色类条目**,必须生成完整的结构化内容,包含以下信息:
+   - 角色名称、性别、外观年龄
+   - 出身背景、所属组织/阵营
+   - 外观描述（发色、发型、瞳色、肤色、体型、服装、配件、特征等）
+   - 性格特征（核心特质、说话风格、心理背景、社交风格）
+   - 示例对话（至少5条典型对话示例）
+   - 角色定位说明、与其他角色的关系、风格标签
+5. **对于非角色条目**（地点、物品、设定等），生成简洁的描述性内容
+6. 直接输出内容，不要包含任何解释或JSON格式包装
 
 **条目信息：**
 ${evolutionText}
@@ -4117,11 +5012,526 @@ ${evolutionText}
         createModal();
     }
 
+    // ========== 条目演变功能 ==========
+
+    // 显示条目演变模态框
+    async function showEntryEvolutionModal(historyList) {
+        const existingModal = document.getElementById('ttw-entry-evolution-modal');
+        if (existingModal) existingModal.remove();
+
+        // 按条目聚合历史
+        const entryEvolution = aggregateEntryEvolution(historyList);
+
+        const modal = document.createElement('div');
+        modal.id = 'ttw-entry-evolution-modal';
+        modal.className = 'ttw-modal-container';
+
+        const entryCount = Object.keys(entryEvolution).length;
+        modal.innerHTML = `
+            <div class="ttw-modal" style="max-width: 1100px;">
+                <div class="ttw-modal-header">
+                    <span class="ttw-modal-title">📊 条目演变历史 (${entryCount}个条目)</span>
+                    <div class="ttw-header-actions">
+                        <button class="ttw-btn ttw-btn-small" id="ttw-summarize-all-btn" style="background: #9b59b6;">🤖 AI总结全部</button>
+                        <button class="ttw-btn ttw-btn-small" id="ttw-export-evolution-btn" style="background: #27ae60;">📥 导出演变数据</button>
+                        <button class="ttw-btn ttw-btn-small" id="ttw-back-to-history-btn" style="background: #e67e22;">↩️ 返回历史</button>
+                        <button class="ttw-modal-close" type="button">✕</button>
+                    </div>
+                </div>
+                <div class="ttw-modal-body" style="display: flex; gap: 15px; height: 500px;">
+                    <div id="ttw-entry-list" style="width: 280px; flex-shrink: 0; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px;">
+                        ${generateEntryListHTML(entryEvolution)}
+                    </div>
+                    <div id="ttw-evolution-detail" style="flex: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px;">
+                        <div style="text-align: center; color: #888; padding: 40px;">👈 点击左侧条目查看演变历史</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // 保存当前演变数据到全局变量
+        window._ttwEntryEvolution = entryEvolution;
+
+        // 绑定事件
+        modal.querySelector('.ttw-modal-close').addEventListener('click', () => modal.remove());
+        modal.querySelector('#ttw-back-to-history-btn').addEventListener('click', () => {
+            modal.remove();
+            showHistoryView();
+        });
+        modal.querySelector('#ttw-export-evolution-btn').addEventListener('click', () => exportEvolutionData(entryEvolution));
+        modal.querySelector('#ttw-summarize-all-btn').addEventListener('click', () => summarizeAllEntryEvolution(entryEvolution));
+
+        // 绑定条目点击事件
+        modal.querySelectorAll('.ttw-entry-evolution-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const entryKey = item.dataset.entryKey;
+                showEntryEvolutionDetail(entryKey, entryEvolution[entryKey]);
+                // 高亮选中项
+                modal.querySelectorAll('.ttw-entry-evolution-item').forEach(i => i.style.background = 'rgba(0,0,0,0.2)');
+                item.style.background = 'rgba(0,0,0,0.4)';
+            });
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+    }
+
+    // 生成条目列表HTML
+    function generateEntryListHTML(entryEvolution) {
+        const entries = Object.entries(entryEvolution);
+
+        if (entries.length === 0) {
+            return '<div style="text-align: center; color: #888; padding: 20px;">暂无条目演变数据</div>';
+        }
+
+        // 按变更次数排序（多的在前）
+        entries.sort((a, b) => b[1].changes.length - a[1].changes.length);
+
+        let html = '';
+        entries.forEach(([key, data]) => {
+            const changeCount = data.changes.length;
+            const hasSummary = data.summary ? '✅' : '';
+
+            html += `
+            <div class="ttw-entry-evolution-item" data-entry-key="${key}" style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; border-left: 3px solid #3498db; transition: background 0.2s;">
+                <div style="font-weight: bold; color: #e67e22; font-size: 13px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+                    <span>${data.entryName}</span>
+                    <span style="font-size: 11px; color: #27ae60;">${hasSummary}</span>
+                </div>
+                <div style="font-size: 11px; color: #888; margin-bottom: 4px;">[${data.category}]</div>
+                <div style="font-size: 11px; color: #aaa;">
+                    <span style="color: #3498db;">${changeCount}次变更</span>
+                </div>
+            </div>`;
+        });
+
+        return html;
+    }
+
+    // 显示条目演变详情
+    function showEntryEvolutionDetail(entryKey, entryData) {
+        const detailContainer = document.getElementById('ttw-evolution-detail');
+        if (!detailContainer || !entryData) return;
+
+        let html = `
+        <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #444;">
+            <h4 style="color: #e67e22; margin: 0 0 5px 0;">${entryData.entryName}</h4>
+            <div style="font-size: 12px; color: #888; margin-bottom: 10px;">[${entryData.category}] - 共 ${entryData.changes.length} 次变更</div>
+            <button class="ttw-btn ttw-btn-small" id="ttw-summarize-single-btn" style="background: #9b59b6;" data-entry-key="${entryKey}">
+                🤖 AI总结此条目演变
+            </button>
+        </div>
+        `;
+
+        // 显示已有的总结
+        if (entryData.summary) {
+            html += `
+            <div style="background: rgba(39, 174, 96, 0.1); border: 1px solid #27ae60; border-radius: 6px; padding: 12px; margin-bottom: 15px;">
+                <div style="color: #27ae60; font-weight: bold; margin-bottom: 8px;">✅ AI总结</div>
+                <div style="color: #f0f0f0; font-size: 13px; line-height: 1.6; white-space: pre-wrap;">${entryData.summary.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            </div>
+            `;
+        }
+
+        html += `<div style="font-size: 14px; font-weight: bold; color: #3498db; margin-bottom: 10px;">📜 变更时间线</div>`;
+
+        // 按时间正序显示变更
+        entryData.changes.forEach((change, index) => {
+            const time = new Date(change.timestamp).toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const typeIcon = change.type === 'add' ? '➕ 新增' : change.type === 'modify' ? '✏️ 修改' : '❌ 删除';
+            const typeColor = change.type === 'add' ? '#27ae60' : change.type === 'modify' ? '#3498db' : '#e74c3c';
+
+            html += `
+            <div style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 12px; margin-bottom: 10px; border-left: 3px solid ${typeColor};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="color: ${typeColor}; font-weight: bold;">#${index + 1} ${typeIcon}</span>
+                    <span style="color: #888; font-size: 11px;">${time} - ${change.memoryTitle || `记忆块 ${change.memoryIndex + 1}`}</span>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex: 1; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; ${change.type === 'add' ? 'opacity: 0.5;' : ''}">
+                        <div style="color: #e74c3c; font-size: 11px; margin-bottom: 4px;">变更前</div>
+                        <div style="font-size: 12px; color: #ccc; max-height: 100px; overflow-y: auto;">
+                            ${change.oldValue ? formatEntryForDisplay(change.oldValue) : '<span style="color: #666;">无</span>'}
+                        </div>
+                    </div>
+                    <div style="flex: 1; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; ${change.type === 'delete' ? 'opacity: 0.5;' : ''}">
+                        <div style="color: #27ae60; font-size: 11px; margin-bottom: 4px;">变更后</div>
+                        <div style="font-size: 12px; color: #ccc; max-height: 100px; overflow-y: auto;">
+                            ${change.newValue ? formatEntryForDisplay(change.newValue) : '<span style="color: #666;">无</span>'}
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        detailContainer.innerHTML = html;
+
+        // 绑定单个条目AI总结按钮
+        const summarizeBtn = document.getElementById('ttw-summarize-single-btn');
+        if (summarizeBtn) {
+            summarizeBtn.addEventListener('click', () => {
+                summarizeSingleEntryEvolution(entryKey);
+            });
+        }
+    }
+
+    // 构建演变描述文本
+    function buildEvolutionText(entryData) {
+        let text = `条目名称: ${entryData.entryName}\n分类: ${entryData.category}\n\n变更历史:\n`;
+
+        entryData.changes.forEach((change, index) => {
+            const time = new Date(change.timestamp).toLocaleString('zh-CN');
+            text += `\n--- 第${index + 1}次变更 (${time}, ${change.memoryTitle || `记忆块${change.memoryIndex + 1}`}) ---\n`;
+            text += `类型: ${change.type === 'add' ? '新增' : change.type === 'modify' ? '修改' : '删除'}\n`;
+
+            if (change.oldValue) {
+                text += `变更前内容: ${change.oldValue['内容'] || JSON.stringify(change.oldValue)}\n`;
+            }
+            if (change.newValue) {
+                text += `变更后内容: ${change.newValue['内容'] || JSON.stringify(change.newValue)}\n`;
+            }
+        });
+
+        return text;
+    }
+
+    // 调用AI进行演变总结
+    async function callAIForEvolutionSummary(entryName, evolutionText) {
+        try {
+            const prompt = getLanguagePrefix() + `请根据以下世界书条目的变更历史，总结这个条目（角色/事物/概念）的常态信息。
+
+**重要要求：**
+1. 这是为SillyTavern RPG角色卡准备的世界书条目
+2. 人物状态应设置为**常态**（活着、正常状态），不能是死亡、受伤等临时状态
+3. 提取该条目的核心特征、背景、能力、关系等持久性信息
+4. 忽略故事中的临时变化，保留角色/事物的本质特征
+5. 输出应该是精炼的、适合作为RPG世界书条目的描述
+
+${evolutionText}
+
+请直接输出总结内容，不要包含任何解释或前缀。`;
+
+            console.log(`📤 [AI演变总结] 条目: ${entryName}\n完整Prompt:\n`, prompt);
+            const response = await callAPI(prompt);
+            console.log(`📥 [AI演变总结] 条目: ${entryName} 响应:\n`, response);
+            return response;
+        } catch (error) {
+            console.error('AI总结失败:', error);
+            return null;
+        }
+    }
+
+    // AI总结单个条目演变
+    async function summarizeSingleEntryEvolution(entryKey) {
+        const entryEvolution = window._ttwEntryEvolution;
+        if (!entryEvolution) {
+            alert('演变数据未加载');
+            return;
+        }
+
+        const entryData = entryEvolution[entryKey];
+        if (!entryData) {
+            alert('找不到该条目的演变数据');
+            return;
+        }
+
+        // 保存总结前的世界书状态
+        const previousWorldbook = JSON.parse(JSON.stringify(generatedWorldbook));
+
+        // 构建演变描述
+        const evolutionText = buildEvolutionText(entryData);
+
+        // 调用AI总结
+        updateProgress(50, `正在AI总结条目: ${entryData.entryName}`);
+        const summary = await callAIForEvolutionSummary(entryData.entryName, evolutionText);
+
+        if (summary) {
+            entryData.summary = summary;
+
+            // 更新世界书中的条目
+            const category = entryData.category;
+            const entryName = entryData.entryName;
+            if (!generatedWorldbook[category]) {
+                generatedWorldbook[category] = {};
+            }
+
+            const oldValue = generatedWorldbook[category][entryName] || null;
+            const newValue = {
+                '关键词': oldValue?.['关键词'] || [],
+                '内容': summary
+            };
+            generatedWorldbook[category][entryName] = newValue;
+
+            // 保存到修改历史
+            const changedEntries = [{
+                category: category,
+                entryName: entryName,
+                type: oldValue ? 'modify' : 'add',
+                oldValue: oldValue,
+                newValue: newValue
+            }];
+
+            try {
+                await MemoryHistoryDB.saveHistory(
+                    -1,
+                    '记忆-演变总结',
+                    previousWorldbook,
+                    generatedWorldbook,
+                    changedEntries
+                );
+                console.log(`📚 已保存演变总结历史: ${entryName}`);
+            } catch (error) {
+                console.error('保存演变总结历史失败:', error);
+            }
+
+            // 刷新显示
+            showEntryEvolutionDetail(entryKey, entryData);
+            await MemoryHistoryDB.saveState(memoryQueue.length);
+            updateProgress(100, `条目 ${entryName} AI总结完成`);
+        }
+    }
+
+    // AI总结全部条目演变
+    async function summarizeAllEntryEvolution(entryEvolution) {
+        window._ttwEntryEvolution = entryEvolution;
+        const entries = Object.entries(entryEvolution);
+
+        if (entries.length === 0) {
+            alert('没有可总结的条目');
+            return;
+        }
+
+        const confirmMsg = `将对 ${entries.length} 个条目进行AI总结。\n这可能需要一些时间和API调用。\n\n是否继续？`;
+        if (!confirm(confirmMsg)) return;
+
+        // 保存总结前的世界书状态
+        const previousWorldbook = JSON.parse(JSON.stringify(generatedWorldbook));
+
+        showProgressSection(true);
+        updateProgress(0, `AI总结中... (0/${entries.length})`);
+
+        let completed = 0;
+        for (const [key, data] of entries) {
+            if (isProcessingStopped) break;
+
+            try {
+                const evolutionText = buildEvolutionText(data);
+                const summary = await callAIForEvolutionSummary(data.entryName, evolutionText);
+                if (summary) {
+                    data.summary = summary;
+                }
+            } catch (e) {
+                console.error(`总结条目 ${key} 失败:`, e);
+            }
+
+            completed++;
+            updateProgress((completed / entries.length) * 100, `AI总结中... (${completed}/${entries.length})`);
+        }
+
+        // 保存总结后的世界书状态到修改历史
+        if (completed > 0) {
+            const allChangedEntries = [];
+            for (const [key, data] of entries) {
+                if (data.summary) {
+                    const category = data.category;
+                    const entryName = data.entryName;
+                    if (!generatedWorldbook[category]) {
+                        generatedWorldbook[category] = {};
+                    }
+
+                    const oldValue = generatedWorldbook[category][entryName] || null;
+                    const newValue = {
+                        '关键词': oldValue?.['关键词'] || [],
+                        '内容': data.summary
+                    };
+                    generatedWorldbook[category][entryName] = newValue;
+
+                    allChangedEntries.push({
+                        category: category,
+                        entryName: entryName,
+                        type: oldValue ? 'modify' : 'add',
+                        oldValue: oldValue,
+                        newValue: newValue
+                    });
+                }
+            }
+
+            if (allChangedEntries.length > 0) {
+                try {
+                    await MemoryHistoryDB.saveHistory(
+                        -1,
+                        '记忆-演变总结',
+                        previousWorldbook,
+                        generatedWorldbook,
+                        allChangedEntries
+                    );
+                    console.log(`📚 已保存演变总结历史: ${allChangedEntries.length} 个条目`);
+                } catch (error) {
+                    console.error('保存演变总结历史失败:', error);
+                }
+                await MemoryHistoryDB.saveState(memoryQueue.length);
+            }
+        }
+
+        updateProgress(100, `已完成 ${completed} 个条目的AI总结`);
+        alert(`已完成 ${completed} 个条目的AI总结！`);
+
+        // 刷新条目列表
+        const entryListContainer = document.getElementById('ttw-entry-list');
+        if (entryListContainer) {
+            entryListContainer.innerHTML = generateEntryListHTML(entryEvolution);
+            // 重新绑定点击事件
+            entryListContainer.querySelectorAll('.ttw-entry-evolution-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const entryKey = item.dataset.entryKey;
+                    showEntryEvolutionDetail(entryKey, entryEvolution[entryKey]);
+                    entryListContainer.querySelectorAll('.ttw-entry-evolution-item').forEach(i => i.style.background = 'rgba(0,0,0,0.2)');
+                    item.style.background = 'rgba(0,0,0,0.4)';
+                });
+            });
+        }
+    }
+
+    // 导出演变数据为SillyTavern世界书格式
+    function exportEvolutionData(entryEvolution) {
+        const entries = Object.entries(entryEvolution);
+
+        if (entries.length === 0) {
+            alert('没有可导出的演变数据');
+            return;
+        }
+
+        const triggerCategories = new Set(['地点', '剧情大纲']);
+        const sillyTavernEntries = [];
+        let entryId = 0;
+
+        for (const [key, data] of entries) {
+            const category = data.category;
+            const entryName = data.entryName;
+            const isTriggerCategory = triggerCategories.has(category);
+            const constant = !isTriggerCategory;
+            const selective = isTriggerCategory;
+
+            // 获取最新的内容和关键词（优先使用AI总结，否则使用最后一次变更的内容）
+            let content = data.summary || '';
+            let keywords = [];
+
+            if (!content && data.changes.length > 0) {
+                const lastChange = data.changes[data.changes.length - 1];
+                content = lastChange.newValue?.['内容'] || lastChange.oldValue?.['内容'] || '';
+                keywords = lastChange.newValue?.['关键词'] || lastChange.oldValue?.['关键词'] || [];
+            }
+
+            if (!content) continue;
+
+            // 处理关键词
+            if (!Array.isArray(keywords) || keywords.length === 0) {
+                keywords = [entryName];
+            }
+            const cleanKeywords = keywords.map(k => String(k).trim().replace(/[-_\s]+/g, ''))
+                .filter(k => k.length > 0 && k.length <= 20);
+            if (cleanKeywords.length === 0) cleanKeywords.push(entryName);
+            const uniqueKeywords = [...new Set(cleanKeywords)];
+
+            sillyTavernEntries.push({
+                uid: entryId++,
+                key: uniqueKeywords,
+                keysecondary: [],
+                comment: `${category} - ${entryName}`,
+                content: content,
+                constant,
+                selective,
+                selectiveLogic: 0,
+                addMemo: true,
+                order: entryId * 100,
+                position: 0,
+                disable: false,
+                excludeRecursion: false,
+                preventRecursion: false,
+                delayUntilRecursion: false,
+                probability: 100,
+                depth: 4,
+                group: category,
+                groupOverride: false,
+                groupWeight: 100,
+                scanDepth: null,
+                caseSensitive: false,
+                matchWholeWords: true,
+                useGroupScoring: null,
+                automationId: '',
+                role: 0,
+                vectorized: false,
+                sticky: null,
+                cooldown: null,
+                delay: null
+            });
+        }
+
+        const exportData = { entries: sillyTavernEntries };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `worldbook_evolution_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        console.log(`已导出 ${sillyTavernEntries.length} 个条目为SillyTavern世界书格式`);
+        alert(`已导出 ${sillyTavernEntries.length} 个条目！`);
+    }
+
+    // 导出指定历史版本的世界书
+    async function exportHistoryWorldbook(historyId) {
+        try {
+            const history = await MemoryHistoryDB.getHistoryById(historyId);
+            if (!history) {
+                alert('找不到该历史记录');
+                return;
+            }
+
+            const worldbook = history.newWorldbook;
+            if (!worldbook || Object.keys(worldbook).length === 0) {
+                alert('该历史记录没有世界书数据');
+                return;
+            }
+
+            // 生成世界书名称
+            const timestamp = new Date(history.timestamp);
+            const readableTimeString = `${timestamp.getFullYear()}${String(timestamp.getMonth() + 1).padStart(2, '0')}${String(timestamp.getDate()).padStart(2, '0')}_${String(timestamp.getHours()).padStart(2, '0')}${String(timestamp.getMinutes()).padStart(2, '0')}`;
+            const worldbookName = `${history.memoryTitle || `记忆${history.memoryIndex + 1}`}-${readableTimeString}`;
+
+            // 转换为SillyTavern世界书格式
+            const sillyTavernWorldbook = convertToSillyTavernFormat(worldbook);
+
+            const blob = new Blob([JSON.stringify(sillyTavernWorldbook, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const safeName = worldbookName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
+            a.download = `${safeName}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            console.log(`已导出历史记录 #${historyId} 的世界书 (SillyTavern世界书格式)`);
+        } catch (error) {
+            console.error('导出历史世界书失败:', error);
+            alert('导出失败: ' + error.message);
+        }
+    }
+
     // ========== 公开 API ==========
     window.TxtToWorldbook = {
         open: open,
         close: closeModal,
         _rollbackToHistory: rollbackToHistory,
+        _exportHistoryWorldbook: exportHistoryWorldbook,
         getWorldbook: () => generatedWorldbook,
         getMemoryQueue: () => memoryQueue
     };
