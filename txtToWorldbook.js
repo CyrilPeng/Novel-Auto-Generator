@@ -2232,8 +2232,10 @@
                 startFromIndex = userSelectedStartIndex;
                 return;
             }
+            const processedCount = memoryQueue.filter(m => m.processed && !m.failed).length;
             const firstUnprocessed = memoryQueue.findIndex(m => !m.processed || m.failed);
-            if (firstUnprocessed !== -1 && firstUnprocessed < memoryQueue.length) {
+            // 只有当存在已处理的条目，且还有未处理的条目时，才显示"继续转换"
+            if (processedCount > 0 && firstUnprocessed !== -1 && firstUnprocessed < memoryQueue.length) {
                 startBtn.textContent = `▶️ 继续转换 (从第${firstUnprocessed + 1}章)`;
                 startFromIndex = firstUnprocessed;
             } else if (memoryQueue.length > 0 && memoryQueue.every(m => m.processed && !m.failed)) {
@@ -6149,6 +6151,11 @@ ${pairsWithContent}
             .ttw-consolidate-category-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:6px;margin-bottom:6px;cursor:pointer;}
             .ttw-consolidate-category-item input{width:18px;height:18px;accent-color:#3498db;}
             @media (max-width: 768px) {
+                .ttw-modal-container{padding:10px;}
+                .ttw-modal{max-height:calc(100vh - 20px);}
+                .ttw-modal-body{padding:12px;max-height:calc(100vh - 180px);overflow-y:auto;}
+                .ttw-modal-footer{flex-wrap:wrap;padding:12px;position:sticky;bottom:0;flex-shrink:0;}
+                .ttw-modal-footer .ttw-btn{flex:1 1 auto;min-width:auto;}
                 .ttw-roll-history-container,.ttw-history-container{flex-direction:column;height:auto;}
                 .ttw-roll-history-left,.ttw-history-left{width:100%;max-width:100%;flex-direction:row;flex-wrap:wrap;height:auto;max-height:120px;}
                 .ttw-roll-reroll-btn{width:auto;flex-shrink:0;}
