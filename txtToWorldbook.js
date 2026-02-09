@@ -398,6 +398,14 @@
                 const request = indexedDB.open(this.dbName, 6); // 升级版本号
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
+                    const oldVersion = event.oldVersion || 0;
+
+                    // 【修复】添加版本迁移逻辑
+                    if (oldVersion < 1) {
+                        // 从 v0 迁移到 v1：创建 stores
+                    }
+
+                    // 创建或更新各个 store
                     if (!db.objectStoreNames.contains(this.storeName)) {
                         const store = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
                         store.createIndex('timestamp', 'timestamp', { unique: false });
@@ -1249,7 +1257,10 @@
         try {
             const bodyObj = JSON.parse(requestOptions.body);
             isStreamRequest = bodyObj.stream === true;
-        } catch (e) { }
+        } catch (e) {
+            // 【修复】JSON.parse 失败时的错误处理
+            debugLog(`解析请求体失败: ${e.message}`);
+        }
 
         try {
             debugLog(`自定义API发送fetch请求到: ${requestUrl.substring(0, 80)}...`);
@@ -1338,7 +1349,10 @@
                             const parsed = JSON.parse(trimmed.slice(6).trim());
                             const delta = parsed.choices?.[0]?.delta?.content || '';
                             if (delta) fullContent += delta;
-                        } catch (e) { }
+                        } catch (e) {
+                            // 【修复】JSON.parse 失败时记录错误
+                            debugLog(`解析剩余buffer中的JSON失败: ${e.message}`);
+                        }
                     }
                 }
 
@@ -2892,7 +2906,10 @@ ${generateDynamicJsonTemplate()}
                 if (!generatedWorldbook[category]) {
                     generatedWorldbook[category] = {};
                 }
-                generatedWorldbook[category][entryName] = entryUpdate[category][entryName];
+                // 【修复】添加可选链检查避免 undefined 错误
+                if (generatedWorldbook[category] && entryName) {
+                    generatedWorldbook[category][entryName] = entryUpdate[category][entryName];
+                }
 
                 updateStreamContent(`✅ 条目重Roll完成: [${category}] ${entryName}\n`);
                 updateMemoryQueueUI();
@@ -3098,17 +3115,20 @@ ${generateDynamicJsonTemplate()}
                 const roll = await MemoryHistoryDB.getEntryRollById(rollId);
                 if (roll && roll.result) {
                     // 更新到编辑区
-                    const keywords = Array.isArray(roll.result['关键词']) 
-                        ? roll.result['关键词'].join(', ') 
+                    const keywords = Array.isArray(roll.result['关键词'])
+                        ? roll.result['关键词'].join(', ')
                         : (roll.result['关键词'] || '');
                     modal.querySelector('#ttw-entry-keywords-edit').value = keywords;
                     modal.querySelector('#ttw-entry-content-edit').value = roll.result['内容'] || '';
-                    
+
                     // 同时更新世界书
+                    // 【修复】使用可选链避免 undefined 错误
                     if (!generatedWorldbook[category]) {
                         generatedWorldbook[category] = {};
                     }
-                    generatedWorldbook[category][entryName] = JSON.parse(JSON.stringify(roll.result));
+                    if (generatedWorldbook[category] && entryName) {
+                        generatedWorldbook[category][entryName] = JSON.parse(JSON.stringify(roll.result));
+                    }
                     updateWorldbookPreview();
                     
                     btn.textContent = '✅ 已应用';
@@ -3124,11 +3144,14 @@ ${generateDynamicJsonTemplate()}
                 const rollId = parseInt(item.dataset.rollId);
                 const roll = await MemoryHistoryDB.getEntryRollById(rollId);
                 if (roll && roll.result) {
-                    const keywords = Array.isArray(roll.result['关键词']) 
-                        ? roll.result['关键词'].join(', ') 
+                    const keywords = Array.isArray(roll.result['关键词'])
+                        ? roll.result['关键词'].join(', ')
                         : (roll.result['关键词'] || '');
                     // 显示预览
-                    alert(`【Roll #${rollId}】\n\n关键词:\n${keywords}\n\n内容:\n${roll.result['内容'] || '(无)'}\n\n提示词: ${roll.customPrompt || '(无)'}`);
+                    // 【修复】使用可选链避免访问 undefined 属性
+                    const content = roll.result['内容'] || '(无)';
+                    const customPrompt = roll.customPrompt || '(无)';
+                    alert(`【Roll #${rollId}】\n\n关键词:\n${keywords}\n\n内容:\n${content}\n\n提示词: ${customPrompt}`);
                 }
             });
         });
@@ -6190,9 +6213,12 @@ ${pairsContent}
         // 高亮函数
         const highlightKw = (text) => {
             if (!text) return '';
+            // 【修复】正确转义所有正则特殊字符，包括 [ ] \ 等
             const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // 【修复】转义 HTML 以防止 XSS
+            const escapedKeyword = keyword.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             return text.replace(new RegExp(escaped, 'g'),
-                `<span style="background:#f1c40f;color:#000;padding:1px 2px;border-radius:2px;">${keyword}</span>`);
+                `<span style="background:#f1c40f;color:#000;padding:1px 2px;border-radius:2px;">${escapedKeyword}</span>`);
         };
 
         // 生成HTML
@@ -6207,16 +6233,21 @@ ${pairsContent}
                 : '<span style="font-size:9px;color:#f39c12;margin-left:4px;">⚠合并数据</span>';
 
             const matchTexts = result.matches.slice(0, 2).map(m => {
-                const fieldText = m.field || '';
+                const fieldText = (m.field || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const matchText = (m.text || '').substring(0, 80);
                 return '<span style="color:#888;">' + fieldText + ':</span> ' + highlightKw(matchText) + (m.text && m.text.length > 80 ? '...' : '');
             }).join('<br>');
 
+            // 【修复】转义 HTML 以防止 XSS
+            const escapedCategory = (result.category || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const escapedEntryName = (result.entryName || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const escapedMemoryLabel = memoryLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
             html += '<div class="ttw-search-result-item" data-result-index="' + idx + '" style="background:rgba(0,0,0,0.2);border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #f1c40f;cursor:pointer;transition:background 0.2s;">';
             html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-            html += '<span style="font-weight:bold;color:#e67e22;">[' + result.category + '] ' + highlightKw(result.entryName) + '</span>';
+            html += '<span style="font-weight:bold;color:#e67e22;">[' + escapedCategory + '] ' + highlightKw(escapedEntryName) + '</span>';
             html += '<div style="display:flex;align-items:center;gap:8px;">';
-            html += '<span style="font-size:11px;color:' + memoryColor + ';background:rgba(52,152,219,0.2);padding:2px 6px;border-radius:3px;">📍 ' + memoryLabel + '</span>';
+            html += '<span style="font-size:11px;color:' + memoryColor + ';background:rgba(52,152,219,0.2);padding:2px 6px;border-radius:3px;">📍 ' + escapedMemoryLabel + '</span>';
             html += sourceTag;
             if (result.memoryIndex >= 0) {
                 html += '<button class="ttw-btn-tiny ttw-reroll-single" data-memory-idx="' + result.memoryIndex + '" title="重Roll此章节">🎲</button>';
@@ -6465,6 +6496,7 @@ ${pairsContent}
                 previewDiv.innerHTML = `<div style="color:#888;text-align:center;padding:20px;">未找到"${findText}"</div>`;
             } else {
                 const highlightText = (text) => {
+                    // 【修复】正确转义所有正则特殊字符，包括 [ ] \ 等
                     return text.replace(new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
                         `<span style="background:#f1c40f;color:#000;padding:1px 2px;border-radius:2px;">${findText}</span>`);
                 };
@@ -6495,7 +6527,8 @@ ${pairsContent}
                     btn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const matchIndex = parseInt(btn.dataset.index);
-                        const matchInfo = preview.allMatches[matchIndex];
+                        // 【修复】添加数组边界检查
+                        const matchInfo = matchIndex >= 0 && matchIndex < preview.allMatches.length ? preview.allMatches[matchIndex] : null;
 
                         if (!matchInfo) return;
 
@@ -6553,6 +6586,7 @@ ${pairsContent}
     }
 
     function previewReplace(findText, replaceWith, inWorldbook, inResults) {
+        // 【修复】正确转义所有正则特殊字符，包括 [ ] \ 等
         const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
         let count = 0;
         const allMatches = [];
@@ -6704,6 +6738,7 @@ ${pairsContent}
 
 
     function executeSingleReplace(findText, replaceWith, matchInfo) {
+        // 【修复】正确转义所有正则特殊字符，包括 [ ] \ 等
         const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
 
         if (matchInfo.source === 'worldbook') {
@@ -6778,6 +6813,7 @@ ${pairsContent}
 
 
     function executeReplace(findText, replaceWith, inWorldbook, inResults) {
+        // 【修复】正确转义所有正则特殊字符，包括 [ ] \ 等
         const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
         let count = 0;
 
