@@ -1,6 +1,7 @@
 import { saveSettingsDebounced } from "../../../../script.js";
 import { extension_settings } from "../../../extensions.js";
 import './txtToWorldbook.js';
+import './Worldbook/index.js';
 
 const extensionName = "novel-auto-generator";
 
