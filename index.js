@@ -49,7 +49,16 @@ const defaultSettings = {
 
 let settings = {};
 let abortGeneration = false;
+const MAX_ERROR_LOG = 100;
 let generationStats = { startTime: null, chaptersGenerated: 0, totalCharacters: 0, errors: [] };
+
+// 安全地添加错误记录
+function addGenerationError(chapter, errorMsg) {
+    if (generationStats.errors.length >= MAX_ERROR_LOG) {
+        generationStats.errors = generationStats.errors.slice(-MAX_ERROR_LOG + 1);
+    }
+    generationStats.errors.push({ chapter: chapter, error: errorMsg, time: Date.now() });
+}
 
 // ============================================
 // 工具函数
@@ -734,7 +743,7 @@ async function startGeneration() {
                     
                     retries++;
                     log(`第 ${i+1} 章失败: ${e.message}`, 'error');
-                    generationStats.errors.push({ chapter: i + 1, error: e.message });
+                    addGenerationError(i + 1, e.message);
                     
                     if (retries < settings.maxRetries) {
                         log(`等待5秒后重试...`, 'info');
