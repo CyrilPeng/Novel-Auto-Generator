@@ -1,0 +1,44 @@
+{
+    "name": "worldinfo-module",
+    "version": "3.0.0",
+    "description": "TXT 转世界书、EPUB 转 TXT、世界书导出模块 - SillyTavern 扩展",
+    "type": "module",
+    "main": "index.js",
+    "types": "types/index.d.ts",
+    "scripts": {
+        "test": "jest --config tests/jest.config.js",
+        "test:watch": "jest --config tests/jest.config.js --watch",
+        "test:coverage": "jest --config tests/jest.config.js --coverage",
+        "test:unit": "jest --config tests/jest.config.js tests/unit/**/*.test.js",
+        "lint": "eslint Worldinfo/**/*.js",
+        "lint:fix": "eslint Worldinfo/**/*.js --fix",
+        "typecheck": "tsc --noEmit --project tsconfig.json"
+    },
+    "keywords": [
+        "sillytavern",
+        "worldinfo",
+        "novel",
+        "epub",
+        "txt",
+        "extension"
+    ],
+    "author": "Novel-Auto-Generator Team",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/CyrilPeng/Novel-Auto-Generator.git"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.23.0",
+        "@babel/preset-env": "^7.23.0",
+        "babel-jest": "^29.7.0",
+        "eslint": "^8.50.0",
+        "jest": "^29.7.0",
+        "jest-environment-jsdom": "^29.7.0",
+        "typescript": "^5.2.2"
+    },
+    "engines": {
+        "node": ">=16.0.0",
+        "npm": ">=8.0.0"
+    }
+}

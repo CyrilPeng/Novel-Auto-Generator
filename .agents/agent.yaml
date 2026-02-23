@@ -1,0 +1,33 @@
+version: 1
+agent:
+  name: novel-auto-generator
+  extend: default
+  # 启用动态创建子 Agent 功能
+  tools:
+    - "kimi_cli.tools.multiagent:Task"
+    - "kimi_cli.tools.multiagent:CreateSubagent"
+    - "kimi_cli.tools.todo:SetTodoList"
+    - "kimi_cli.tools.shell:Shell"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
+  # 预定义的子 Agent 配置
+  subagents:
+    # 代码审查子 Agent - 用于审查代码变更
+    reviewer:
+      description: "Code reviewer expert for reviewing code changes"
+      path: reviewer.yaml
+    
+    # 文档编写子 Agent - 用于编写和更新文档
+    documenter:
+      description: "Documentation expert for writing and updating docs"
+      path: documenter.yaml
+    
+    # 测试专家子 Agent - 用于编写测试用例
+    tester:
+      description: "Testing expert for writing test cases"
+      path: tester.yaml

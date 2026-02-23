@@ -1,7 +1,5 @@
-import { saveSettingsDebounced } from "../../../../script.js";
+﻿import { saveSettingsDebounced } from "../../../../script.js";
 import { extension_settings } from "../../../extensions.js";
-import './txtToWorldbook.js';
-import './Worldbook/index.js';
 
 const extensionName = "novel-auto-generator";
 
@@ -1173,12 +1171,28 @@ function bindEvents() {
     $('#nag-btn-export-json').on('click', () => exportAsJSON(false));
     $('#nag-btn-refresh-floors').on('click', () => $('#nag-total-floors').text(getTotalFloors()));
     $('#nag-btn-refresh-preview').on('click', refreshPreview);
-    // TXT转世界书入口
-    $('#nag-btn-txt-to-worldbook').on('click', () => {
-        if (typeof window.TxtToWorldbook !== 'undefined') {
-            window.TxtToWorldbook.open();
-        } else {
-            toastr.error('TXT转世界书模块未加载');
+    // TXT 转世界书入口 - 自动加载模块
+    $('#nag-btn-txt-to-worldbook').on('click', async () => {
+        try {
+            console.log('[Worldinfo] Button clicked');
+            if (typeof window.WorldinfoModule === 'undefined') {
+                console.log('[Worldinfo] Module not defined, loading...');
+                // 使用绝对路径导入（相对于 SillyTavern 根目录）
+                const basePath = window.location.origin + '/scripts/extensions/third-party/Novel-Auto-Generator/';
+                const m = await import(basePath + 'Worldinfo/main.js?t=' + Date.now());
+                window.WorldinfoModule = {
+                    init: m.initWorldinfo,
+                    open: m.openWorldinfo
+                };
+                console.log('[Worldinfo] 模块加载成功');
+            }
+            console.log('[Worldinfo] Calling init()...');
+            await window.WorldinfoModule.init();
+            console.log('[Worldinfo] Calling open()...');
+            window.WorldinfoModule.open();
+        } catch (e) {
+            console.error('[Worldinfo] 打开失败:', e);
+            toastr.error('打开失败：' + e.message);
         }
     });
 
@@ -1371,6 +1385,21 @@ function syncUI() {
 // ============================================
 // 初始化
 // ============================================
+
+// 保存扩展脚本的基础路径供 Worldinfo 模块使用
+const __extensionBasePath = (() => {
+    try {
+        const scripts = document.getElementsByTagName('script');
+        for (let script of scripts) {
+            if (script.src && script.src.includes('Novel-Auto-Generator')) {
+                return script.src.substring(0, script.src.lastIndexOf('/') + 1);
+            }
+        }
+    } catch (e) {}
+    // 回退到默认路径（相对于 SillyTavern 根目录）
+    const base = window.location.origin + '/scripts/extensions/third-party/Novel-Auto-Generator/';
+    return base;
+})();
 
 jQuery(async () => {
     loadSettings();

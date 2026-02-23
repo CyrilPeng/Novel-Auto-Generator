@@ -1,0 +1,698 @@
+/* ============================================
+   Worldinfo 模块样式表
+   ============================================ */
+
+/* ============================================
+   CSS 变量定义
+   ============================================ */
+:root {
+    /* 主题色 */
+    --ww-primary: #e67e22;
+    --ww-primary-dark: #d35400;
+    --ww-secondary: #3498db;
+    --ww-secondary-dark: #2980b9;
+    --ww-success: #27ae60;
+    --ww-success-light: #2ecc71;
+    --ww-warning: #f39c12;
+    --ww-danger: #e74c3c;
+    --ww-info: #1abc9c;
+    --ww-purple: #9b59b6;
+    
+    /* 背景色 */
+    --ww-bg-primary: #1a1a2e;
+    --ww-bg-secondary: #2d2d2d;
+    --ww-bg-tertiary: #3a3a3a;
+    --ww-bg-card: rgba(255, 255, 255, 0.05);
+    --ww-bg-hover: rgba(255, 255, 255, 0.1);
+    
+    /* 边框色 */
+    --ww-border: #444;
+    --ww-border-light: #555;
+    
+    /* 文字色 */
+    --ww-text-primary: #fff;
+    --ww-text-secondary: #aaa;
+    --ww-text-muted: #888;
+    
+    /* 阴影 */
+    --ww-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --ww-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    
+    /* 圆角 */
+    --ww-radius: 8px;
+    --ww-radius-sm: 4px;
+    --ww-radius-lg: 12px;
+    
+    /* 过渡 */
+    --ww-transition: all 0.2s ease;
+}
+
+/* ============================================
+   主容器
+   ============================================ */
+.worldinfo-container {
+    margin-top: 10px;
+    padding: 15px;
+    background: var(--ww-bg-primary);
+    border-radius: var(--ww-radius-lg);
+    border: 1px solid var(--ww-border);
+}
+
+.worldinfo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--ww-border);
+}
+
+.worldinfo-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--ww-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.worldinfo-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ============================================
+   弹窗组件
+   ============================================ */
+.ww-modal-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+    /* 遮罩淡入动画 */
+    animation: wwModalFadeIn 0.15s ease;
+}
+
+@keyframes wwModalFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.ww-modal {
+    background: var(--ww-bg-primary);
+    border: 1px solid var(--ww-border);
+    border-radius: var(--ww-radius-lg);
+    max-width: 600px;
+    width: 100%;
+    max-height: 80vh;
+    max-height: 80dvh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--ww-shadow);
+    /* 初始状态：透明且缩小 */
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+    /* 添加过渡效果 */
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    /* 确保内容不会在动画期间溢出 */
+    overflow: hidden;
+}
+
+/* 可见状态：由 JS 添加类触发 */
+.ww-modal-visible {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+@keyframes wwModalAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.ww-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ww-border);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--ww-radius-lg) var(--ww-radius-lg) 0 0;
+    flex-shrink: 0;
+}
+
+.ww-modal-title {
+    font-weight: bold;
+    font-size: 16px;
+    color: var(--ww-primary);
+}
+
+.ww-modal-close {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--ww-radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--ww-transition);
+    font-size: 18px;
+}
+
+.ww-modal-close:hover {
+    background: rgba(231, 76, 60, 0.3);
+    color: #ff6b6b;
+}
+
+.ww-modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.ww-modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--ww-border);
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 0 0 var(--ww-radius-lg) var(--ww-radius-lg);
+    flex-shrink: 0;
+}
+
+/* ============================================
+   进度条
+   ============================================ */
+.ww-progress-container {
+    margin: 15px 0;
+}
+
+.ww-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--ww-radius-sm);
+    overflow: hidden;
+}
+
+.ww-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ww-success), var(--ww-success-light));
+    transition: width 0.3s ease;
+}
+
+.ww-progress-text {
+    margin-top: 8px;
+    font-size: 13px;
+    text-align: center;
+    color: var(--ww-text-secondary);
+}
+
+/* ============================================
+   按钮
+   ============================================ */
+.ww-btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--ww-radius);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: var(--ww-transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.ww-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ww-btn-primary {
+    background: linear-gradient(135deg, var(--ww-primary), var(--ww-primary-dark));
+    color: #fff;
+}
+
+.ww-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.4);
+}
+
+.ww-btn-secondary {
+    background: var(--ww-secondary);
+    color: #fff;
+}
+
+.ww-btn-secondary:hover:not(:disabled) {
+    background: var(--ww-secondary-dark);
+}
+
+.ww-btn-success {
+    background: var(--ww-success);
+    color: #fff;
+}
+
+.ww-btn-success:hover:not(:disabled) {
+    background: var(--ww-success-light);
+}
+
+.ww-btn-warning {
+    background: var(--ww-warning);
+    color: #fff;
+}
+
+.ww-btn-danger {
+    background: var(--ww-danger);
+    color: #fff;
+}
+
+.ww-btn-danger:hover:not(:disabled) {
+    background: #c0392b;
+}
+
+.ww-btn-info {
+    background: var(--ww-info);
+    color: #fff;
+}
+
+.ww-btn-purple {
+    background: var(--ww-purple);
+    color: #fff;
+}
+
+.ww-btn-small {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.ww-btn-large {
+    padding: 14px 20px;
+    font-size: 16px;
+}
+
+.ww-btn-block {
+    width: 100%;
+}
+
+.ww-btn-icon {
+    padding: 8px;
+    width: 36px;
+    height: 36px;
+}
+
+/* ============================================
+   卡片组件
+   ============================================ */
+.ww-card {
+    background: var(--ww-bg-secondary);
+    border: 1px solid var(--ww-border);
+    border-radius: var(--ww-radius);
+    padding: 12px;
+    margin-bottom: 10px;
+    transition: var(--ww-transition);
+}
+
+.ww-card:hover {
+    border-color: var(--ww-border-light);
+    background: var(--ww-bg-hover);
+}
+
+.ww-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 10px;
+}
+
+.ww-card-title {
+    font-weight: bold;
+    font-size: 14px;
+    color: var(--ww-text-primary);
+}
+
+.ww-card-body {
+    padding-top: 10px;
+}
+
+.ww-card-footer {
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ============================================
+   输入框
+   ============================================ */
+.ww-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--ww-border);
+    border-radius: var(--ww-radius);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--ww-text-primary);
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: var(--ww-transition);
+}
+
+.ww-input:focus {
+    outline: none;
+    border-color: var(--ww-primary);
+    box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.2);
+}
+
+.ww-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ww-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.ww-input-group {
+    margin-bottom: 12px;
+}
+
+.ww-input-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--ww-text-secondary);
+}
+
+/* ============================================
+   章节列表
+   ============================================ */
+.ww-chapter-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: var(--ww-radius);
+}
+
+.ww-chapter-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--ww-bg-card);
+    border-radius: var(--ww-radius);
+    cursor: pointer;
+    transition: var(--ww-transition);
+    border: 1px solid transparent;
+}
+
+.ww-chapter-item:hover {
+    background: var(--ww-bg-hover);
+    border-color: var(--ww-border);
+}
+
+.ww-chapter-item.processing {
+    border-left: 3px solid var(--ww-info);
+    background: rgba(26, 188, 204, 0.1);
+}
+
+.ww-chapter-item.completed {
+    border-left: 3px solid var(--ww-success);
+    opacity: 0.7;
+}
+
+.ww-chapter-item.failed {
+    border-left: 3px solid var(--ww-danger);
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.ww-chapter-item.selected {
+    border-color: var(--ww-primary);
+    background: rgba(230, 126, 34, 0.2);
+}
+
+.ww-chapter-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+.ww-chapter-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.ww-chapter-size {
+    font-size: 11px;
+    color: var(--ww-text-muted);
+}
+
+/* ============================================
+   世界书预览卡片
+   ============================================ */
+.ww-worldbook-category {
+    margin-bottom: 15px;
+    border: 1px solid var(--ww-primary);
+    border-radius: var(--ww-radius);
+    overflow: hidden;
+}
+
+.ww-worldbook-category-header {
+    background: linear-gradient(135deg, var(--ww-primary), var(--ww-primary-dark));
+    padding: 10px 14px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: var(--ww-transition);
+}
+
+.ww-worldbook-category-header:hover {
+    opacity: 0.9;
+}
+
+.ww-worldbook-category-title {
+    font-weight: bold;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ww-worldbook-category-stats {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.ww-worldbook-category-body {
+    background: var(--ww-bg-secondary);
+    padding: 10px;
+}
+
+.ww-worldbook-entry {
+    margin: 8px 0;
+    border: 1px solid var(--ww-border);
+    border-radius: var(--ww-radius);
+    overflow: hidden;
+}
+
+.ww-worldbook-entry-header {
+    background: var(--ww-bg-tertiary);
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: var(--ww-transition);
+}
+
+.ww-worldbook-entry-header:hover {
+    background: var(--ww-bg-hover);
+}
+
+.ww-worldbook-entry-title {
+    font-weight: bold;
+    font-size: 13px;
+    color: var(--ww-text-primary);
+}
+
+.ww-worldbook-entry-body {
+    background: #1c1c1c;
+    padding: 12px;
+    display: none;
+}
+
+.ww-worldbook-entry-body.expanded {
+    display: block;
+}
+
+/* ============================================
+   标签/徽章
+   ============================================ */
+.ww-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.ww-badge-primary {
+    background: rgba(230, 126, 34, 0.2);
+    color: var(--ww-primary);
+}
+
+.ww-badge-success {
+    background: rgba(39, 174, 96, 0.2);
+    color: var(--ww-success);
+}
+
+.ww-badge-warning {
+    background: rgba(243, 156, 18, 0.2);
+    color: var(--ww-warning);
+}
+
+.ww-badge-danger {
+    background: rgba(231, 76, 60, 0.2);
+    color: var(--ww-danger);
+}
+
+.ww-badge-info {
+    background: rgba(26, 188, 204, 0.2);
+    color: var(--ww-info);
+}
+
+/* ============================================
+   工具提示
+   ============================================ */
+.ww-tooltip {
+    position: relative;
+}
+
+.ww-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    font-size: 12px;
+    border-radius: var(--ww-radius-sm);
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--ww-transition);
+    z-index: 1000;
+}
+
+.ww-tooltip:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* ============================================
+   复选框
+   ============================================ */
+.ww-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 6px 0;
+}
+
+.ww-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--ww-primary);
+}
+
+.ww-checkbox-label {
+    font-size: 13px;
+    color: var(--ww-text-secondary);
+}
+
+/* ============================================
+   选择器
+   ============================================ */
+.ww-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--ww-border);
+    border-radius: var(--ww-radius);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--ww-text-primary);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.ww-select:focus {
+    outline: none;
+    border-color: var(--ww-primary);
+}
+
+.ww-select option {
+    background: var(--ww-bg-secondary);
+    color: var(--ww-text-primary);
+}
+
+/* ============================================
+   响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .ww-modal {
+        max-width: 95%;
+        max-height: 90vh;
+    }
+    
+    .ww-chapter-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .worldinfo-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    
+    .worldinfo-actions {
+        flex-wrap: wrap;
+    }
+}

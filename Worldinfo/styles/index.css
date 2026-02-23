@@ -1,0 +1,6 @@
+/**
+ * Worldinfo 模块样式统一入口
+ */
+
+@import url('./worldinfo.css');
+@import url('./components.css');

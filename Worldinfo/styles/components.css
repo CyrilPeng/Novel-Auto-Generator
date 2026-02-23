@@ -1,0 +1,256 @@
+/**
+ * 世界书模块 - 组件样式
+ * 包含所有UI组件的样式定义
+ */
+
+/* ========================================
+   CSS变量
+   ======================================== */
+:root {
+  /* 主色调 */
+  --wb-primary: #e67e22;
+  --wb-primary-dark: #d35400;
+  --wb-primary-light: #f39c12;
+  
+  /* 功能色 */
+  --wb-success: #27ae60;
+  --wb-success-light: #2ecc71;
+  --wb-info: #3498db;
+  --wb-info-light: #5dade2;
+  --wb-warning: #f39c12;
+  --wb-warning-light: #f5b041;
+  --wb-danger: #e74c3c;
+  --wb-danger-light: #ec7063;
+  
+  /* 中性色 */
+  --wb-bg-dark: rgba(30, 30, 46, 0.95);
+  --wb-bg-darker: rgba(20, 20, 35, 0.98);
+  --wb-bg-light: rgba(255, 255, 255, 0.05);
+  --wb-bg-lighter: rgba(255, 255, 255, 0.1);
+  --wb-border: #444;
+  --wb-border-light: #555;
+  --wb-border-dark: #333;
+  --wb-text: #fff;
+  --wb-text-muted: #888;
+  --wb-text-secondary: #aaa;
+  
+  /* 阴影 */
+  --wb-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --wb-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --wb-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  
+  /* 过渡 */
+  --wb-transition: all 0.2s ease;
+  --wb-transition-fast: all 0.1s ease;
+  --wb-transition-slow: all 0.3s ease;
+  
+  /* 圆角 */
+  --wb-radius-sm: 4px;
+  --wb-radius: 6px;
+  --wb-radius-lg: 8px;
+  --wb-radius-xl: 12px;
+  --wb-radius-full: 9999px;
+  
+  /* 间距 */
+  --wb-space-xs: 4px;
+  --wb-space-sm: 8px;
+  --wb-space: 12px;
+  --wb-space-md: 16px;
+  --wb-space-lg: 20px;
+  --wb-space-xl: 24px;
+  --wb-space-2xl: 32px;
+  
+  /* 字体 */
+  --wb-font-xs: 11px;
+  --wb-font-sm: 12px;
+  --wb-font: 13px;
+  --wb-font-md: 14px;
+  --wb-font-lg: 16px;
+  --wb-font-xl: 18px;
+  --wb-font-2xl: 20px;
+  
+  /* 尺寸 */
+  --wb-size-xs: 24px;
+  --wb-size-sm: 28px;
+  --wb-size: 32px;
+  --wb-size-md: 36px;
+  --wb-size-lg: 40px;
+  --wb-size-xl: 48px;
+}
+
+/* ========================================
+   动画
+   ======================================== */
+
+@keyframes wb-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes wb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wb-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes wb-slide-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes wb-slide-down {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes wb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes wb-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes wb-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* ========================================
+   工具类
+   ======================================== */
+
+.wb-animate-spin { animation: wb-spin 1s linear infinite; }
+.wb-animate-fade-in { animation: wb-fade-in 0.2s ease; }
+.wb-animate-fade-out { animation: wb-fade-out 0.2s ease; }
+.wb-animate-slide-up { animation: wb-slide-up 0.2s ease; }
+.wb-animate-slide-down { animation: wb-slide-down 0.2s ease; }
+.wb-animate-pulse { animation: wb-pulse 2s ease-in-out infinite; }
+.wb-animate-bounce { animation: wb-bounce 1s ease infinite; }
+.wb-animate-shake { animation: wb-shake 0.5s ease; }
+
+.wb-hidden { display: none !important; }
+.wb-invisible { visibility: hidden !important; }
+.wb-transparent { opacity: 0 !important; }
+
+.wb-text-left { text-align: left !important; }
+.wb-text-center { text-align: center !important; }
+.wb-text-right { text-align: right !important; }
+
+.wb-float-left { float: left !important; }
+.wb-float-right { float: right !important; }
+.wb-clearfix::after { content: ''; display: table; clear: both; }
+
+.wb-overflow-hidden { overflow: hidden !important; }
+.wb-overflow-auto { overflow: auto !important; }
+.wb-overflow-scroll { overflow: scroll !important; }
+
+.wb-cursor-pointer { cursor: pointer !important; }
+.wb-cursor-not-allowed { cursor: not-allowed !important; }
+.wb-cursor-default { cursor: default !important; }
+
+.wb-user-select-none { user-select: none !important; }
+.wb-user-select-all { user-select: all !important; }
+
+/* 文本颜色 */
+.wb-text-primary { color: var(--wb-primary) !important; }
+.wb-text-success { color: var(--wb-success) !important; }
+.wb-text-info { color: var(--wb-info) !important; }
+.wb-text-warning { color: var(--wb-warning) !important; }
+.wb-text-danger { color: var(--wb-danger) !important; }
+.wb-text-muted { color: var(--wb-text-muted) !important; }
+
+/* 背景颜色 */
+.wb-bg-primary { background-color: var(--wb-primary) !important; }
+.wb-bg-success { background-color: var(--wb-success) !important; }
+.wb-bg-info { background-color: var(--wb-info) !important; }
+.wb-bg-warning { background-color: var(--wb-warning) !important; }
+.wb-bg-danger { background-color: var(--wb-danger) !important; }
+.wb-bg-dark { background-color: var(--wb-bg-dark) !important; }
+
+/* Flex布局 */
+.wb-flex { display: flex !important; }
+.wb-inline-flex { display: inline-flex !important; }
+.wb-flex-row { flex-direction: row !important; }
+.wb-flex-column { flex-direction: column !important; }
+.wb-flex-wrap { flex-wrap: wrap !important; }
+.wb-flex-nowrap { flex-wrap: nowrap !important; }
+.wb-justify-start { justify-content: flex-start !important; }
+.wb-justify-center { justify-content: center !important; }
+.wb-justify-end { justify-content: flex-end !important; }
+.wb-justify-between { justify-content: space-between !important; }
+.wb-justify-around { justify-content: space-around !important; }
+.wb-align-start { align-items: flex-start !important; }
+.wb-align-center { align-items: center !important; }
+.wb-align-end { align-items: flex-end !important; }
+.wb-align-stretch { align-items: stretch !important; }
+.wb-flex-1 { flex: 1 !important; }
+.wb-flex-auto { flex: auto !important; }
+.wb-flex-none { flex: none !important; }
+
+/* 间距 */
+.wb-m-0 { margin: 0 !important; }
+.wb-m-xs { margin: var(--wb-space-xs) !important; }
+.wb-m-sm { margin: var(--wb-space-sm) !important; }
+.wb-m { margin: var(--wb-space) !important; }
+.wb-m-md { margin: var(--wb-space-md) !important; }
+.wb-m-lg { margin: var(--wb-space-lg) !important; }
+.wb-m-xl { margin: var(--wb-space-xl) !important; }
+
+.wb-mt-0 { margin-top: 0 !important; }
+.wb-mt-xs { margin-top: var(--wb-space-xs) !important; }
+.wb-mt-sm { margin-top: var(--wb-space-sm) !important; }
+.wb-mt { margin-top: var(--wb-space) !important; }
+.wb-mt-md { margin-top: var(--wb-space-md) !important; }
+.wb-mt-lg { margin-top: var(--wb-space-lg) !important; }
+.wb-mt-xl { margin-top: var(--wb-space-xl) !important; }
+
+/* ... (类似的margin-right, margin-bottom, margin-left, padding等) */
+
+/* 宽度和高度 */
+.wb-w-auto { width: auto !important; }
+.wb-w-full { width: 100% !important; }
+.wb-w-1-2 { width: 50% !important; }
+.wb-w-1-3 { width: 33.333333% !important; }
+.wb-w-2-3 { width: 66.666667% !important; }
+.wb-w-1-4 { width: 25% !important; }
+.wb-w-3-4 { width: 75% !important; }
+
+.wb-h-auto { height: auto !important; }
+.wb-h-full { height: 100% !important; }
+.wb-h-screen { height: 100vh !important; }
+
+/* 最大/最小宽度和高度 */
+.wb-max-w-full { max-width: 100% !important; }
+.wb-max-h-full { max-height: 100% !important; }
+.wb-min-w-0 { min-width: 0 !important; }
+.wb-min-h-0 { min-height: 0 !important; }
+
+/* 边框 */
+.wb-border-0 { border: 0 !important; }
+.wb-border { border: 1px solid var(--wb-border) !important; }
+.wb-border-t { border-top: 1px solid var(--wb-border) !important; }
+.wb-border-r { border-right: 1px solid var(--wb-border) !important; }
+.wb-border-b { border-bottom: 1px solid var(--wb-border) !important; }
+.wb-border-l { border-left: 1px solid var(--wb-border) !important; }
+
+/* 圆角 */
+.wb-rounded-0 { border-radius: 0 !important; }
+.wb-rounded-sm { border-radius: var(--wb-radius-sm) !important; }
+.wb-rounded { border-radius: var(--wb-radius) !important; }
+.wb-rounded-lg { border-radius: var(--wb-radius-lg) !important; }
+.wb-rounded-xl { border-radius: var(--wb-radius-xl) !important; }
+.wb-rounded-full { border-radius: var(--wb-radius-full) !important; }
+
+/* 阴影 */
+.wb-shadow-0 { box-shadow: none !important; }
+.wb-shadow-sm { box-shadow: var(--wb-shadow-sm) !important; }
+.wb-shadow { box-shadow: var(--wb-shadow) !important; }
+.wb-shadow-lg { box-shadow: var(--wb-shadow-lg) !important; }
