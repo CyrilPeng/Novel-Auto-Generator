@@ -445,7 +445,7 @@ export class APIService {
         if (!endpoint) {
             throw new Error('请先设置 API Endpoint');
         }
-        
+
         let modelsUrl = endpoint;
         if (modelsUrl.endsWith('/chat/completions')) {
             modelsUrl = modelsUrl.replace('/chat/completions', '/models');
@@ -454,26 +454,27 @@ export class APIService {
         } else if (!modelsUrl.endsWith('/models')) {
             modelsUrl = modelsUrl.replace(/\/$/, '') + '/models';
         }
-        
+
         if (!modelsUrl.startsWith('http')) {
             modelsUrl = 'http://' + modelsUrl;
         }
-        
+
         const headers = { 'Content-Type': 'application/json' };
         if (this.config.customApiKey) {
             headers['Authorization'] = `Bearer ${this.config.customApiKey}`;
         }
-        
-        const response = await fetch(modelsUrl, { headers });
-        
+
+        // Use SillyTavern's fetch to avoid CORS
+        const response = await this.sillyTavernFetch(modelsUrl, { headers });
+
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`拉取模型列表失败：${response.status} - ${errorText}`);
         }
-        
+
         const data = await response.json();
         let models = [];
-        
+
         if (data.data && Array.isArray(data.data)) {
             models = data.data.map(m => m.id || m.name || m);
         } else if (Array.isArray(data)) {
@@ -481,9 +482,27 @@ export class APIService {
         } else if (data.models && Array.isArray(data.models)) {
             models = data.models.map(m => typeof m === 'string' ? m : (m.id || m.name || m));
         }
-        
+
         return models;
     }
+
+    /**
+     * SillyTavern fetch wrapper to avoid CORS issues
+     * @param {string} url - URL to fetch
+     * @param {Object} options - Fetch options
+     * @returns {Promise<Response>} Fetch response
+     */
+    async sillyTavernFetch(url, options = {}) {
+        // Try to use SillyTavern's fetch proxy first
+        if (typeof SillyTavern !== 'undefined' && SillyTavern.fetch) {
+            console.log('[API Service] Using SillyTavern.fetch for:', url);
+            return await SillyTavern.fetch(url, options);
+        }
+
+        // Fallback to regular fetch (may have CORS issues)
+        console.warn('[API Service] SillyTavern.fetch not available, using regular fetch (may have CORS issues)');
+        return await fetch(url, options);
+    },
 
     /**
      * 快速测试
@@ -491,10 +510,10 @@ export class APIService {
     async quickTest() {
         const endpoint = this.config.customApiEndpoint || '';
         const model = this.config.customApiModel || '';
-        
+
         if (!endpoint) throw new Error('请先设置 API Endpoint');
         if (!model) throw new Error('请先设置模型名称');
-        
+
         let requestUrl = endpoint;
         if (!requestUrl.includes('/chat/completions')) {
             if (requestUrl.endsWith('/v1')) {
@@ -503,21 +522,22 @@ export class APIService {
                 requestUrl = requestUrl.replace(/\/$/, '') + '/chat/completions';
             }
         }
-        
+
         if (!requestUrl.startsWith('http')) {
             requestUrl = 'http://' + requestUrl;
         }
-        
+
         const headers = { 'Content-Type': 'application/json' };
         if (this.config.customApiKey) {
             headers['Authorization'] = `Bearer ${this.config.customApiKey}`;
         }
-        
+
         const startTime = Date.now();
-        
-        const response = await fetch(requestUrl, {
+
+        // Use SillyTavern's fetch to avoid CORS
+        const response = await this.sillyTavernFetch(requestUrl, {
             method: 'POST',
-            headers,
+            headers: headers,
             body: JSON.stringify({
                 model: model,
                 messages: [{ role: 'user', content: 'Say "OK" if you can hear me.' }],
@@ -525,21 +545,21 @@ export class APIService {
                 temperature: 0.1
             })
         });
-        
+
         const elapsed = Date.now() - startTime;
-        
+
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`测试失败：${response.status} - ${errorText}`);
         }
-        
+
         const data = await response.json();
         let responseText = data.choices?.[0]?.message?.content || '';
-        
+
         if (!responseText) {
             responseText = data.response || data.content || data.text || data.output || data.generated_text || '';
         }
-        
+
         return {
             success: true,
             elapsed,

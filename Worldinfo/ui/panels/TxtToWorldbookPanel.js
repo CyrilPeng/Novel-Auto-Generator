@@ -8,6 +8,7 @@ import { splitByChapters, splitBySize, testRegex, DEFAULT_CHAPTER_REGEX } from '
 import { logger, LogLevel } from '../../utils/Logger.js';
 import { ConfigKeys } from '../../core/Config.js';
 import { HelpModal } from './HelpModal.js';
+import { apiService } from '../../services/APIService.js';
 
 /**
  * 主面板配置
@@ -669,11 +670,35 @@ export class TxtToWorldbookPanel {
                 container.appendChild(this.element);
             }
 
-            // 设置面板样式
+            // 设置面板样式 - 响应式设计
             this.element.style.display = 'block';
-            this.element.style.width = '900px';
-            this.element.style.maxWidth = '95vw';
-            this.element.style.maxHeight = '90vh';
+            this.element.style.position = 'relative';
+            this.element.style.margin = 'auto';
+
+            // 根据屏幕宽度设置不同的宽度
+            const screenWidth = window.innerWidth;
+            if (screenWidth <= 480) {
+                // 移动端小屏幕
+                this.element.style.width = '100%';
+                this.element.style.maxWidth = '100vw';
+                this.element.style.height = '100%';
+                this.element.style.maxHeight = '100vh';
+                this.element.style.borderRadius = '0';
+                this.element.style.margin = '0';
+            } else if (screenWidth <= 768) {
+                // 平板/大手机
+                this.element.style.width = '95%';
+                this.element.style.maxWidth = '95vw';
+                this.element.style.height = 'auto';
+                this.element.style.maxHeight = '95vh';
+            } else {
+                // PC端
+                this.element.style.width = '900px';
+                this.element.style.maxWidth = '95vw';
+                this.element.style.height = 'auto';
+                this.element.style.maxHeight = '90vh';
+            }
+
             this.element.style.overflow = 'auto';
             this.element.style.pointerEvents = 'auto';
             this.element.style.zIndex = '99999';
@@ -1253,94 +1278,70 @@ export class TxtToWorldbookPanel {
         const mode = this.element?.querySelector('#ttw-api-mode')?.value;
 
         if (mode === 'tavern') {
-            // 酒馆 API 测试
+            // 酒馆 API 测试 - 使用 SillyTavern 的 generate 方法
             try {
                 if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
                     const ctx = SillyTavern.getContext();
                     if (ctx && typeof ctx.generate === 'function') {
-                        showInfo('酒馆 API 连接正常');
+                        showInfo('⏳ 正在测试酒馆 API...');
+                        // 使用 SillyTavern 的 generate 进行简单测试
+                        await ctx.generate('Say "OK" if you can hear me.', false);
+                        showSuccess('酒馆 API 连接正常');
                         return;
                     }
                 }
-                showError('无法连接到酒馆 API');
+                showError('无法连接到酒馆 API，请检查 SillyTavern 是否正常运行');
             } catch (error) {
                 showError('酒馆 API 测试失败：' + error.message);
             }
         } else {
-            // 自定义 API 测试
-            const endpoint = this.element?.querySelector('#ttw-api-endpoint')?.value;
-            const apiKey = this.element?.querySelector('#ttw-api-key')?.value;
-            const model = this.element?.querySelector('#ttw-api-model')?.value;
-
-            if (!endpoint) {
-                showError('请填写 API Endpoint');
-                return;
-            }
+            // 自定义 API 测试 - 使用 SillyTavern 后端代理避免 CORS
+            showInfo('⏳ 正在测试 API...');
 
             try {
-                showInfo('⏳ 正在测试 API 连接...');
+                const endpoint = this.element?.querySelector('#ttw-api-endpoint')?.value;
+                const apiKey = this.element?.querySelector('#ttw-api-key')?.value;
+                const model = this.element?.querySelector('#ttw-api-model')?.value;
 
-                // 检查是否是 NVIDIA API
-                if (endpoint.includes('nvidia.com') || endpoint.includes('integrate.api.nvidia')) {
-                    showWarning('NVIDIA API 不支持直接从浏览器测试
-
-' +
-                        '解决方案：
-' +
-                        '1. 手动在"模型名称"输入框中填写模型名称
-' +
-                        '2. 或使用支持 CORS 的 API 端点
-
-' +
-                        '常见 NVIDIA 模型：
-' +
-                        '• meta/llama-3.1-405b-instruct
-' +
-                        '• meta/llama-3.1-70b-instruct
-' +
-                        '• nvidia/nemotron-4-340b-instruct');
+                if (!endpoint) {
+                    showError('请填写 API Endpoint');
+                    return;
+                }
+                if (!model) {
+                    showError('请填写模型名称');
                     return;
                 }
 
-                // 构建测试请求
-                const url = mode === 'openai-compatible'
-                    ? endpoint.replace('/chat/completions', '/models')
-                    : endpoint;
-
-                const headers = {
-                    'Content-Type': 'application/json'
+                // 使用 SillyTavern 后端代理 API 请求，避免 CORS
+                const requestBody = {
+                    chat_completion_source: 'openai',
+                    messages: [{ role: 'user', content: 'Say "OK" if you can hear me.' }],
+                    model: model,
+                    reverse_proxy: endpoint,
+                    proxy_password: apiKey,
+                    stream: false,
+                    max_tokens: 100,
+                    temperature: 0.1
                 };
 
-                if (apiKey) {
-                    headers['Authorization'] = `Bearer ${apiKey}`;
-                }
-
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers
+                const response = await fetch('/api/backends/chat-completions/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
                 });
 
-                if (response.ok) {
-                    showInfo('API 连接正常');
-                } else {
-                    showError('API 连接失败：' + response.statusText);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API 请求失败: ${response.status} - ${errorText}`);
                 }
-            } catch (error) {
-                // 检查是否是 CORS 错误
-                if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-                    showWarning('无法直接访问 API 端点（CORS 限制）
 
-' +
-                        '解决方案：
-' +
-                        '1. 手动在"模型名称"输入框中填写模型名称
-' +
-                        '2. 使用支持 CORS 的 API 端点
-' +
-                        '3. 通过代理服务器访问 API');
-                } else {
-                    showError('API 测试失败：' + error.message);
-                }
+                const data = await response.json();
+                const responseText = data.choices?.[0]?.message?.content || '';
+
+                showSuccess(`API 连接正常\n响应: ${responseText}`);
+            } catch (error) {
+                console.error('[TxtToWorldbookPanel] API test error:', error);
+                showError('API 测试失败：' + (error.message || '未知错误'));
             }
         }
     }
@@ -1352,10 +1353,26 @@ export class TxtToWorldbookPanel {
         const mode = this.element?.querySelector('#ttw-api-mode')?.value;
 
         if (mode === 'tavern') {
-            showError('酒馆 API 模式不支持拉取模型列表');
+            // 尝试从 SillyTavern 获取模型列表
+            if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
+                const ctx = SillyTavern.getContext();
+                if (ctx) {
+                    // 尝试从 SillyTavern 的模型选择器获取
+                    const modelSelector = document.querySelector('#model_select');
+                    if (modelSelector) {
+                        const models = Array.from(modelSelector.options).map(opt => opt.text || opt.value);
+                        if (models.length > 0) {
+                            alert('✅ 找到以下模型:\n\n' + models.join('\n'));
+                            return;
+                        }
+                    }
+                }
+            }
+            showInfo('酒馆 API 模式使用 SillyTavern 的模型选择器，无需手动拉取模型列表');
             return;
         }
 
+        // 自定义 API 模式 - 使用 SillyTavern 后端代理避免 CORS
         const endpoint = this.element?.querySelector('#ttw-api-endpoint')?.value;
         const apiKey = this.element?.querySelector('#ttw-api-key')?.value;
 
@@ -1364,69 +1381,50 @@ export class TxtToWorldbookPanel {
             return;
         }
 
-        // 检查是否是 NVIDIA API，如果是则提示不支持
-        if (endpoint.includes('nvidia.com') || endpoint.includes('integrate.api.nvidia')) {
-            showWarning('NVIDIA API 不支持直接从浏览器拉取模型列表\n\n' +
-                '解决方案：\n' +
-                '1. 手动在"模型名称"输入框中填写模型名称\n' +
-                '2. 或使用支持 CORS 的 API 端点\n\n' +
-                '常见 NVIDIA 模型：\n' +
-                '• meta/llama-3.1-405b-instruct\n' +
-                '• meta/llama-3.1-70b-instruct\n' +
-                '• nvidia/nemotron-4-340b-instruct');
-            return;
-        }
-
-        let errorShown = false; // 防止重复显示错误
+        showInfo('⏳ 正在拉取模型列表...');
 
         try {
-            showInfo('⏳ 正在拉取模型列表...');
-
-            const headers = {
-                'Content-Type': 'application/json'
-            };
-
-            if (apiKey) {
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-
-            // OpenAI 兼容格式
-            const modelsUrl = endpoint.includes('/chat/completions')
-                ? endpoint.replace('/chat/completions', '/models')
-                : endpoint + (endpoint.endsWith('/') ? 'models' : '/models');
-
-            const response = await fetch(modelsUrl, {
-                method: 'GET',
-                headers
+            // 使用 SillyTavern 后端代理 API 请求，避免 CORS
+            const response = await fetch('/api/backends/chat-completions/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reverse_proxy: endpoint,
+                    proxy_password: apiKey,
+                    chat_completion_source: 'openai'
+                })
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                const models = data.data || data.models || [];
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
 
-                if (models.length > 0) {
-                    const modelNames = models.map(m => m.id || m.name).filter(Boolean);
-                    alert('✅ 找到以下模型:\n\n' + modelNames.join('\n'));
-                } else {
-                    showInfo('未找到模型');
-                }
+            const rawData = await response.json();
+            const models = Array.isArray(rawData) ? rawData : (rawData.data || rawData.models || []);
+
+            if (!Array.isArray(models)) {
+                throw new Error('API未返回有效的模型列表数组');
+            }
+
+            const formattedModels = models
+                .map(m => {
+                    const modelName = m.name ? m.name.replace('models/', '') : (m.id || m.model || m);
+                    return modelName;
+                })
+                .filter(Boolean)
+                .sort((a, b) => String(a).localeCompare(String(b)));
+
+            if (formattedModels.length > 0) {
+                // 显示模型列表
+                const modelList = formattedModels.map((m, i) => `${i + 1}. ${m}`).join('\n');
+                alert(`✅ 找到 ${formattedModels.length} 个模型:\n\n${modelList}`);
             } else {
-                errorShown = true;
-                showError('拉取模型失败：' + response.statusText);
+                showWarning('未找到任何模型，请检查 API 配置');
             }
         } catch (error) {
-            if (!errorShown) {
-                // 检查是否是 CORS 错误
-                if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-                    showWarning('无法直接访问 API 端点（CORS 限制）\n\n' +
-                        '解决方案：\n' +
-                        '1. 手动在"模型名称"输入框中填写模型名称\n' +
-                        '2. 使用支持 CORS 的 API 端点\n' +
-                        '3. 通过代理服务器访问 API');
-                } else {
-                    showError('拉取模型失败：' + error.message);
-                }
-            }
+            console.error('[TxtToWorldbookPanel] 拉取模型列表失败:', error);
+            showError('拉取模型列表失败：' + (error.message || '未知错误'));
         }
     }
 

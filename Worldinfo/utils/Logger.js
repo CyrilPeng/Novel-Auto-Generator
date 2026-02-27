@@ -25,12 +25,12 @@ const LogLevelNames = {
     [LogLevel.NONE]: 'NONE'
 };
 
-class Logger {
+export class Logger {
     constructor() {
         this.enabled = false;
-        this.level = LogLevel.INFO;
+        this.level = LogLevel.ERROR;
         this.prefix = '[Worldinfo]';
-        
+
         // 向后兼容
         this.debugEnabled = false;
     }

@@ -1183,9 +1183,7 @@ function bindEvents() {
     // TXT 转世界书入口 - 自动加载模块
     $('#nag-btn-txt-to-worldbook').on('click', async () => {
         try {
-            console.log('[Worldinfo] Button clicked');
             if (typeof window.WorldinfoModule === 'undefined') {
-                console.log('[Worldinfo] Module not defined, loading...');
                 // 使用绝对路径导入（相对于 SillyTavern 根目录）
                 const basePath = window.location.origin + '/scripts/extensions/third-party/Novel-Auto-Generator/';
                 const m = await import(basePath + 'Worldinfo/main.js?t=' + Date.now());
@@ -1193,11 +1191,8 @@ function bindEvents() {
                     init: m.initWorldinfo,
                     open: m.openWorldinfo
                 };
-                console.log('[Worldinfo] 模块加载成功');
             }
-            console.log('[Worldinfo] Calling init()...');
             await window.WorldinfoModule.init();
-            console.log('[Worldinfo] Calling open()...');
             window.WorldinfoModule.open();
         } catch (e) {
             console.error('[Worldinfo] 打开失败:', e);

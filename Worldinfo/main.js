@@ -1,9 +1,10 @@
 /**
- * Worldinfo 模块主入口
+ * Worldinfo 模块主入口 - 备份
  * 用于在 SillyTavern 中注册和启动 Worldinfo 应用
  */
 
 import { createWorldinfoApp, WorldinfoApp } from './app.js';
+import { logger, LogLevel } from './utils/index.js';
 
 // 全局状态
 let appInstance = null;
@@ -14,11 +15,11 @@ let isLoaded = false;
  */
 export async function initWorldinfo() {
     if (isLoaded) {
-        console.log('[Worldinfo] 模块已加载，跳过初始化');
+        logger.info('模块已加载，跳过初始化');
         return appInstance;
     }
 
-    console.log('[Worldinfo] 开始初始化...');
+    logger.info('开始初始化...');
 
     try {
         // 加载样式
@@ -49,11 +50,12 @@ export async function initWorldinfo() {
         };
 
         isLoaded = true;
-        console.log('[Worldinfo] 初始化完成');
+        logger.info('初始化完成');
 
         return appInstance;
 
     } catch (error) {
+        logger.error('初始化失败:', error);
         console.error('[Worldinfo] 初始化失败:', error);
         throw error;
     }
@@ -82,7 +84,7 @@ function createContainer() {
     // 初始不显示背景遮罩，由面板的 show 方法控制
     container.style.background = 'transparent';
     container.style.transition = 'background 0.2s ease';
-    
+
     // 阻止容器点击事件冒泡到 SillyTavern 背景
     container.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -93,7 +95,7 @@ function createContainer() {
     container.addEventListener('touchstart', (e) => {
         e.stopPropagation();
     });
-    
+
     document.body.appendChild(container);
 }
 
@@ -103,7 +105,7 @@ function createContainer() {
 function loadStyles() {
     // 获取扩展基础路径
     const basePath = getBasePath();
-    
+
     const styles = [
         basePath + 'Worldinfo/styles/index.css'
     ];
@@ -143,17 +145,17 @@ function getBasePath() {
  * 打开 Worldinfo 主界面
  */
 export async function openWorldinfo() {
-    console.log('[Worldinfo] openWorldinfo called');
+    logger.info('openWorldinfo called');
     if (!appInstance) {
-        console.log('[Worldinfo] appInstance not set, initializing...');
+        logger.info('appInstance not set, initializing...');
         appInstance = await initWorldinfo();
     }
 
-    console.log('[Worldinfo] appInstance.txtToWorldbookPanel:', appInstance?.txtToWorldbookPanel);
-    
+    logger.debug('appInstance.txtToWorldbookPanel:', appInstance?.txtToWorldbookPanel);
+
     // 直接显示面板
     appInstance?.txtToWorldbookPanel?.show();
-    console.log('[Worldinfo] show() called');
+    logger.info('show() called');
 }
 
 /**
@@ -174,15 +176,15 @@ export function getWorldinfoApp() {
  * 销毁模块
  */
 export function destroyWorldinfo() {
-    appInstance?.destroy();
+    appInstance?.destroy?.();
     appInstance = null;
     isLoaded = false;
-    console.log('[Worldinfo] 模块已销毁');
+    logger.info('模块已销毁');
 }
 
 // 自动初始化
 if (typeof window !== 'undefined') {
-    console.log('[Worldinfo] 模块已加载，等待初始化...');
+    logger.info('模块已加载，等待初始化...');
 }
 
-console.log('[Worldinfo] 入口模块已加载');
+logger.debug('入口模块已加载');
