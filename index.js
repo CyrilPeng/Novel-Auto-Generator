@@ -1,6 +1,10 @@
 import { saveSettingsDebounced } from "../../../../script.js";
 import { extension_settings } from "../../../extensions.js";
-import './txtToWorldbook.js';
+import { initTxtToWorldbookBridge } from './txtToWorldbook/main.js';
+
+initTxtToWorldbookBridge().catch((error) => {
+    console.error('[NovelGen] TxtToWorldbook bridge init failed:', error);
+});
 
 const extensionName = "novel-auto-generator";
 
@@ -1377,3 +1381,4 @@ jQuery(async () => {
     setInterval(() => { if (settings.isRunning) updateUI(); }, 1000);
     log('扩展已加载', 'success');
 });
+

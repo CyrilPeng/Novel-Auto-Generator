@@ -1,7 +1,7 @@
-/**
+﻿/**
 * TXT转世界书模块
 *
-* @file txtToWorldbook.js
+* @file txtToWorldbook/main.js
 * @version 1.5.0
 * @author Novel-Auto-Generator
 * @license MIT
@@ -63,6 +63,39 @@
  * @property {boolean} enabled - 是否启用
  * @property {string} color - 显示颜色
  */
+
+import {
+    DEFAULT_CHAPTER_REGEX,
+    DEFAULT_CATEGORY_LIGHT,
+    DEFAULT_PLOT_OUTLINE_CONFIG,
+    DEFAULT_PARALLEL_CONFIG,
+    defaultSettings
+} from './core/constants.js';
+import { createInitialAppState } from './core/state.js';
+import { Logger } from './core/logger.js';
+import { estimateTokenCount, naturalSortEntryNames } from './core/utils.js';
+import { ModalFactory } from './infra/modalFactory.js';
+import { APICaller } from './infra/apiCaller.js';
+import { createMemoryHistoryDB } from './infra/memoryHistoryDB.js';
+import { createWorldbookService } from './services/worldbookService.js';
+import { createMergeService } from './services/mergeService.js';
+import {
+    buildAliasCategorySelectModal,
+    buildAliasGroupsListHtml,
+    buildAliasPairResultsHtml,
+    buildAliasMergePlanHtml,
+} from './ui/mergeModals.js';
+import {
+    bindActionEvents as bindActionEventsUI,
+    bindCollapsePanelEvents as bindCollapsePanelEventsUI,
+    bindExportEvents as bindExportEventsUI,
+    bindFileEvents as bindFileEventsUI,
+    bindMessageChainEvents as bindMessageChainEventsUI,
+    bindModalBasicEvents as bindModalBasicEventsUI,
+    bindPromptEvents as bindPromptEventsUI,
+    bindSettingEvents as bindSettingEventsUI,
+    bindStreamEvents as bindStreamEventsUI,
+} from './ui/eventBindings.js';
 
 (function () {
 'use strict';
@@ -164,80 +197,6 @@ const DEFAULT_WORLDBOOK_CATEGORIES = [
             autoIncrementOrder: false
         }
 ];
-
-// ========== 默认章回正则配置 ==========
-const DEFAULT_CHAPTER_REGEX = {
-    pattern: '第[零一二三四五六七八九十百千万0-9]+[章回卷节部篇]',
-    useCustomRegex: false
-};
-
-// ========== 默认分类灯状态配置 ==========
-const DEFAULT_CATEGORY_LIGHT = {
-    '角色': false,
-    '地点': true,
-    '组织': false,
-    '剧情大纲': true,
-    '知识书': false,
-    '文风配置': false,
-    '地图环境': true,
-    '剧情节点': true
-};
-
-// ========== 默认剧情大纲导出配置 ==========
-const DEFAULT_PLOT_OUTLINE_CONFIG = {
-    position: 0,
-    depth: 4,
-    order: 100,
-    autoIncrementOrder: true
-};
-
-// ========== 默认并行处理配置 ==========
-const DEFAULT_PARALLEL_CONFIG = {
-    enabled: true,
-    concurrency: 3,
-    mode: 'independent'
-};
-
-// ========== 默认设置对象 ==========
-const defaultSettings = {
-    chunkSize: 15000,
-    enablePlotOutline: false,
-    enableLiteraryStyle: false,
-    language: 'zh',
-    customWorldbookPrompt: '',
-    customPlotPrompt: '',
-    customStylePrompt: '',
-    useVolumeMode: false,
-    apiTimeout: 120000,
-    parallelEnabled: true,
-    parallelConcurrency: 3,
-    parallelMode: 'independent',
-    useTavernApi: true,
-    customMergePrompt: '',
-    consolidatePromptPresets: [],
-    consolidateCategoryPresetMap: {},
-    categoryLightSettings: null,
-    defaultWorldbookEntries: '',
-    customRerollPrompt: '',
-    customBatchRerollPrompt: '',
-    customApiProvider: 'openai-compatible',
-    customApiKey: '',
-    customApiEndpoint: '',
-    customApiModel: 'gemini-2.5-flash',
-    forceChapterMarker: true,
-    chapterRegexPattern: '第[零一二三四五六七八九十百千万0-9]+[章回卷节部篇]',
-    useCustomChapterRegex: false,
-    defaultWorldbookEntriesUI: [],
-    categoryDefaultConfig: {},
-    entryPositionConfig: {},
-    customSuffixPrompt: '',
-    promptMessageChain: [
-        { role: 'user', content: '{PROMPT}', enabled: true }
-    ],
-    allowRecursion: false,
-    filterResponseTags: 'thinking,/think',
-    debugMode: false,
-};
 
 // ========== 默认提示词模板 ==========
 const defaultWorldbookPrompt = `你是专业的小说世界书生成专家。请仔细阅读提供的小说内容，提取其中的关键信息，生成高质量的世界书条目。
@@ -384,73 +343,14 @@ class Semaphore {
 // - 运行时状态
 
 // ========== AppState 统一状态对象 ==========
-const AppState = {
-    // 世界书数据
-    worldbook: {
-        generated: {},
-        volumes: [],
-        currentVolumeIndex: 0
-    },
-
-    // 记忆队列
-    memory: {
-        queue: [],
-        failedQueue: [],
-        currentIndex: 0,
-        startIndex: 0,
-        userSelectedIndex: null
-    },
-
-    // 文件信息
-    file: {
-        current: null,
-        hash: null,
-        novelName: ''
-    },
-
-    // 处理状态
-    processing: {
-        isStopped: false,
-        isRepairing: false,
-        isRerolling: false,
-        incrementalMode: true,
-        volumeMode: false,
-        streamContent: '',
-        activeTasks: new Set()
-    },
-
-    // UI 状态
-    ui: {
-        isMultiSelectMode: false,
-        selectedIndices: new Set(),
-        searchKeyword: '',
-        tokenThreshold: 0,
-        manualMergeHighlight: null
-    },
-
-    // 配置
-    config: {
-        entryPosition: {},
-        categoryLight: { ...DEFAULT_CATEGORY_LIGHT },
-        categoryDefault: {},
-        plotOutline: { ...DEFAULT_PLOT_OUTLINE_CONFIG },
-        parallel: { ...DEFAULT_PARALLEL_CONFIG },
-        chapterRegex: { ...DEFAULT_CHAPTER_REGEX }
-    },
-
-    // 持久化数据
-    persistent: {
-        defaultEntries: [],
-        customCategories: JSON.parse(JSON.stringify(DEFAULT_WORLDBOOK_CATEGORIES)),
-        pendingImport: null
-    },
-
-    // 设置
-    settings: { ...defaultSettings },
-
-    // 全局信号量
-    globalSemaphore: null
-};
+const AppState = createInitialAppState({
+    defaultCategoryLight: DEFAULT_CATEGORY_LIGHT,
+    defaultPlotOutlineConfig: DEFAULT_PLOT_OUTLINE_CONFIG,
+    defaultParallelConfig: DEFAULT_PARALLEL_CONFIG,
+    defaultChapterRegex: DEFAULT_CHAPTER_REGEX,
+    defaultWorldbookCategories: DEFAULT_WORLDBOOK_CATEGORIES,
+    defaultSettings,
+});
 
 // ============================================================
 // 第三区：工具函数
@@ -460,41 +360,6 @@ const AppState = {
 // - 文件哈希
 // - 编码检测
 // - JSON 修复
-
-/**
- * 估算文本Token数量（简化估算）
- * @param {string} text - 要估算的文本
- * @returns {number} 估算的Token数量
- * @description
- * 使用简化算法估算：
- * - 中文字符：约1.5-2 token/字
- * - 英文单词：约1 token/词
- * - 标点符号：约0.5 token/字符
- */
-function estimateTokenCount(text) {
-        if (!text) return 0;
-        const str = String(text);
-        // 简单估算：中文字符约1.5-2 token，英文单词约1 token，标点符号等
-        let tokens = 0;
-
-        // 中文字符计数 (大约每个中文字符1.5-2个token)
-        const chineseChars = (str.match(/[\u4e00-\u9fa5]/g) || []).length;
-        tokens += chineseChars * 1.5;
-
-        // 英文单词计数
-        const englishWords = (str.match(/[a-zA-Z]+/g) || []).length;
-        tokens += englishWords;
-
-        // 数字
-        const numbers = (str.match(/\d+/g) || []).length;
-        tokens += numbers;
-
-        // 标点和特殊字符
-        const punctuation = (str.match(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g) || []).length;
-        tokens += punctuation * 0.5;
-
-        return Math.ceil(tokens);
-    }
 
 /**
  * getEntryTotalTokens
@@ -522,62 +387,7 @@ return total;
 // 第三区-C：自然排序与中文数字处理
 // ============================================================
 
-/**
- * 自然排序条目名称（支持章节号智能排序）
- * @param {string[]} names - 条目名称数组
- * @returns {string[]} 排序后的名称数组
- * @example
- * naturalSortEntryNames(['第十章', '第一章', '第二章'])
- * // 返回: ['第一章', '第二章', '第十章']
- */
-function naturalSortEntryNames(names) {
-        return [...names].sort((a, b) => {
-            // 提取章节号的正则：匹配"第X章"格式
-            const chapterRegex = /第([零一二三四五六七八九十百千万\d]+)[章回卷节部篇]/;
-            const matchA = a.match(chapterRegex);
-            const matchB = b.match(chapterRegex);
-            if (matchA && matchB) {
-                const numA = chineseNumToInt(matchA[1]);
-                const numB = chineseNumToInt(matchB[1]);
-                if (numA !== numB) return numA - numB;
-            }
-            // 通用自然排序：按数字段比较
-            return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' });
-        });
-    }
-
-    /**
- * 中文数字转阿拉伯数字
- * @param {string} str - 中文数字字符串（如：一、十、二十、一百零五）
- * @returns {number} 阿拉伯数字
- * @example
- * chineseNumToInt('一') // 1
- * chineseNumToInt('十') // 10
- * chineseNumToInt('二十五') // 25
- */
-function chineseNumToInt(str) {
-        // 纯数字直接返回
-        if (/^\d+$/.test(str)) return parseInt(str);
-        const numMap = { '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
-        const unitMap = { '十': 10, '百': 100, '千': 1000, '万': 10000 };
-        let result = 0, section = 0, current = 0;
-        for (const ch of str) {
-            if (numMap[ch] !== undefined) {
-                current = numMap[ch];
-            } else if (unitMap[ch] !== undefined) {
-                const unit = unitMap[ch];
-                if (unit === 10000) {
-                    section = (current === 0 && section === 0) ? unit : (section + current) * unit;
-                    result += section;
-                    section = 0;
-                } else {
-                    section += (current === 0 ? 1 : current) * unit;
-                }
-                current = 0;
-            }
-        }
-	return result + section + current;
-}
+// naturalSortEntryNames / chineseNumToInt 已抽离到 core/utils.js
 
 // ============================================================
 // 第三区-A：性能优化工具
@@ -748,68 +558,7 @@ cleanups.push(this.on(container, selector, eventType, handler));
 // - ErrorHandler: 统一错误处理
 // - Logger: 日志系统
 
-// ========== Logger 日志系统 ==========
-const Logger = {
-	levels: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
-	currentLevel: 1, // INFO
-
-	/**
-	 * 记录日志
-	 * @param {string} level - 日志级别
-	 * @param {string} tag - 标签
-	 * @param {...any} args - 日志参数
-	 */
-	log(level, tag, ...args) {
-		if (this.levels[level] >= this.currentLevel) {
-			const timestamp = new Date().toISOString().slice(11, 23);
-			const levelStr = level.padEnd(5);
-			console.log(`[${timestamp}][${levelStr}][${tag}]`, ...args);
-		}
-	},
-
-	/**
-	 * debug
-	 * 
-	 * @param {*} tag
-	 * @param {*} ...args
-	 * @returns {*}
-	 */
-	debug(tag, ...args) { this.log('DEBUG', tag, ...args); },
-	/**
-	 * info
-	 * 
-	 * @param {*} tag
-	 * @param {*} ...args
-	 * @returns {*}
-	 */
-	info(tag, ...args) { this.log('INFO', tag, ...args); },
-	/**
-	 * warn
-	 * 
-	 * @param {*} tag
-	 * @param {*} ...args
-	 * @returns {*}
-	 */
-	warn(tag, ...args) { this.log('WARN', tag, ...args); },
-	/**
-	 * error
-	 * 
-	 * @param {*} tag
-	 * @param {*} ...args
-	 * @returns {*}
-	 */
-	error(tag, ...args) { this.log('ERROR', tag, ...args); },
-
-	/**
-	 * 设置日志级别
-	 * @param {string} level - DEBUG, INFO, WARN, ERROR
-	 */
-	setLevel(level) {
-		if (this.levels[level] !== undefined) {
-			this.currentLevel = this.levels[level];
-		}
-	}
-};
+// Logger 已抽离到 core/logger.js
 
 // ========== ErrorHandler 错误处理 ==========
 const ErrorHandler = {
@@ -979,366 +728,6 @@ const UI = {
 // - ListRenderer: 列表渲染工具
 
 // ========== ModalFactory 模态框工厂 ==========
-const ModalFactory = {
-    _escape(text) {
-        if (text === null || text === undefined) return '';
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    },
-
-    _formatPlainText(text) {
-        return this._escape(text).replace(/\n/g, '<br>');
-    },
-
-    // 创建模态框
-    create(config) {
-        const {
-            id,
-            title,
-            body = '',
-            footer = '',
-            bodyNode = null,
-            footerNode = null,
-            width = '600px',
-            maxWidth = '90vw',
-            maxHeight = '80vh',
-            onClose = null,
-            closeOnOverlay = true,
-            closeOnEscape = true
-        } = config;
-
-        const container = document.createElement('div');
-        container.id = id || `ttw-modal-${Date.now()}`;
-        container.className = 'ttw-modal-container';
-
-        const modal = document.createElement('div');
-        modal.className = 'ttw-modal';
-        modal.style.width = width;
-        modal.style.maxWidth = maxWidth;
-
-        const header = document.createElement('div');
-        header.className = 'ttw-modal-header';
-
-        const titleEl = document.createElement('span');
-        titleEl.className = 'ttw-modal-title';
-        titleEl.textContent = String(title || '');
-
-        const closeBtnEl = document.createElement('button');
-        closeBtnEl.className = 'ttw-modal-close';
-        closeBtnEl.type = 'button';
-        closeBtnEl.textContent = '✕';
-
-        header.appendChild(titleEl);
-        header.appendChild(closeBtnEl);
-        modal.appendChild(header);
-
-        const bodyEl = document.createElement('div');
-        bodyEl.className = 'ttw-modal-body';
-        bodyEl.style.maxHeight = maxHeight;
-        bodyEl.style.overflowY = 'auto';
-        const resolvedBodyNode = bodyNode || ((typeof Node !== 'undefined' && body instanceof Node) ? body : null);
-        if (resolvedBodyNode) {
-            bodyEl.appendChild(resolvedBodyNode);
-        } else {
-            bodyEl.innerHTML = body;
-        }
-        modal.appendChild(bodyEl);
-
-        const resolvedFooterNode = footerNode || ((typeof Node !== 'undefined' && footer instanceof Node) ? footer : null);
-        if (footer || resolvedFooterNode) {
-            const footerEl = document.createElement('div');
-            footerEl.className = 'ttw-modal-footer';
-            if (resolvedFooterNode) {
-                footerEl.appendChild(resolvedFooterNode);
-            } else {
-                footerEl.innerHTML = footer;
-            }
-            modal.appendChild(footerEl);
-        }
-
-        container.appendChild(modal);
-        document.body.appendChild(container);
-
-        let escapeHandler;
-        const cleanupCallbacks = [];
-        const registerCleanup = (fn) => {
-            if (typeof fn === 'function') cleanupCallbacks.push(fn);
-        };
-        const doClose = () => {
-            this.close(container, onClose);
-        };
-
-        if (closeBtnEl) {
-            closeBtnEl.addEventListener('click', doClose);
-        }
-
-        if (closeOnOverlay) {
-            const overlayHandler = (e) => {
-                if (e.target === container) {
-                    doClose();
-                }
-            };
-            container.addEventListener('click', overlayHandler);
-            registerCleanup(() => container.removeEventListener('click', overlayHandler));
-        }
-
-        // 阻止事件冒泡到 SillyTavern 外层（如扩展栏折叠监听）
-        const stopPropagationEvents = ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend'];
-        const stopPropagationHandler = (e) => e.stopPropagation();
-        stopPropagationEvents.forEach((eventName) => {
-            container.addEventListener(eventName, stopPropagationHandler);
-            registerCleanup(() => container.removeEventListener(eventName, stopPropagationHandler));
-        });
-
-        if (closeOnEscape) {
-            escapeHandler = (e) => {
-                if (e.key === 'Escape') {
-                    doClose();
-                }
-            };
-            document.addEventListener('keydown', escapeHandler);
-            registerCleanup(() => document.removeEventListener('keydown', escapeHandler));
-        }
-
-        container.__ttwModalCleanup = cleanupCallbacks;
-        container.__ttwModalOnClose = onClose;
-        container.__ttwModalClosed = false;
-        return container;
-    },
-
-    close(container, onClose) {
-        if (!container || container.__ttwModalClosed) return;
-        container.__ttwModalClosed = true;
-
-        const cleanupCallbacks = Array.isArray(container.__ttwModalCleanup) ? container.__ttwModalCleanup : [];
-        while (cleanupCallbacks.length) {
-            const cleanup = cleanupCallbacks.pop();
-            try {
-                cleanup();
-            } catch (error) {
-                console.warn('Modal cleanup failed:', error);
-            }
-        }
-
-        const resolvedOnClose = onClose || container.__ttwModalOnClose;
-        if (typeof resolvedOnClose === 'function') {
-            resolvedOnClose();
-        }
-        container.remove();
-    },
-
-    alert(config) {
-        return new Promise((resolve) => {
-            const {
-                title = '提示',
-                message = '',
-                confirmText = '知道了'
-            } = typeof config === 'string' ? { message: config } : config;
-
-            let settled = false;
-            const modal = this.create({
-                title,
-                body: `<div style="padding:20px;line-height:1.7;">${this._formatPlainText(message)}</div>`,
-                footer: `<button class="ttw-btn ttw-btn-primary" data-action="confirm">${this._escape(confirmText)}</button>`,
-                width: '420px',
-                onClose: () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve();
-                }
-            });
-
-            modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
-                if (settled) return;
-                settled = true;
-                this.close(modal);
-                resolve();
-            });
-        });
-    },
-
-    confirm(config) {
-        return new Promise((resolve) => {
-            const {
-                title = '确认',
-                message = '',
-                confirmText = '确定',
-                cancelText = '取消',
-                danger = false
-            } = config;
-
-            let settled = false;
-            const footer = `
-                <button class="ttw-btn" data-action="cancel">${this._escape(cancelText)}</button>
-                <button class="ttw-btn ${danger ? 'ttw-btn-danger' : 'ttw-btn-primary'}" data-action="confirm">${this._escape(confirmText)}</button>
-            `;
-
-            const modal = this.create({
-                title,
-                body: `<div style="padding:20px;line-height:1.7;">${this._formatPlainText(message)}</div>`,
-                footer,
-                width: '420px',
-                onClose: () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve(false);
-                }
-            });
-
-            modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-                if (settled) return;
-                settled = true;
-                this.close(modal);
-                resolve(false);
-            });
-
-            modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
-                if (settled) return;
-                settled = true;
-                this.close(modal);
-                resolve(true);
-            });
-        });
-    },
-
-    prompt(config) {
-        return new Promise((resolve) => {
-            const {
-                title = '输入',
-                message = '',
-                defaultValue = '',
-                placeholder = '',
-                confirmText = '确定',
-                cancelText = '取消',
-                multiline = false,
-                rows = 3,
-                trimResult = true
-            } = typeof config === 'string' ? { message: config } : config;
-
-            const inputHtml = multiline
-                ? `<textarea data-role="prompt-input" rows="${rows}" placeholder="${this._escape(placeholder)}" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:13px;resize:vertical;">${this._escape(defaultValue)}</textarea>`
-                : `<input data-role="prompt-input" type="text" value="${this._escape(defaultValue)}" placeholder="${this._escape(placeholder)}" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:13px;">`;
-
-            let settled = false;
-            const modal = this.create({
-                title,
-                body: `
-                    <div style="padding:20px;line-height:1.7;display:flex;flex-direction:column;gap:12px;">
-                        ${message ? `<div>${this._formatPlainText(message)}</div>` : ''}
-                        ${inputHtml}
-                    </div>
-                `,
-                footer: `
-                    <button class="ttw-btn" data-action="cancel">${this._escape(cancelText)}</button>
-                    <button class="ttw-btn ttw-btn-primary" data-action="confirm">${this._escape(confirmText)}</button>
-                `,
-                width: '460px',
-                onClose: () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve(null);
-                }
-            });
-
-            const input = modal.querySelector('[data-role="prompt-input"]');
-            setTimeout(() => {
-                if (!input) return;
-                input.focus();
-                if (typeof input.select === 'function') input.select();
-            }, 0);
-
-            const finish = (value) => {
-                if (settled) return;
-                settled = true;
-                this.close(modal);
-                resolve(value);
-            };
-
-            modal.querySelector('[data-action="cancel"]').addEventListener('click', () => finish(null));
-            modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
-                let value = input ? input.value : '';
-                if (trimResult) value = value.trim();
-                finish(value);
-            });
-
-            if (input) {
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !multiline) {
-                        e.preventDefault();
-                        modal.querySelector('[data-action="confirm"]').click();
-                    }
-                });
-            }
-        });
-    },
-
-    listSelect(config) {
-        return new Promise((resolve) => {
-            const {
-                title = '选择',
-                items = [],
-                multiSelect = false,
-                selectedIndices = []
-            } = config;
-
-            const listHtml = items.map((item, i) => `
-                <label class="ttw-list-item" style="display:block;padding:8px;border-bottom:1px solid #eee;cursor:pointer;">
-                    <input type="${multiSelect ? 'checkbox' : 'radio'}" name="ttw-list-select" 
-                           value="${i}" ${selectedIndices.includes(i) ? 'checked' : ''}>
-                    <span>${typeof item === 'object' ? item.label || item.name : item}</span>
-                </label>
-            `).join('');
-
-            const footer = `
-                <button class="ttw-btn ttw-btn-small" data-action="select-all">全选</button>
-                <button class="ttw-btn ttw-btn-small" data-action="deselect-all">取消全选</button>
-                <button class="ttw-btn" data-action="cancel">取消</button>
-                <button class="ttw-btn ttw-btn-primary" data-action="confirm">确定</button>
-            `;
-
-            let settled = false;
-            const modal = this.create({
-                title,
-                body: `<div class="ttw-list-container" style="max-height:400px;overflow-y:auto;">${listHtml}</div>`,
-                footer,
-                width: '500px',
-                onClose: () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve(null);
-                }
-            });
-
-            modal.querySelector('[data-action="select-all"]').addEventListener('click', () => {
-                modal.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-            });
-
-            modal.querySelector('[data-action="deselect-all"]').addEventListener('click', () => {
-                modal.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-            });
-
-            modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-                if (settled) return;
-                settled = true;
-                this.close(modal);
-                resolve(null);
-            });
-
-            modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
-                const selected = Array.from(modal.querySelectorAll('input:checked')).map(cb => parseInt(cb.value));
-                if (settled) return;
-                settled = true;
-                this.close(modal);
-                resolve(multiSelect ? selected : selected[0]);
-            });
-        });
-    }
-};
-
 async function confirmAction(message, options = {}) {
     return ModalFactory.confirm({ message, ...options });
 }
@@ -1356,231 +745,6 @@ async function alertAction(config, options = {}) {
     }
     return ModalFactory.alert(config || options);
 }
-// ========== APICaller 统一API调用封装 ==========
-const APICaller = {
-	/**
-	 * fetchWithTimeout
-	 * 
-	 * @param {*} url
-	 * @param {*} options
-	 * @param {*} timeout
-	 * @returns {Promise<any>}
-	 */
-	async fetchWithTimeout(url, options = {}, timeout = 120000) {
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-		try {
-			const response = await fetch(url, {
-				...options,
-				signal: controller.signal
-			});
-			clearTimeout(timeoutId);
-			return response;
-		} catch (error) {
-			clearTimeout(timeoutId);
-			if (error.name === 'AbortError') {
-				throw new Error('请求超时');
-			}
-			throw error;
-		}
-	},
-
-	async request(url, options = {}) {
-		const { timeout, ...fetchOptions } = options;
-		const response = await this.fetchWithTimeout(url, fetchOptions, timeout || 120000);
-		if (!response.ok) {
-			let text = '';
-			try {
-				text = await response.text();
-			} catch (e) { }
-			const error = new Error(`API请求失败: ${response.status} ${response.statusText}${text ? ` - ${text.substring(0, 200)}` : ''}`);
-			error.status = response.status;
-			error.responseText = text;
-			error.response = response;
-			throw error;
-		}
-		return response;
-	},
-
-	/**
-	 * parseResponse
-	 * 
-	 * @param {*} response
-	 * @returns {Promise<any>}
-	 */
-	async parseResponse(response) {
-		return response.text();
-	},
-
-	/**
-	 * extractJSON
-	 * 
-	 * @param {*} text
-	 * @returns {*}
-	 */
-	extractJSON(text) {
-		try { return JSON.parse(text); } catch (e) { }
-
-		const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-		if (jsonBlockMatch) {
-			try { return JSON.parse(jsonBlockMatch[1].trim()); } catch (e) { }
-		}
-
-		const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
-		if (jsonObjectMatch) {
-			try { return JSON.parse(jsonObjectMatch[0]); } catch (e) { }
-		}
-
-		throw new Error('无法从响应中提取有效的JSON');
-	},
-
-	async requestJSON(url, options = {}) {
-		const response = await this.request(url, options);
-		const text = await this.parseResponse(response);
-		return this.extractJSON(text);
-	},
-
-	async requestText(url, options = {}) {
-		const response = await this.request(url, options);
-		return this.parseResponse(response);
-	},
-
-	async parseSSEStream(response, config = {}) {
-		const { onChunk = null, inactivityTimeout = 120000 } = config;
-		if (!response.body) {
-			throw new Error('流式响应不可用');
-		}
-
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let fullContent = '';
-		let buffer = '';
-		let inactivityTimer = null;
-
-		const resetInactivityTimer = () => {
-			if (inactivityTimer) clearTimeout(inactivityTimer);
-			inactivityTimer = setTimeout(() => {
-				try { reader.cancel(); } catch (e) { }
-			}, inactivityTimeout);
-		};
-
-		const consumeLine = (line) => {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith(':') || !trimmed.startsWith('data: ')) return;
-			const dataStr = trimmed.slice(6).trim();
-			if (dataStr === '[DONE]') return;
-			try {
-				const parsed = JSON.parse(dataStr);
-				const delta = parsed.choices?.[0]?.delta?.content || '';
-				if (delta) {
-					fullContent += delta;
-					if (typeof onChunk === 'function') onChunk(delta, fullContent, parsed);
-				}
-			} catch (e) { }
-		};
-
-		resetInactivityTimer();
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				resetInactivityTimer();
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split('\n');
-				buffer = lines.pop() || '';
-				for (const line of lines) {
-					consumeLine(line);
-				}
-			}
-		} finally {
-			if (inactivityTimer) clearTimeout(inactivityTimer);
-		}
-
-		if (buffer.trim()) {
-			consumeLine(buffer);
-		}
-
-		return fullContent;
-	},
-
-	async requestStream(url, options = {}) {
-		const { onChunk = null, inactivityTimeout = 120000, ...requestOptions } = options;
-		const response = await this.request(url, requestOptions);
-		return this.parseSSEStream(response, { onChunk, inactivityTimeout });
-	},
-
-	isRateLimitError(error) {
-		const message = String(error?.responseText || error?.message || '').toLowerCase();
-		return error?.status === 429 || message.includes('resource_exhausted') || message.includes('rate limit');
-	},
-
-	async withRetry(task, config = {}) {
-		const { retries = 0, onRetry = null, shouldRetry = null } = config;
-		let attempt = 0;
-		while (true) {
-			try {
-				return await task(attempt);
-			} catch (error) {
-				const canRetry = attempt < retries && (typeof shouldRetry === 'function' ? shouldRetry(error, attempt) : this.isRateLimitError(error));
-				if (!canRetry) throw error;
-				const delay = Math.pow(2, attempt) * 1000;
-				if (typeof onRetry === 'function') {
-					await onRetry(error, attempt + 1, delay);
-				}
-				await new Promise(resolve => setTimeout(resolve, delay));
-				attempt += 1;
-			}
-		}
-	},
-
-	/**
-	 * handleError
-	 * 
-	 * @param {*} error
-	 * @param {*} context
-	 * @returns {*}
-	 */
-	handleError(error, context = '') {
-		const prefix = context ? `[${context}] ` : '';
-		Logger.error('APICaller', prefix + error.message);
-
-		if (error.message.includes('超时')) {
-			return { type: 'timeout', message: '请求超时，请稍后重试' };
-		}
-		if (error.message.includes('网络') || error.message.includes('fetch')) {
-			return { type: 'network', message: '网络错误，请检查连接' };
-		}
-		if (error.message.includes('API Key')) {
-			return { type: 'auth', message: 'API Key 无效或已过期' };
-		}
-
-		return { type: 'unknown', message: error.message };
-	},
-
-	/**
-	 * getJSON
-	 * 
-	 * @param {*} url
-	 * @param {*} options
-	 * @returns {Promise<any>}
-	 */
-	async getJSON(url, options = {}) {
-		return this.requestJSON(url, options);
-	},
-
-	/**
-	 * getText
-	 * 
-	 * @param {*} url
-	 * @param {*} options
-	 * @returns {Promise<any>}
-	 */
-	async getText(url, options = {}) {
-		return this.requestText(url, options);
-	}
-};
-
 // ========== ListRenderer 列表渲染工具 ==========
 const ListRenderer = {
 	/**
@@ -1838,591 +1002,7 @@ const ListRenderer = {
 // - 自定义分类持久化
 
 // ========== IndexedDB ==========
-const MemoryHistoryDB = {
-        dbName: 'TxtToWorldbookDB',
-        storeName: 'history',
-        metaStoreName: 'meta',
-        stateStoreName: 'state',
-        rollStoreName: 'rolls',
-        categoriesStoreName: 'categories',
-        entryRollStoreName: 'entryRolls', // 新增：条目级别Roll历史
-        db: null,
-
-        /**
-         * openDB
-         * 
-         * @returns {Promise<any>}
-         */
-        async openDB() {
-            if (this.db) return this.db;
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(this.dbName, 7); // 升级版本号
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    let historyStore;
-                    if (!db.objectStoreNames.contains(this.storeName)) {
-                        historyStore = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
-                    } else {
-                        historyStore = request.transaction.objectStore(this.storeName);
-                    }
-                    if (!historyStore.indexNames.contains('timestamp')) {
-                        historyStore.createIndex('timestamp', 'timestamp', { unique: false });
-                    }
-                    if (!historyStore.indexNames.contains('memoryIndex')) {
-                        historyStore.createIndex('memoryIndex', 'memoryIndex', { unique: false });
-                    }
-                    if (!historyStore.indexNames.contains('memoryTitleFileHash')) {
-                        historyStore.createIndex('memoryTitleFileHash', ['memoryTitle', 'fileHash'], { unique: false });
-                    }
-                    if (!db.objectStoreNames.contains(this.metaStoreName)) {
-                        db.createObjectStore(this.metaStoreName, { keyPath: 'key' });
-                    }
-                    if (!db.objectStoreNames.contains(this.stateStoreName)) {
-                        db.createObjectStore(this.stateStoreName, { keyPath: 'key' });
-                    }
-                    if (!db.objectStoreNames.contains(this.rollStoreName)) {
-                        const rollStore = db.createObjectStore(this.rollStoreName, { keyPath: 'id', autoIncrement: true });
-                        rollStore.createIndex('memoryIndex', 'memoryIndex', { unique: false });
-                    }
-                    if (!db.objectStoreNames.contains(this.categoriesStoreName)) {
-                        db.createObjectStore(this.categoriesStoreName, { keyPath: 'key' });
-                    }
-                    // 新增：条目级别Roll历史存储
-                    if (!db.objectStoreNames.contains(this.entryRollStoreName)) {
-                        const entryRollStore = db.createObjectStore(this.entryRollStoreName, { keyPath: 'id', autoIncrement: true });
-                        entryRollStore.createIndex('entryKey', 'entryKey', { unique: false }); // category:entryName
-                        entryRollStore.createIndex('timestamp', 'timestamp', { unique: false });
-                    }
-                };
-                request.onsuccess = (event) => {
-                    this.db = event.target.result;
-                    resolve(this.db);
-                };
-                request.onerror = (event) => reject(event.target.error);
-            });
-        },
-
-        /**
-         * saveCustomCategories
-         * 
-         * @param {*} categories
-         * @returns {Promise<any>}
-         */
-        async saveCustomCategories(categories) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.categoriesStoreName], 'readwrite');
-                const store = transaction.objectStore(this.categoriesStoreName);
-                const request = store.put({ key: 'customCategories', value: categories });
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getCustomCategories
-         * 
-         * @returns {Promise<any>}
-         */
-        async getCustomCategories() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.categoriesStoreName], 'readonly');
-                const store = transaction.objectStore(this.categoriesStoreName);
-                const request = store.get('customCategories');
-                request.onsuccess = () => resolve(request.result?.value || null);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        buildHistoryDedupKey(memoryTitle) {
-            return [memoryTitle, AppState.file.hash || null];
-        },
-
-        async getDuplicateHistoryRecords(memoryTitle) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.storeName], 'readonly');
-                const store = transaction.objectStore(this.storeName);
-                if (!store.indexNames.contains('memoryTitleFileHash')) {
-                    const request = store.getAll();
-                    request.onsuccess = () => {
-                        const fileHash = AppState.file.hash || null;
-                        resolve((request.result || []).filter(item => item.memoryTitle === memoryTitle && (item.fileHash || null) === fileHash));
-                    };
-                    request.onerror = () => reject(request.error);
-                    return;
-                }
-                const index = store.index('memoryTitleFileHash');
-                const request = index.getAll(this.buildHistoryDedupKey(memoryTitle));
-                request.onsuccess = () => resolve(request.result || []);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * saveHistory
-         * 
-         * @param {*} memoryIndex
-         * @param {*} memoryTitle
-         * @param {*} previousWorldbook
-         * @param {*} newWorldbook
-         * @param {*} changedEntries
-         * @returns {Promise<any>}
-         */
-        async saveHistory(memoryIndex, memoryTitle, previousWorldbook, newWorldbook, changedEntries) {
-            const db = await this.openDB();
-            const allowedDuplicates = ['记忆-优化', '记忆-演变总结'];
-            if (!allowedDuplicates.includes(memoryTitle)) {
-                try {
-                    const duplicates = await this.getDuplicateHistoryRecords(memoryTitle);
-                    if (duplicates.length > 0) {
-                        const deleteTransaction = db.transaction([this.storeName], 'readwrite');
-                        const deleteStore = deleteTransaction.objectStore(this.storeName);
-                        for (const dup of duplicates) {
-                            deleteStore.delete(dup.id);
-                        }
-                        await new Promise((resolve, reject) => {
-                            deleteTransaction.oncomplete = () => resolve();
-                            deleteTransaction.onerror = () => reject(deleteTransaction.error);
-                        });
-                    }
-                } catch (error) {
-                    Logger.error('MemoryHistoryDB', '删除重复历史记录失败:', error);
-                }
-            }
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.storeName], 'readwrite');
-                const store = transaction.objectStore(this.storeName);
-                const record = {
-                    timestamp: Date.now(),
-                    memoryIndex,
-                    memoryTitle,
-                    previousWorldbook: JSON.parse(JSON.stringify(previousWorldbook || {})),
-                    newWorldbook: JSON.parse(JSON.stringify(newWorldbook || {})),
-                    changedEntries: changedEntries || [],
-                    fileHash: AppState.file.hash || null,
-                    volumeIndex: AppState.worldbook.currentVolumeIndex
-                };
-                const request = store.add(record);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getAllHistory
-         * 
-         * @returns {Promise<any>}
-         */
-        async getAllHistory() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.storeName], 'readonly');
-                const store = transaction.objectStore(this.storeName);
-                const request = store.getAll();
-                request.onsuccess = () => resolve(request.result || []);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getHistoryById
-         * 
-         * @param {*} id
-         * @returns {Promise<any>}
-         */
-        async getHistoryById(id) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.storeName], 'readonly');
-                const store = transaction.objectStore(this.storeName);
-                const request = store.get(id);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * clearAllHistory
-         * 
-         * @returns {Promise<any>}
-         */
-        async clearAllHistory() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.storeName], 'readwrite');
-                const store = transaction.objectStore(this.storeName);
-                const request = store.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * clearAllRolls
-         * 
-         * @returns {Promise<any>}
-         */
-        async clearAllRolls() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.rollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.rollStoreName);
-                const request = store.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * saveFileHash
-         * 
-         * @param {*} hash
-         * @returns {Promise<any>}
-         */
-        async saveFileHash(hash) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.metaStoreName], 'readwrite');
-                const store = transaction.objectStore(this.metaStoreName);
-                const request = store.put({ key: 'AppState.file.hash', value: hash });
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getSavedFileHash
-         * 
-         * @returns {Promise<any>}
-         */
-        async getSavedFileHash() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.metaStoreName], 'readonly');
-                const store = transaction.objectStore(this.metaStoreName);
-                const request = store.get('AppState.file.hash');
-                request.onsuccess = () => resolve(request.result?.value || null);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * clearFileHash
-         * 
-         * @returns {Promise<any>}
-         */
-        async clearFileHash() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.metaStoreName], 'readwrite');
-                const store = transaction.objectStore(this.metaStoreName);
-                const request = store.delete('AppState.file.hash');
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * saveState
-         * 
-         * @param {*} processedIndex
-         * @returns {Promise<any>}
-         */
-        async saveState(processedIndex) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.stateStoreName], 'readwrite');
-                const store = transaction.objectStore(this.stateStoreName);
-                const state = {
-                    key: 'currentState',
-                    processedIndex,
-                    memoryQueue: JSON.parse(JSON.stringify(AppState.memory.queue)),
-                    generatedWorldbook: JSON.parse(JSON.stringify(AppState.worldbook.generated)),
-                    worldbookVolumes: JSON.parse(JSON.stringify(AppState.worldbook.volumes)),
-                    currentVolumeIndex: AppState.worldbook.currentVolumeIndex,
-                    fileHash: AppState.file.hash,
-                    novelName: AppState.file.novelName || '',
-                    timestamp: Date.now()
-                };
-                const request = store.put(state);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * loadState
-         * 
-         * @returns {Promise<any>}
-         */
-        async loadState() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.stateStoreName], 'readonly');
-                const store = transaction.objectStore(this.stateStoreName);
-                const request = store.get('currentState');
-                request.onsuccess = () => resolve(request.result || null);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * clearState
-         * 
-         * @returns {Promise<any>}
-         */
-        async clearState() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.stateStoreName], 'readwrite');
-                const store = transaction.objectStore(this.stateStoreName);
-                const request = store.delete('currentState');
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * saveRollResult
-         * 
-         * @param {*} memoryIndex
-         * @param {*} result
-         * @returns {Promise<any>}
-         */
-        async saveRollResult(memoryIndex, result) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.rollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.rollStoreName);
-                const record = {
-                    memoryIndex,
-                    result: JSON.parse(JSON.stringify(result)),
-                    timestamp: Date.now()
-                };
-                const request = store.add(record);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getRollResults
-         * 
-         * @param {*} memoryIndex
-         * @returns {Promise<any>}
-         */
-        async getRollResults(memoryIndex) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.rollStoreName], 'readonly');
-                const store = transaction.objectStore(this.rollStoreName);
-                const index = store.index('memoryIndex');
-                const request = index.getAll(memoryIndex);
-                request.onsuccess = () => resolve(request.result || []);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * clearRollResults
-         * 
-         * @param {*} memoryIndex
-         * @returns {Promise<any>}
-         */
-        async clearRollResults(memoryIndex) {
-            const db = await this.openDB();
-            const results = await this.getRollResults(memoryIndex);
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.rollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.rollStoreName);
-                for (const r of results) {
-                    store.delete(r.id);
-                }
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
-            });
-        },
-
-        // ========== 新增：条目级别Roll历史方法 ==========
-        async saveEntryRollResult(category, entryName, memoryIndex, result, customPrompt = '') {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.entryRollStoreName);
-                const entryKey = `${category}:${entryName}`;
-                const record = {
-                    entryKey,
-                    category,
-                    entryName,
-                    memoryIndex,
-                    result: JSON.parse(JSON.stringify(result)),
-                    customPrompt,
-                    timestamp: Date.now()
-                };
-                const request = store.add(record);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getEntryRollResults
-         * 
-         * @param {*} category
-         * @param {*} entryName
-         * @returns {Promise<any>}
-         */
-        async getEntryRollResults(category, entryName) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.entryRollStoreName], 'readonly');
-                const store = transaction.objectStore(this.entryRollStoreName);
-                const index = store.index('entryKey');
-                const entryKey = `${category}:${entryName}`;
-                const request = index.getAll(entryKey);
-                request.onsuccess = () => {
-                    const results = request.result || [];
-                    // 按时间倒序排列
-                    results.sort((a, b) => b.timestamp - a.timestamp);
-                    resolve(results);
-                };
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * clearEntryRollResults
-         * 
-         * @param {*} category
-         * @param {*} entryName
-         * @returns {Promise<any>}
-         */
-        async clearEntryRollResults(category, entryName) {
-            const db = await this.openDB();
-            const results = await this.getEntryRollResults(category, entryName);
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.entryRollStoreName);
-                for (const r of results) {
-                    store.delete(r.id);
-                }
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
-            });
-        },
-
-        /**
-         * clearAllEntryRolls
-         * 
-         * @returns {Promise<any>}
-         */
-        async clearAllEntryRolls() {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.entryRollStoreName);
-                const request = store.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * deleteEntryRollById
-         * 
-         * @param {*} rollId
-         * @returns {Promise<any>}
-         */
-        async deleteEntryRollById(rollId) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
-                const store = transaction.objectStore(this.entryRollStoreName);
-                const request = store.delete(rollId);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * getEntryRollById
-         * 
-         * @param {*} rollId
-         * @returns {Promise<any>}
-         */
-        async getEntryRollById(rollId) {
-            const db = await this.openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.entryRollStoreName], 'readonly');
-                const store = transaction.objectStore(this.entryRollStoreName);
-                const request = store.get(rollId);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        /**
-         * rollbackToHistory
-         * 
-         * @param {*} historyId
-         * @returns {Promise<any>}
-         */
-        async rollbackToHistory(historyId) {
-            const history = await this.getHistoryById(historyId);
-            if (!history) throw new Error('找不到指定的历史记录');
-            AppState.worldbook.generated = JSON.parse(JSON.stringify(history.previousWorldbook));
-            const db = await this.openDB();
-            const allHistory = await this.getAllHistory();
-            const toDelete = allHistory.filter(h => h.id >= historyId);
-            const transaction = db.transaction([this.storeName], 'readwrite');
-            const store = transaction.objectStore(this.storeName);
-            for (const h of toDelete) {
-                store.delete(h.id);
-            }
-            return history;
-        },
-
-        /**
-         * cleanDuplicateHistory
-         * 
-         * @returns {Promise<any>}
-         */
-        async cleanDuplicateHistory() {
-            const db = await this.openDB();
-            const allHistory = await this.getAllHistory();
-            const allowedDuplicates = ['记忆-优化', '记忆-演变总结'];
-            const groupedByTitle = {};
-            for (const record of allHistory) {
-                const title = record.memoryTitle;
-                if (!groupedByTitle[title]) groupedByTitle[title] = [];
-                groupedByTitle[title].push(record);
-            }
-            const toDelete = [];
-            for (const title in groupedByTitle) {
-                if (allowedDuplicates.includes(title)) continue;
-                const records = groupedByTitle[title];
-                if (records.length > 1) {
-                    records.sort((a, b) => b.timestamp - a.timestamp);
-                    toDelete.push(...records.slice(1));
-                }
-            }
-            if (toDelete.length > 0) {
-                const transaction = db.transaction([this.storeName], 'readwrite');
-                const store = transaction.objectStore(this.storeName);
-                for (const record of toDelete) {
-                    store.delete(record.id);
-                }
-                await new Promise((resolve, reject) => {
-                    transaction.oncomplete = () => resolve();
-                    transaction.onerror = () => reject(transaction.error);
-                });
-                return toDelete.length;
-            }
-            return 0;
-        }
-    };
+const MemoryHistoryDB = createMemoryHistoryDB(AppState, Logger);
 
     // ========== 新增：自定义分类管理函数 ==========
     async function saveCustomCategories() {
@@ -3282,160 +1862,19 @@ success: true,
 // - 数据规范化
 
 // ========== 世界书数据处理 ==========
-function normalizeWorldbookEntry(entry) {
-        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
-        if (entry.content !== undefined && entry['内容'] !== undefined) {
-            const contentLen = String(entry.content || '').length;
-            const neirongLen = String(entry['内容'] || '').length;
-            if (contentLen > neirongLen) entry['内容'] = entry.content;
-            delete entry.content;
-        } else if (entry.content !== undefined) {
-            entry['内容'] = entry.content;
-            delete entry.content;
-        }
-        return entry;
-    }
-
-    /**
-     * normalizeWorldbookData
-     * 
-     * @param {*} data
-     * @returns {*}
-     */
-    function normalizeWorldbookData(data) {
-        if (!data || typeof data !== 'object') return data;
-        for (const category in data) {
-            if (typeof data[category] === 'object' && data[category] !== null && !Array.isArray(data[category])) {
-                if (data[category]['关键词'] || data[category]['内容'] || data[category].content) {
-                    normalizeWorldbookEntry(data[category]);
-                } else {
-                    for (const entryName in data[category]) {
-                        if (typeof data[category][entryName] === 'object') {
-                            normalizeWorldbookEntry(data[category][entryName]);
-                        }
-                    }
-                }
-            }
-        }
-        return data;
-    }
-
-    /**
-     * mergeWorldbookData
-     * 
-     * @param {*} target
-     * @param {*} source
-     * @returns {*}
-     */
-    function mergeWorldbookData(target, source) {
-        normalizeWorldbookData(source);
-        for (const key in source) {
-            if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
-                if (!target[key]) target[key] = {};
-                mergeWorldbookData(target[key], source[key]);
-            } else {
-                target[key] = source[key];
-            }
-        }
-    }
-
-    /**
-     * mergeWorldbookDataIncremental
-     * 
-     * @param {*} target
-     * @param {*} source
-     * @returns {*}
-     */
-    function mergeWorldbookDataIncremental(target, source) {
-        normalizeWorldbookData(source);
-        for (const category in source) {
-            if (typeof source[category] !== 'object' || source[category] === null) continue;
-            if (!target[category]) target[category] = {};
-            for (const entryName in source[category]) {
-                const sourceEntry = source[category][entryName];
-                if (typeof sourceEntry !== 'object' || sourceEntry === null) continue;
-                if (target[category][entryName]) {
-                    const targetEntry = target[category][entryName];
-                    if (Array.isArray(sourceEntry['关键词']) && Array.isArray(targetEntry['关键词'])) {
-                        targetEntry['关键词'] = [...new Set([...targetEntry['关键词'], ...sourceEntry['关键词']])];
-                    } else if (Array.isArray(sourceEntry['关键词'])) {
-                        targetEntry['关键词'] = sourceEntry['关键词'];
-                    }
-                    if (sourceEntry['内容']) {
-                        const existingContent = targetEntry['内容'] || '';
-                        const newContent = sourceEntry['内容'];
-                        if (newContent && !existingContent.includes(newContent.substring(0, 50))) {
-                            targetEntry['内容'] = existingContent + '\n\n---\n\n' + newContent;
-                        }
-                    }
-                } else {
-                    target[category][entryName] = JSON.parse(JSON.stringify(sourceEntry));
-                }
-            }
-        }
-    }
-
-    /**
-     * findChangedEntries
-     * 
-     * @param {*} oldWorldbook
-     * @param {*} newWorldbook
-     * @returns {*}
-     */
-    function findChangedEntries(oldWorldbook, newWorldbook) {
-        const changes = [];
-        for (const category in newWorldbook) {
-            const oldCategory = oldWorldbook[category] || {};
-            const newCategory = newWorldbook[category];
-            for (const entryName in newCategory) {
-                const oldEntry = oldCategory[entryName];
-                const newEntry = newCategory[entryName];
-                if (!oldEntry) {
-                    changes.push({ type: 'add', category, entryName, oldValue: null, newValue: newEntry });
-                } else if (JSON.stringify(oldEntry) !== JSON.stringify(newEntry)) {
-                    changes.push({ type: 'modify', category, entryName, oldValue: oldEntry, newValue: newEntry });
-                }
-            }
-        }
-        for (const category in oldWorldbook) {
-            const oldCategory = oldWorldbook[category];
-            const newCategory = newWorldbook[category] || {};
-            for (const entryName in oldCategory) {
-                if (!newCategory[entryName]) {
-                    changes.push({ type: 'delete', category, entryName, oldValue: oldCategory[entryName], newValue: null });
-                }
-            }
-        }
-        return changes;
-}
-
-/**
- * 合并世界书数据并保存历史
- * @param {Object} options - 配置选项
- * @param {Object} options.target - 目标世界书对象
- * @param {Object} options.source - 源世界书数据
- * @param {number} options.memoryIndex - 记忆索引
- * @param {string} options.memoryTitle - 记忆标题
- * @returns {Promise<Array>} 变更条目列表
- */
-async function mergeWorldbookDataWithHistory(options) {
-    const { target, source, memoryIndex, memoryTitle } = options;
-    debugLog(`合并世界书[${memoryTitle}] 开始, 深拷贝快照...`);
-    const previousWorldbook = JSON.parse(JSON.stringify(target));
-    if (AppState.processing.incrementalMode) {
-        mergeWorldbookDataIncremental(target, source);
-    } else {
-        mergeWorldbookData(target, source);
-    }
-    debugLog(`合并世界书[${memoryTitle}] 合并完成, 计算差异...`);
-    const changedEntries = findChangedEntries(previousWorldbook, target);
-    if (changedEntries.length > 0) {
-        debugLog(`合并世界书[${memoryTitle}] 发现${changedEntries.length}处变更, 保存历史...`);
-        await MemoryHistoryDB.saveHistory(memoryIndex, memoryTitle, previousWorldbook, target, changedEntries);
-    }
-    debugLog(`合并世界书[${memoryTitle}] 全部完成`);
-    return changedEntries;
-}
+const worldbookService = createWorldbookService({
+    getIncrementalMode: () => AppState.processing.incrementalMode,
+    saveHistory: (...args) => MemoryHistoryDB.saveHistory(...args),
+    debugLog: (msg) => debugLog(msg),
+});
+const {
+    normalizeWorldbookEntry,
+    normalizeWorldbookData,
+    mergeWorldbookData,
+    mergeWorldbookDataIncremental,
+    findChangedEntries,
+    mergeWorldbookDataWithHistory,
+} = worldbookService;
 
     // ========== 后处理添加章节编号后缀 ==========
     function postProcessResultWithChapterIndex(result, chapterIndex) {
@@ -7411,7 +5850,7 @@ tochao">thinking\ntucao\ntochao</textarea>
 
     // ========== 别名识别与合并 ==========
     function findPotentialDuplicateCharacters() {
-        return findPotentialDuplicates('角色');
+        return mergeService.findPotentialDuplicates('角色');
     }
 
     /**
@@ -7421,43 +5860,7 @@ tochao">thinking\ntucao\ntochao</textarea>
      * @returns {*}
      */
     function findPotentialDuplicates(categoryName) {
-        const entries = AppState.worldbook.generated[categoryName];
-        if (!entries) return [];
-
-        const names = Object.keys(entries);
-        const suspectedGroups = [];
-        const processed = new Set();
-
-        for (let i = 0; i < names.length; i++) {
-            if (processed.has(names[i])) continue;
-
-            const group = [names[i]];
-            const keywordsA = new Set(entries[names[i]]['关键词'] || []);
-
-            for (let j = i + 1; j < names.length; j++) {
-                if (processed.has(names[j])) continue;
-
-                const keywordsB = new Set(entries[names[j]]['关键词'] || []);
-
-                const intersection = [...keywordsA].filter(k => keywordsB.has(k));
-
-                const nameContains = names[i].includes(names[j]) || names[j].includes(names[i]);
-
-                const shortNameMatch = checkShortNameMatch(names[i], names[j]);
-
-                if (intersection.length > 0 || nameContains || shortNameMatch) {
-                    group.push(names[j]);
-                    processed.add(names[j]);
-                }
-            }
-
-            if (group.length > 1) {
-                suspectedGroups.push(group);
-                group.forEach(n => processed.add(n));
-            }
-        }
-
-        return suspectedGroups;
+        return mergeService.findPotentialDuplicates(categoryName);
     }
 
     /**
@@ -7468,98 +5871,7 @@ tochao">thinking\ntucao\ntochao</textarea>
      * @returns {*}
      */
     function checkShortNameMatch(nameA, nameB) {
-        /**
-         * extractName
-         * 
-         * @param {*} fullName
-         * @returns {*}
-         */
-        const extractName = (fullName) => {
-            if (fullName.length <= 3) return fullName;
-            return fullName.slice(-2);
-        };
-
-        const shortA = extractName(nameA);
-        const shortB = extractName(nameB);
-
-        return shortA === shortB || nameA.includes(shortB) || nameB.includes(shortA);
-    }
-
-    /**
-     * generatePairs
-     * 
-     * @param {*} group
-     * @returns {*}
-     */
-    function generatePairs(group) {
-        const pairs = [];
-        for (let i = 0; i < group.length; i++) {
-            for (let j = i + 1; j < group.length; j++) {
-                pairs.push([group[i], group[j]]);
-            }
-        }
-        return pairs;
-    }
-
-    class UnionFind {
-        constructor(items) {
-            this.parent = {};
-            this.rank = {};
-            items.forEach(item => {
-                this.parent[item] = item;
-                this.rank[item] = 0;
-            });
-        }
-
-        /**
-         * find
-         * 
-         * @param {*} x
-         * @returns {*}
-         */
-        find(x) {
-            if (this.parent[x] !== x) {
-                this.parent[x] = this.find(this.parent[x]);
-            }
-            return this.parent[x];
-        }
-
-        /**
-         * union
-         * 
-         * @param {*} x
-         * @param {*} y
-         * @returns {*}
-         */
-        union(x, y) {
-            const rootX = this.find(x);
-            const rootY = this.find(y);
-            if (rootX === rootY) return;
-
-            if (this.rank[rootX] < this.rank[rootY]) {
-                this.parent[rootX] = rootY;
-            } else if (this.rank[rootX] > this.rank[rootY]) {
-                this.parent[rootY] = rootX;
-            } else {
-                this.parent[rootY] = rootX;
-                this.rank[rootX]++;
-            }
-        }
-
-        /**
-         * getGroups
-         * 
-         * @returns {*}
-         */
-        getGroups() {
-            const groups = {};
-            for (const item in this.parent) {
-                const root = this.find(item);
-                if (!groups[root]) groups[root] = [];
-                groups[root].push(item);
-            }
-            return Object.values(groups).filter(g => g.length > 1);
-        }
+        return mergeService.checkShortNameMatch(nameA, nameB);
     }
 
     /**
@@ -7572,214 +5884,7 @@ tochao">thinking\ntucao\ntochao</textarea>
      * @returns {Promise<any>}
      */
     async function handleVerifyDuplicates(suspectedGroups, useParallel = true, threshold = 5, categoryName = '角色') {
-        if (suspectedGroups.length === 0) return { pairResults: [], mergedGroups: [] };
-
-        const entries = AppState.worldbook.generated[categoryName];
-
-        const allPairs = [];
-        const allNames = new Set();
-
-        for (const group of suspectedGroups) {
-            const pairs = generatePairs(group);
-            pairs.forEach(pair => {
-                allPairs.push(pair);
-                allNames.add(pair[0]);
-                allNames.add(pair[1]);
-            });
-        }
-
-        if (allPairs.length === 0) return { pairResults: [], mergedGroups: [] };
-
-        // 构建配对内容
-        const buildPairContent = (pairs, startIndex = 0) => {
-            return pairs.map((pair, i) => {
-                const [nameA, nameB] = pair;
-                const entryA = entries[nameA];
-                const entryB = entries[nameB];
-
-                const keywordsA = entryA?.['关键词']?.join(', ') || '无';
-                const keywordsB = entryB?.['关键词']?.join(', ') || '无';
-                const contentA = (entryA?.['内容'] || '').substring(0, 300);
-                const contentB = (entryB?.['内容'] || '').substring(0, 300);
-
-                return `配对${startIndex + i + 1}: 「${nameA}」vs「${nameB}」
-  【${nameA}】关键词: ${keywordsA}
-  内容摘要: ${contentA}${contentA.length >= 300 ? '...' : ''}
-  【${nameB}】关键词: ${keywordsB}
-  内容摘要: ${contentB}${contentB.length >= 300 ? '...' : ''}`;
-            }).join('\n\n');
-        };
-
-        const categoryLabel = categoryName === '角色' ? '角色' : `「${categoryName}」分类的条目`;
-        /**
-         * buildPrompt
-         * 
-         * @param {*} pairsContent
-         * @param {*} pairCount
-         * @returns {*}
-         */
-        const buildPrompt = (pairsContent, pairCount) => {
-            return getLanguagePrefix() + `你是${categoryName}识别专家。请对以下每一对${categoryLabel}进行判断，判断它们是否为同一${categoryName === '角色' ? '人物' : '事物'}。
-
-## 待判断的${categoryLabel}配对
-${pairsContent}
-
-## 判断依据
-- 仔细阅读每个条目的关键词和内容摘要
-- 根据描述的核心特征、身份、背景等信息判断
-- 考虑：全名vs简称、别名、昵称、代号等称呼变化
-- 如果内容描述明显指向同一${categoryName === '角色' ? '个人' : '个事物'}，则判定为相同
-- 【重要】即使名字相似，如果核心特征明显不同，也要判定为不同
-
-## 要求
-- 对每一对分别判断
-- 如果是同一${categoryName === '角色' ? '人' : '事物'}，选择更完整/更常用的名称作为mainName
-- 如果不是同一${categoryName === '角色' ? '人' : '事物'}，说明原因
-- 返回JSON格式
-
-## 输出格式
-{
-    "results": [
-        {"pair": 1, "nameA": "条目A名", "nameB": "条目B名", "isSamePerson": true, "mainName": "保留的名称", "reason": "判断依据"},
-        {"pair": 2, "nameA": "条目A名", "nameB": "条目B名", "isSamePerson": false, "reason": "不是同一${categoryName === '角色' ? '人' : '事物'}的原因"}
-    ]
-}`;
-        };
-
-        const pairResults = [];
-
-        if (useParallel && allPairs.length > threshold) {
-            // 并发模式：分批处理
-            updateStreamContent('\n🚀 并发模式处理配对判断...\n');
-
-            // 将配对分组：每组接近threshold个
-            const batches = [];
-            for (let i = 0; i < allPairs.length; i += threshold) {
-                batches.push({
-                    pairs: allPairs.slice(i, Math.min(i + threshold, allPairs.length)),
-                    startIndex: i
-                });
-            }
-
-            updateStreamContent(`📦 分成 ${batches.length} 批，每批约 ${threshold} 对\n`);
-
-            const semaphore = new Semaphore(AppState.config.parallel.concurrency);
-            let completed = 0;
-
-            /**
-             * processBatch
-             * 
-             * @param {*} batch
-             * @param {*} batchIndex
-             * @returns {Promise<any>}
-             */
-            const processBatch = async (batch, batchIndex) => {
-                await semaphore.acquire();
-                try {
-                    updateStreamContent(`🔄 [批次${batchIndex + 1}/${batches.length}] 处理 ${batch.pairs.length} 对...\n`);
-
-                    const pairsContent = buildPairContent(batch.pairs, batch.startIndex);
-                    const prompt = buildPrompt(pairsContent, batch.pairs.length);
-                    const response = await callAPI(prompt);
-                    const aiResult = parseAIResponse(response);
-
-                    for (const result of aiResult.results || []) {
-                        const localPairIndex = (result.pair || 1) - 1;
-                        const globalPairIndex = batch.startIndex + localPairIndex;
-
-                        if (globalPairIndex < 0 || globalPairIndex >= allPairs.length) continue;
-
-                        const [nameA, nameB] = allPairs[globalPairIndex];
-                        pairResults.push({
-                            nameA: result.nameA || nameA,
-                            nameB: result.nameB || nameB,
-                            isSamePerson: result.isSamePerson,
-                            mainName: result.mainName,
-                            reason: result.reason,
-                            _globalIndex: globalPairIndex
-                        });
-                    }
-
-                    completed++;
-                    updateStreamContent(`✅ [批次${batchIndex + 1}] 完成 (${completed}/${batches.length})\n`);
-                } catch (error) {
-                    updateStreamContent(`❌ [批次${batchIndex + 1}] 失败: ${error.message}\n`);
-                } finally {
-                    semaphore.release();
-                }
-            };
-
-            await Promise.allSettled(batches.map((batch, i) => processBatch(batch, i)));
-
-        } else {
-            // 单次请求模式
-            updateStreamContent('\n🤖 单次请求模式处理配对判断...\n');
-
-            const pairsContent = buildPairContent(allPairs, 0);
-            const prompt = buildPrompt(pairsContent, allPairs.length);
-            const response = await callAPI(prompt);
-            const aiResult = parseAIResponse(response);
-
-            for (const result of aiResult.results || []) {
-                const pairIndex = (result.pair || 1) - 1;
-                if (pairIndex < 0 || pairIndex >= allPairs.length) continue;
-
-                const [nameA, nameB] = allPairs[pairIndex];
-                pairResults.push({
-                    nameA: result.nameA || nameA,
-                    nameB: result.nameB || nameB,
-                    isSamePerson: result.isSamePerson,
-                    mainName: result.mainName,
-                    reason: result.reason,
-                    _globalIndex: pairIndex
-                });
-            }
-        }
-
-        // 使用并查集合并结果
-        const uf = new UnionFind([...allNames]);
-
-        for (const result of pairResults) {
-            if (result.isSamePerson) {
-                const [nameA, nameB] = allPairs[result._globalIndex];
-                uf.union(nameA, nameB);
-            }
-        }
-
-        const mergedGroups = uf.getGroups();
-
-        const finalGroups = mergedGroups.map(group => {
-            let mainName = null;
-            for (const result of pairResults) {
-                if (result.isSamePerson && result.mainName) {
-                    if (group.includes(result.nameA) || group.includes(result.nameB)) {
-                        if (group.includes(result.mainName)) {
-                            mainName = result.mainName;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!mainName) {
-                let maxLen = 0;
-                for (const name of group) {
-                    const len = (entries[name]?.['内容'] || '').length;
-                    if (len > maxLen) {
-                        maxLen = len;
-                        mainName = name;
-                    }
-                }
-            }
-
-            return { names: group, mainName: mainName || group[0] };
-        });
-
-        return {
-            pairResults,
-            mergedGroups: finalGroups,
-            _allPairs: allPairs
-        };
+        return mergeService.verifyDuplicatesWithAI(suspectedGroups, useParallel, threshold, categoryName);
     }
 
 
@@ -7792,109 +5897,32 @@ ${pairsContent}
      * @returns {Promise<any>}
      */
     async function handleMergeDuplicates(aiResult, categoryName = '角色') {
-        const entries = AppState.worldbook.generated[categoryName];
-        let mergedCount = 0;
-
-        const mergedGroups = aiResult.mergedGroups || [];
-
-        for (const groupInfo of mergedGroups) {
-            const { names, mainName } = groupInfo;
-            if (!names || names.length < 2 || !mainName) continue;
-
-            let mergedKeywords = [];
-            let mergedContent = '';
-
-            for (const name of names) {
-                if (entries[name]) {
-                    mergedKeywords.push(...(entries[name]['关键词'] || []));
-                    mergedKeywords.push(name);
-                    if (entries[name]['内容']) {
-                        mergedContent += entries[name]['内容'] + '\n\n---\n\n';
-                    }
-                }
-            }
-
-            entries[mainName] = {
-                '关键词': [...new Set(mergedKeywords)],
-                '内容': mergedContent.replace(/\n\n---\n\n$/, '')
-            };
-
-            for (const name of names) {
-                if (name !== mainName && entries[name]) {
-                    delete entries[name];
-                }
-            }
-
-            mergedCount++;
-        }
-
-        return mergedCount;
+        return mergeService.mergeConfirmedDuplicates(aiResult, categoryName);
     }
 
 
 // ========== 新增：手动合并条目功能 ==========
+const mergeService = createMergeService({
+    AppState,
+    Logger,
+    getAllVolumesWorldbook,
+    getLanguagePrefix,
+    updateStreamContent,
+    Semaphore,
+    callAPI,
+    parseAIResponse,
+});
+
 function getManualMergeViewWorldbook() {
-	return AppState.processing.volumeMode ? getAllVolumesWorldbook() : AppState.worldbook.generated;
+	return mergeService.getManualMergeViewWorldbook();
 }
 
 function resolveDisplayedEntrySource(category, displayedName) {
-	const categoryFromGenerated = AppState.worldbook.generated?.[category];
-	const volumes = AppState.worldbook.volumes || [];
-
-	const suffixMatch = displayedName.match(/^(.*)_卷(\d+)$/);
-	if (suffixMatch) {
-		const baseName = suffixMatch[1];
-		const targetVolumeIndex = parseInt(suffixMatch[2], 10) - 1;
-
-		if (targetVolumeIndex === AppState.worldbook.currentVolumeIndex && categoryFromGenerated?.[baseName]) {
-			return { sourceType: 'generated', volumeIndex: AppState.worldbook.currentVolumeIndex, actualName: baseName, entry: categoryFromGenerated[baseName] };
-		}
-
-		const volume = volumes.find(v => v.volumeIndex === targetVolumeIndex);
-		const fromVolume = volume?.worldbook?.[category]?.[baseName];
-		if (fromVolume) {
-			return { sourceType: 'volume', volumeIndex: targetVolumeIndex, actualName: baseName, entry: fromVolume };
-		}
-	}
-
-	for (const volume of volumes) {
-		const fromVolume = volume?.worldbook?.[category]?.[displayedName];
-		if (fromVolume) {
-			return { sourceType: 'volume', volumeIndex: volume.volumeIndex, actualName: displayedName, entry: fromVolume };
-		}
-	}
-
-	if (categoryFromGenerated?.[displayedName]) {
-		return { sourceType: 'generated', volumeIndex: AppState.worldbook.currentVolumeIndex, actualName: displayedName, entry: categoryFromGenerated[displayedName] };
-	}
-
-	return null;
+	return mergeService.resolveDisplayedEntrySource(category, displayedName);
 }
 
 function resolveManualMergeEntryRef(entryRef) {
-	if (!entryRef || !entryRef.category || !entryRef.name) return null;
-
-	if (entryRef.sourceType && entryRef.actualName) {
-		if (entryRef.sourceType === 'generated') {
-			const entry = AppState.worldbook.generated?.[entryRef.category]?.[entryRef.actualName];
-			if (entry) return { ...entryRef, entry };
-		}
-		if (entryRef.sourceType === 'volume' && Number.isInteger(entryRef.volumeIndex)) {
-			const volume = (AppState.worldbook.volumes || []).find(v => v.volumeIndex === entryRef.volumeIndex);
-			const entry = volume?.worldbook?.[entryRef.category]?.[entryRef.actualName];
-			if (entry) return { ...entryRef, entry };
-		}
-	}
-
-	const fallback = resolveDisplayedEntrySource(entryRef.category, entryRef.name);
-	if (!fallback) return null;
-	return {
-		...entryRef,
-		sourceType: fallback.sourceType,
-		volumeIndex: fallback.volumeIndex,
-		actualName: fallback.actualName,
-		entry: fallback.entry
-	};
+	return mergeService.resolveManualMergeEntryRef(entryRef);
 }
 
 function showManualMergeUI(onMergeComplete) {
@@ -8252,205 +6280,7 @@ function showManualMergeUI(onMergeComplete) {
      * @returns {*}
      */
     function executeManualMerge(selectedEntries, mainName, targetCategory, dedupKeywords, addSeparator) {
-        const worldbook = AppState.worldbook.generated;
-        const resolvedEntries = selectedEntries.map(resolveManualMergeEntryRef).filter(Boolean);
-
-        const uniqueResolvedMap = new Map();
-        resolvedEntries.forEach((entry) => {
-            const sourceKey = `${entry.sourceType}:${entry.volumeIndex}:${entry.category}:${entry.actualName}`;
-            if (!uniqueResolvedMap.has(sourceKey)) uniqueResolvedMap.set(sourceKey, entry);
-        });
-        const uniqueResolvedEntries = [...uniqueResolvedMap.values()];
-
-        if (uniqueResolvedEntries.length < 2) {
-            Logger.warn('手动合并', `未命中足够条目: 已选${selectedEntries.length}，命中${uniqueResolvedEntries.length}`);
-            return { success: false, error: '未命中足够的有效条目，请重新选择后重试' };
-        }
-
-        let mergedKeywords = [];
-        let mergedContent = '';
-
-        // 收集所有关键词和内容
-        for (const entry of uniqueResolvedEntries) {
-            const data = entry.entry;
-            if (data['关键词']) {
-                mergedKeywords.push(...(Array.isArray(data['关键词']) ? data['关键词'] : [data['关键词']]));
-            }
-            mergedKeywords.push(entry.name);
-
-            if (data['内容']) {
-                if (mergedContent && addSeparator) {
-                    mergedContent += '\n\n---\n\n';
-                } else if (mergedContent) {
-                    mergedContent += '\n\n';
-                }
-                mergedContent += data['内容'];
-            }
-        }
-
-        if (!mergedKeywords.length && !mergedContent.trim()) {
-            Logger.warn('手动合并', '合并内容为空，终止合并');
-            return { success: false, error: '合并结果为空，请检查所选条目是否存在有效内容' };
-        }
-
-        // 去重关键词
-        if (dedupKeywords) {
-            mergedKeywords = [...new Set(mergedKeywords)];
-        }
-
-        // 先删除所有原条目，再写入新条目，避免同名主条目被中途覆盖
-        let deletedCount = 0;
-        for (const entry of uniqueResolvedEntries) {
-            let sourceCategoryEntries = null;
-            if (entry.sourceType === 'generated') {
-                sourceCategoryEntries = AppState.worldbook.generated?.[entry.category];
-            } else if (entry.sourceType === 'volume' && Number.isInteger(entry.volumeIndex)) {
-                const volume = (AppState.worldbook.volumes || []).find(v => v.volumeIndex === entry.volumeIndex);
-                sourceCategoryEntries = volume?.worldbook?.[entry.category];
-            }
-
-            if (sourceCategoryEntries && sourceCategoryEntries[entry.actualName]) {
-                delete sourceCategoryEntries[entry.actualName];
-                deletedCount++;
-                Logger.info('手动合并', `已删除原条目: [${entry.category}] ${entry.actualName} (${entry.sourceType}${entry.sourceType === 'volume' ? `#${entry.volumeIndex + 1}` : ''})`);
-            }
-        }
-
-        // 确保目标分类存在
-        if (!worldbook[targetCategory]) {
-            worldbook[targetCategory] = {};
-        }
-
-        // 写入合并后的条目
-        worldbook[targetCategory][mainName] = {
-            '关键词': mergedKeywords,
-            '内容': mergedContent
-        };
-
-        Logger.info('手动合并', `手动合并完成: 共${selectedEntries.length}个条目，命中${uniqueResolvedEntries.length}个，删除了${deletedCount}个原条目，合并为 [${targetCategory}] ${mainName}`);
-        return { success: true, deletedCount, mergedCount: uniqueResolvedEntries.length };
-}
-
-// ========== 别名合并辅助函数 ==========
-function _buildAliasCategorySelectModal(availableCategories) {
-return availableCategories.map(cat => {
-const count = Object.keys(AppState.worldbook.generated[cat]).length;
-const isChecked = cat === '角色' ? 'checked' : '';
-return `
-<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(155,89,182,0.1);border-radius:6px;margin-bottom:6px;cursor:pointer;">
-<input type="checkbox" class="ttw-alias-cat-cb" data-cat="${cat}" ${isChecked} style="width:16px;height:16px;accent-color:#9b59b6;">
-<span style="color:#e67e22;font-weight:bold;font-size:13px;">${ListRenderer.escapeHtml(cat)}</span>
-<span style="color:#888;font-size:11px;margin-left:auto;">${count} 个条目</span>
-</label>
-`;
-}).join('');
-}
-
-/**
- * _buildAliasGroupsListHtml
- * 
- * @param {*} allSuspectedByCategory
- * @param {*} groupCategoryMap
- * @returns {*}
- */
-function _buildAliasGroupsListHtml(allSuspectedByCategory, groupCategoryMap) {
-let groupsHtml = '';
-let globalGroupIndex = 0;
-
-for (const cat of Object.keys(allSuspectedByCategory)) {
-const suspected = allSuspectedByCategory[cat];
-const entries = AppState.worldbook.generated[cat];
-
-groupsHtml += `<div style="margin-bottom:8px;padding:6px 8px;background:rgba(230,126,34,0.15);border-radius:4px;font-size:12px;color:#e67e22;font-weight:bold;">📂 ${ListRenderer.escapeHtml(cat)} (${suspected.length}组)</div>`;
-
-suspected.forEach((group, localIdx) => {
-const pairCount = (group.length * (group.length - 1)) / 2;
-const groupInfo = group.map(name => {
-const entry = entries[name];
-const keywords = (entry?.['关键词'] || []).slice(0, 3).join(', ');
-return `${ListRenderer.escapeHtml(name)}${keywords ? ` [${ListRenderer.escapeHtml(keywords)}]` : ''}`;
-}).join(' / ');
-
-groupsHtml += `
-<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:rgba(155,89,182,0.1);border-radius:6px;margin-bottom:6px;cursor:pointer;">
-<input type="checkbox" class="ttw-alias-group-cb" data-index="${globalGroupIndex}" data-category="${cat}" checked style="margin-top:3px;">
-<div>
-<div style="color:#9b59b6;font-weight:bold;font-size:12px;">组${globalGroupIndex + 1} <span style="color:#888;font-weight:normal;">(${group.length}条, ${pairCount}对)</span></div>
-<div style="font-size:11px;color:#ccc;word-break:break-all;">${groupInfo}</div>
-</div>
-</label>
-`;
-
-groupCategoryMap.push({ category: cat, localIndex: localIdx });
-globalGroupIndex++;
-});
-}
-return groupsHtml;
-}
-
-/**
- * _buildAliasPairResultsHtml
- * 
- * @param {*} aiResultByCategory
- * @returns {*}
- */
-function _buildAliasPairResultsHtml(aiResultByCategory) {
-    let pairHtml = '';
-    for (const cat of Object.keys(aiResultByCategory)) {
-        const catResult = aiResultByCategory[cat];
-        if (catResult.pairResults && catResult.pairResults.length > 0) {
-            pairHtml += `<div style="font-size:11px;color:#e67e22;font-weight:bold;margin:6px 0 4px;">📂 ${ListRenderer.escapeHtml(cat)}</div>`;
-            for (const result of catResult.pairResults) {
-                const icon = result.isSamePerson ? '✅' : '❌';
-                const color = result.isSamePerson ? '#27ae60' : '#e74c3c';
-                pairHtml += `
-<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:rgba(0,0,0,0.2);border-radius:4px;margin:2px;font-size:11px;border-left:2px solid ${color};">
-<span style="color:${color};">${icon}</span>
-<span>「${ListRenderer.escapeHtml(result.nameA)}」vs「${ListRenderer.escapeHtml(result.nameB)}」</span>
-${result.isSamePerson ? `<span style="color:#888;">→${ListRenderer.escapeHtml(result.mainName)}</span>` : ''}
-</div>
-`;
-            }
-        }
-    }
-    return pairHtml || '<div style="color:#888;">无配对结果</div>';
-}
-
-/**
- * _buildAliasMergePlanHtml
- * 
- * @param {*} aiResultByCategory
- * @returns {*}
- */
-function _buildAliasMergePlanHtml(aiResultByCategory) {
-    let mergePlanHtml = '';
-    let hasAnyMerge = false;
-
-    for (const cat of Object.keys(aiResultByCategory)) {
-        if (aiResultByCategory[cat].mergedGroups && aiResultByCategory[cat].mergedGroups.length > 0) {
-            hasAnyMerge = true;
-            break;
-        }
-    }
-
-    if (hasAnyMerge) {
-        mergePlanHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:11px;color:#888;">取消勾选可排除不想合并的组</span><label style="font-size:11px;cursor:pointer;"><input type="checkbox" id="ttw-select-all-merge-groups" checked> 全选</label></div>';
-
-        for (const cat of Object.keys(aiResultByCategory)) {
-            const catResult = aiResultByCategory[cat];
-            if (!catResult.mergedGroups || catResult.mergedGroups.length === 0) continue;
-
-            mergePlanHtml += `<div style="font-size:11px;color:#e67e22;font-weight:bold;margin:8px 0 4px;">📂 ${ListRenderer.escapeHtml(cat)}</div>`;
-
-            for (let gi = 0; gi < catResult.mergedGroups.length; gi++) {
-                const group = catResult.mergedGroups[gi];
-                mergePlanHtml += `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:4px;margin-bottom:6px;border-left:3px solid #27ae60;cursor:pointer;"><input type="checkbox" class="ttw-merge-group-cb" data-group-index="${gi}" data-category="${cat}" checked style="margin-top:2px;width:16px;height:16px;accent-color:#27ae60;flex-shrink:0;"><div><div style="color:#27ae60;font-weight:bold;font-size:12px;">→ 合并为「${ListRenderer.escapeHtml(group.mainName)}」</div><div style="font-size:11px;color:#ccc;margin-top:4px;">包含: ${ListRenderer.escapeHtml(group.names.join(', '))}</div></div></label>`;
-            }
-        }
-    } else {
-        mergePlanHtml = '<div style="color:#888;font-size:12px;">没有需要合并的条目（所有配对都是不同事物）</div>';
-    }
-    return { html: mergePlanHtml, hasAnyMerge };
+        return mergeService.executeManualMerge(selectedEntries, mainName, targetCategory, dedupKeywords, addSeparator);
 }
 
 /**
@@ -8461,32 +6291,23 @@ function _buildAliasMergePlanHtml(aiResultByCategory) {
  * @returns {Promise<any>}
  */
 async function _handleAliasMergeConfirm(modal, aiResultByCategory) {
-    var checkedBoxes = modal.querySelectorAll('.ttw-merge-group-cb:checked');
+    const checkedBoxes = modal.querySelectorAll('.ttw-merge-group-cb:checked');
     if (checkedBoxes.length === 0) {
         ErrorHandler.showUserError('没有勾选任何合并组');
         return;
     }
 
-    var mergeByCategory = {};
-    for (var i = 0; i < checkedBoxes.length; i++) {
-        var cat = checkedBoxes[i].getAttribute('data-category');
-        var gi = parseInt(checkedBoxes[i].getAttribute('data-group-index'));
-        if (!mergeByCategory[cat]) mergeByCategory[cat] = [];
-        if (aiResultByCategory[cat] && aiResultByCategory[cat].mergedGroups[gi]) {
-            mergeByCategory[cat].push(aiResultByCategory[cat].mergedGroups[gi]);
-        }
-    }
+    const checkedSelections = [...checkedBoxes].map((box) => ({
+        category: box.getAttribute('data-category'),
+        groupIndex: parseInt(box.getAttribute('data-group-index'), 10),
+    }));
+    const mergeByCategory = mergeService.collectAliasMergeGroups(checkedSelections, aiResultByCategory);
 
-    var totalSelected = checkedBoxes.length;
-    var categoryList = Object.keys(mergeByCategory).map(c => `${c}(${mergeByCategory[c].length}组)`).join('、');
+    const totalSelected = checkedBoxes.length;
+    const categoryList = Object.keys(mergeByCategory).map(c => `${c}(${mergeByCategory[c].length}组)`).join('、');
     if (!await confirmAction('确定合并选中的 ' + totalSelected + ' 组条目？\n涉及分类: ' + categoryList, { title: '批量合并重复条目', danger: true })) return;
 
-    var totalMerged = 0;
-    for (var cat in mergeByCategory) {
-        var filteredResult = { pairResults: aiResultByCategory[cat].pairResults, mergedGroups: mergeByCategory[cat] };
-        var mergedCount = await handleMergeDuplicates(filteredResult, cat);
-        totalMerged += mergedCount;
-    }
+    const totalMerged = await mergeService.executeAliasMergeByCategory(mergeByCategory, aiResultByCategory);
 
         updateWorldbookPreview();
         modal.remove();
@@ -8513,7 +6334,7 @@ return;
 		const existingModal = document.getElementById('ttw-alias-cat-modal');
 		if (existingModal) existingModal.remove();
 
-		const catListHtml = _buildAliasCategorySelectModal(availableCategories);
+		const catListHtml = buildAliasCategorySelectModal(availableCategories, AppState.worldbook.generated, ListRenderer.escapeHtml);
 		const bodyHtml = `
 			<div style="margin-bottom:12px;padding:10px;background:rgba(52,152,219,0.15);border-radius:6px;font-size:12px;color:#3498db;">
 				💡 请勾选需要让AI识别别名并合并的分类。将对每个选中的分类独立扫描重复条目。
@@ -8596,7 +6417,7 @@ updateStreamContent(`共发现 ${totalGroups} 组疑似重复，${totalPairs} �
 	if (existingModal) existingModal.remove();
 
 	const groupCategoryMap = [];
-	const groupsHtml = _buildAliasGroupsListHtml(allSuspectedByCategory, groupCategoryMap);
+	const groupsHtml = buildAliasGroupsListHtml(allSuspectedByCategory, AppState.worldbook.generated, groupCategoryMap, ListRenderer.escapeHtml);
 
 	const bodyHtml = `
 		<div style="margin-bottom:16px;padding:12px;background:rgba(52,152,219,0.15);border-radius:8px;">
@@ -8718,10 +6539,10 @@ updateStreamContent(`共发现 ${totalGroups} 组疑似重复，${totalPairs} �
         resultDiv.style.display = 'block';
 
         // 显示所有分类的配对结果
-        pairResultsDiv.innerHTML = _buildAliasPairResultsHtml(aiResultByCategory);
+        pairResultsDiv.innerHTML = buildAliasPairResultsHtml(aiResultByCategory, ListRenderer.escapeHtml);
 
         // 显示所有分类的合并方案
-        const { html: mergePlanHtml, hasAnyMerge } = _buildAliasMergePlanHtml(aiResultByCategory);
+        const { html: mergePlanHtml, hasAnyMerge } = buildAliasMergePlanHtml(aiResultByCategory, ListRenderer.escapeHtml);
         mergePlanDiv.innerHTML = mergePlanHtml;
 
         const selectAllMergeCb = mergePlanDiv.querySelector('#ttw-select-all-merge-groups');
@@ -12925,313 +10746,92 @@ async function restoreExistingState() {
  * 将事件绑定拆分为多个子函数以提高可读性
  */
 function _bindModalEvents() {
-	_bindModalBasicEvents();
-	_bindSettingEvents();
-	_bindCollapsePanelEvents();
-	_bindPromptEvents();
-	_bindMessageChainEvents();
-	_bindFileEvents();
-	_bindActionEvents();
-	_bindStreamEvents();
-	_bindExportEvents();
-}
-
-/**
- * 绑定模态框基础事件
- * @private
- */
-function _bindModalBasicEvents() {
-	const modal = modalContainer.querySelector('.ttw-modal');
-
-	// 阻止点击事件冒泡到 SillyTavern 主界面，避免触发插件栏折叠
-	// 覆盖 click/pointerdown 等常见触发事件，不影响内部元素的默认行为
-	const stopPropagationHandler = (e) => e.stopPropagation();
-	['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend'].forEach((eventName) => {
-		modalContainer.addEventListener(eventName, stopPropagationHandler);
+	bindModalBasicEventsUI({
+		modalContainer,
+		closeModal,
+		showHelpModal,
+		handleEscKey,
 	});
 
-	modalContainer.querySelector('.ttw-modal-close').addEventListener('click', closeModal);
-	modalContainer.querySelector('.ttw-help-btn').addEventListener('click', showHelpModal);
-	document.addEventListener('keydown', handleEscKey, true);
-}
-
-/**
- * 绑定设置相关事件
- * @private
- */
-function _bindSettingEvents() {
-	EventDelegate.batchOn(modalContainer, {
-		'#ttw-use-tavern-api': { change: () => { handleUseTavernApiChange(); saveCurrentSettings(); } },
-		'#ttw-api-provider': { change: () => { handleProviderChange(); saveCurrentSettings(); } },
-		'#ttw-model-select': { change: (e) => { if (e.target.value) { document.getElementById('ttw-api-model').value = e.target.value; saveCurrentSettings(); } } },
-		'#ttw-fetch-models': { click: handleFetchModels },
-		'#ttw-quick-test': { click: handleQuickTest },
-		'#ttw-parallel-enabled': { change: (e) => { AppState.config.parallel.enabled = e.target.checked; saveCurrentSettings(); } },
-		'#ttw-parallel-concurrency': { change: (e) => { AppState.config.parallel.concurrency = Math.max(1, Math.min(10, parseInt(e.target.value) || 3)); e.target.value = AppState.config.parallel.concurrency; saveCurrentSettings(); } },
-		'#ttw-parallel-mode': { change: (e) => { AppState.config.parallel.mode = e.target.value; saveCurrentSettings(); } },
-		'#ttw-volume-mode': { change: (e) => { AppState.processing.volumeMode = e.target.checked; const indicator = document.getElementById('ttw-volume-indicator'); if (indicator) indicator.style.display = AppState.processing.volumeMode ? 'block' : 'none'; } },
-		'#ttw-rechunk-btn': { click: rechunkMemories },
-		'#ttw-add-category': { click: showAddCategoryModal },
-		'#ttw-reset-categories': { click: async () => { if (await confirmAction('确定重置为默认分类配置吗？这将清除所有自定义分类。', { title: '重置分类', danger: true })) { await resetToDefaultCategories(); renderCategoriesList(); } } },
-		'#ttw-add-default-entry': { click: showAddDefaultEntryModal },
-		'#ttw-apply-default-entries': { click: () => { saveDefaultWorldbookEntriesUI(); const applied = applyDefaultWorldbookEntries(); if (applied) { showResultSection(true); updateWorldbookPreview(); ErrorHandler.showUserSuccess('默认世界书条目已应用！'); } else { ErrorHandler.showUserError('没有默认世界书条目'); } } },
-		'#ttw-chapter-regex': { change: (e) => { AppState.config.chapterRegex.pattern = e.target.value; saveCurrentSettings(); } },
-		'#ttw-test-chapter-regex': { click: testChapterRegex },
-		'.ttw-chapter-preset': { click: (e, btn) => { const regex = btn.dataset.regex; document.getElementById('ttw-chapter-regex').value = regex; AppState.config.chapterRegex.pattern = regex; saveCurrentSettings(); } },
-		'.ttw-reset-prompt': { click: (e, btn) => { const type = btn.getAttribute('data-type'); const textarea = document.getElementById(`ttw-${type}-prompt`); if (textarea) { textarea.value = ''; saveCurrentSettings(); } } }
+	bindSettingEventsUI({
+		EventDelegate,
+		modalContainer,
+		AppState,
+		saveCurrentSettings,
+		handleUseTavernApiChange,
+		handleProviderChange,
+		handleFetchModels,
+		handleQuickTest,
+		rechunkMemories,
+		showAddCategoryModal,
+		confirmAction,
+		resetToDefaultCategories,
+		renderCategoriesList,
+		showAddDefaultEntryModal,
+		saveDefaultWorldbookEntriesUI,
+		applyDefaultWorldbookEntries,
+		showResultSection,
+		updateWorldbookPreview,
+		ErrorHandler,
+		testChapterRegex,
 	});
 
-	['ttw-api-key', 'ttw-api-endpoint', 'ttw-api-model', 'ttw-chunk-size', 'ttw-api-timeout'].forEach(id => {
-		const el = document.getElementById(id);
-		if (el) el.addEventListener('change', saveCurrentSettings);
+	bindCollapsePanelEventsUI();
+
+	bindPromptEventsUI({
+		saveCurrentSettings,
 	});
 
-	['ttw-incremental-mode', 'ttw-volume-mode', 'ttw-enable-plot', 'ttw-enable-style', 'ttw-force-chapter-marker', 'ttw-allow-recursion'].forEach(id => {
-		const el = document.getElementById(id);
-		if (el) el.addEventListener('change', saveCurrentSettings);
-	});
-}
-
-/**
- * 绑定折叠面板事件
- * @private
- */
-function _bindCollapsePanelEvents() {
-	const categoriesHeader = document.querySelector('[data-target="ttw-categories-content"]');
-	if (categoriesHeader) {
-		categoriesHeader.addEventListener('click', () => _toggleCollapsePanel('ttw-categories-content', categoriesHeader));
-	}
-
-	const defaultEntriesHeader = document.querySelector('[data-target="ttw-default-entries-content"]');
-	if (defaultEntriesHeader) {
-		defaultEntriesHeader.addEventListener('click', () => _toggleCollapsePanel('ttw-default-entries-content', defaultEntriesHeader));
-	}
-
-	document.querySelectorAll('.ttw-prompt-header[data-target]').forEach(header => {
-		header.addEventListener('click', (e) => {
-			if (e.target.type === 'checkbox') return;
-			const targetId = header.getAttribute('data-target');
-			if (targetId === 'ttw-default-entries-content' || targetId === 'ttw-categories-content') return;
-			_toggleCollapsePanel(targetId, header);
-		});
-	});
-}
-
-/**
- * 切换折叠面板状态
- * @param {string} contentId - 内容元素ID
- * @param {HTMLElement} header - 头部元素
- * @private
- */
-function _toggleCollapsePanel(contentId, header) {
-	const content = document.getElementById(contentId);
-	const icon = header.querySelector('.ttw-collapse-icon');
-	if (content.style.display === 'none' || !content.style.display) {
-		content.style.display = 'block';
-		icon.textContent = '▼';
-	} else {
-		content.style.display = 'none';
-		icon.textContent = '▶';
-	}
-}
-
-/**
- * 绑定提示词相关事件
- * @private
- */
-function _bindPromptEvents() {
-	['ttw-worldbook-prompt', 'ttw-plot-prompt', 'ttw-style-prompt', 'ttw-suffix-prompt'].forEach(id => {
-		const el = document.getElementById(id);
-		if (el) el.addEventListener('input', saveCurrentSettings);
-	});
-}
-
-/**
- * 绑定消息链编辑器事件
- * @private
- */
-function _bindMessageChainEvents() {
-	renderMessageChainUI();
-	document.getElementById('ttw-add-chain-msg').addEventListener('click', () => {
-		if (!AppState.settings.promptMessageChain) AppState.settings.promptMessageChain = [];
-		AppState.settings.promptMessageChain.push({ role: 'user', content: '', enabled: true });
-		renderMessageChainUI();
-		saveCurrentSettings();
-	});
-	document.getElementById('ttw-reset-chain').addEventListener('click', async () => {
-		if (await confirmAction('确定恢复默认消息链？', { title: '恢复默认消息链' })) {
-			AppState.settings.promptMessageChain = [{ role: 'user', content: '{PROMPT}', enabled: true }];
-			renderMessageChainUI();
-			saveCurrentSettings();
-		}
-	});
-}
-
-/**
- * 绑定文件上传相关事件
- * @private
- */
-function _bindFileEvents() {
-	const uploadArea = document.getElementById('ttw-upload-area');
-	const fileInput = document.getElementById('ttw-file-input');
-	
-	uploadArea.addEventListener('click', () => fileInput.click());
-	uploadArea.addEventListener('dragover', (e) => {
-		e.preventDefault();
-		uploadArea.style.borderColor = '#e67e22';
-		uploadArea.style.background = 'rgba(230,126,34,0.1)';
-	});
-	uploadArea.addEventListener('dragleave', () => {
-		uploadArea.style.borderColor = '#555';
-		uploadArea.style.background = 'transparent';
-	});
-	uploadArea.addEventListener('drop', (e) => {
-		e.preventDefault();
-		uploadArea.style.borderColor = '#555';
-		uploadArea.style.background = 'transparent';
-		if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files[0]);
-	});
-	fileInput.addEventListener('change', (e) => {
-		if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+	bindMessageChainEventsUI({
+		AppState,
+		renderMessageChainUI,
+		saveCurrentSettings,
+		confirmAction,
 	});
 
-	document.getElementById('ttw-clear-file').addEventListener('click', handleClearFile);
-	document.getElementById('ttw-novel-name-input').addEventListener('input', (e) => {
-		AppState.file.novelName = e.target.value.trim();
-		
-	});
-}
-
-/**
- * 绑定操作按钮事件（开始、暂停、修复等）
- * @private
- */
-function _bindActionEvents() {
-	document.getElementById('ttw-start-btn').addEventListener('click', handleStartConversion);
-	document.getElementById('ttw-stop-btn').addEventListener('click', handleStopProcessing);
-	document.getElementById('ttw-repair-btn').addEventListener('click', handleRepairFailedMemories);
-	document.getElementById('ttw-select-start').addEventListener('click', showStartFromSelector);
-	document.getElementById('ttw-view-processed').addEventListener('click', showProcessedResults);
-
-	document.getElementById('ttw-multi-delete-btn').addEventListener('click', toggleMultiSelectMode);
-	document.getElementById('ttw-confirm-multi-delete').addEventListener('click', deleteSelectedMemories);
-	document.getElementById('ttw-cancel-multi-select').addEventListener('click', () => {
-		AppState.ui.isMultiSelectMode = false;
-		
-		AppState.ui.selectedIndices.clear();
-		updateMemoryQueueUI();
+	bindFileEventsUI({
+		AppState,
+		handleFileSelect,
+		handleClearFile,
 	});
 
-	document.getElementById('ttw-search-btn').addEventListener('click', showSearchModal);
-	document.getElementById('ttw-replace-btn').addEventListener('click', showReplaceModal);
-	document.getElementById('ttw-view-worldbook').addEventListener('click', showWorldbookView);
-	document.getElementById('ttw-view-history').addEventListener('click', showHistoryView);
-	document.getElementById('ttw-consolidate-entries').addEventListener('click', showConsolidateCategorySelector);
-	document.getElementById('ttw-clean-tags').addEventListener('click', showCleanTagsModal);
-	document.getElementById('ttw-alias-merge').addEventListener('click', showAliasMergeUI);
-}
-
-/**
- * 绑定实时输出流相关事件
- * @private
- */
-function _bindStreamEvents() {
-	document.getElementById('ttw-toggle-stream').addEventListener('click', () => {
-		const container = document.getElementById('ttw-stream-container');
-		container.style.display = container.style.display === 'none' ? 'block' : 'none';
-	});
-	document.getElementById('ttw-clear-stream').addEventListener('click', () => updateStreamContent('', true));
-
-	document.getElementById('ttw-copy-stream').addEventListener('click', () => {
-		const streamEl = document.getElementById('ttw-stream-content');
-		if (streamEl && streamEl.textContent) {
-			navigator.clipboard.writeText(streamEl.textContent).then(() => {
-				const btn = document.getElementById('ttw-copy-stream');
-				const orig = btn.textContent;
-				btn.textContent = '✅ 已复制';
-				setTimeout(() => { btn.textContent = orig; }, 1500);
-			}).catch(() => {
-				const ta = document.createElement('textarea');
-				ta.value = streamEl.textContent;
-				document.body.appendChild(ta);
-				ta.select();
-				document.execCommand('copy');
-				document.body.removeChild(ta);
-				const btn = document.getElementById('ttw-copy-stream');
-				btn.textContent = '✅ 已复制';
-				setTimeout(() => { btn.textContent = '📋 复制全部'; }, 1500);
-			});
-		}
+	bindActionEventsUI({
+		AppState,
+		handleStartConversion,
+		handleStopProcessing,
+		handleRepairFailedMemories,
+		showStartFromSelector,
+		showProcessedResults,
+		toggleMultiSelectMode,
+		deleteSelectedMemories,
+		updateMemoryQueueUI,
+		showSearchModal,
+		showReplaceModal,
+		showWorldbookView,
+		showHistoryView,
+		showConsolidateCategorySelector,
+		showCleanTagsModal,
+		showAliasMergeUI,
 	});
 
-	document.getElementById('ttw-debug-mode').addEventListener('change', (e) => {
-		const copyBtn = document.getElementById('ttw-copy-stream');
-		if (copyBtn) copyBtn.style.display = e.target.checked ? 'inline-block' : 'none';
+	bindStreamEventsUI({
+		updateStreamContent,
 	});
-}
 
-/**
- * 绑定导出相关事件
- * @private
- */
-function _bindExportEvents() {
-	document.getElementById('ttw-preview-prompt').addEventListener('click', showPromptPreview);
-	document.getElementById('ttw-plot-export-config').addEventListener('click', showPlotOutlineConfigModal);
-	document.getElementById('ttw-import-json').addEventListener('click', importAndMergeWorldbook);
-	document.getElementById('ttw-import-task').addEventListener('click', loadTaskState);
-	document.getElementById('ttw-export-task').addEventListener('click', saveTaskState);
-	document.getElementById('ttw-export-settings').addEventListener('click', exportSettings);
-	document.getElementById('ttw-import-settings').addEventListener('click', importSettings);
-	document.getElementById('ttw-export-json').addEventListener('click', exportCharacterCard);
-	document.getElementById('ttw-export-volumes').addEventListener('click', exportVolumes);
-	document.getElementById('ttw-export-st').addEventListener('click', exportToSillyTavern);
-	document.querySelector('[data-section="settings"]').addEventListener('click', () => { document.querySelector('.ttw-settings-section').classList.toggle('collapsed'); });
-
-	// ========== 事件委托：记忆队列点击处理 ==========
-	const memoryQueueContainer = document.getElementById('ttw-memory-queue');
-	if (memoryQueueContainer) {
-		memoryQueueContainer.addEventListener('click', (e) => {
-			const item = e.target.closest('.ttw-memory-item');
-			if (!item) return;
-			
-			const index = parseInt(item.dataset.index);
-			if (isNaN(index)) return;
-
-			// 多选模式：处理复选框切换
-			if (AppState.ui.isMultiSelectMode) {
-				const checkbox = item.querySelector('.ttw-memory-checkbox');
-				if (e.target.type !== 'checkbox' && checkbox) {
-					checkbox.checked = !checkbox.checked;
-					checkbox.dispatchEvent(new Event('change'));
-				}
-			} else {
-				// 普通模式：显示记忆内容
-				showMemoryContentModal(index);
-			}
-		});
-
-		// 复选框变化事件委托
-		memoryQueueContainer.addEventListener('change', (e) => {
-			if (!e.target.classList.contains('ttw-memory-checkbox')) return;
-			
-			const item = e.target.closest('.ttw-memory-item');
-			const index = parseInt(item?.dataset.index);
-			if (isNaN(index)) return;
-
-			if (e.target.checked) {
-				AppState.ui.selectedIndices.add(index);
-				item.classList.add('selected-for-delete');
-			} else {
-				AppState.ui.selectedIndices.delete(index);
-				item.classList.remove('selected-for-delete');
-			}
-
-			const selectedCountEl = document.getElementById('ttw-selected-count');
-			if (selectedCountEl) {
-				selectedCountEl.textContent = `已选: ${AppState.ui.selectedIndices.size}`;
-			}
-		});
-	}
+	bindExportEventsUI({
+		AppState,
+		showPromptPreview,
+		showPlotOutlineConfigModal,
+		importAndMergeWorldbook,
+		loadTaskState,
+		saveTaskState,
+		exportSettings,
+		importSettings,
+		exportCharacterCard,
+		exportVolumes,
+		exportToSillyTavern,
+		showMemoryContentModal,
+	});
 }
 
     /**
@@ -14326,3 +11926,27 @@ async function showHistoryView() {
 	Logger.info('Module', '性能优化: TokenCache缓存 | PerfUtils防抖节流 | DOM批量更新');
 	Logger.info('Module', '代码质量: ErrorHandler统一错误处理 | JSDoc完整文档 | 函数命名规范化');
 })();
+
+
+
+let __txtToWorldbookInitPromise = null;
+
+export async function initTxtToWorldbookBridge() {
+    if (!__txtToWorldbookInitPromise) {
+        __txtToWorldbookInitPromise = Promise.resolve({
+            loadedFrom: 'txtToWorldbook/main.js',
+            api: getTxtToWorldbookApi(),
+        });
+    }
+    return __txtToWorldbookInitPromise;
+}
+
+export function getTxtToWorldbookApi() {
+    if (typeof window === 'undefined') return null;
+    return window.TxtToWorldbook || null;
+}
+
+export default {
+    initTxtToWorldbookBridge,
+    getTxtToWorldbookApi,
+};
