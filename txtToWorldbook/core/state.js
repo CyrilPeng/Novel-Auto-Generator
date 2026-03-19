@@ -27,7 +27,9 @@
             novelName: ''
         },
         processing: {
+            status: 'idle',
             isStopped: false,
+            isRunning: false,
             isRepairing: false,
             isRerolling: false,
             incrementalMode: true,
