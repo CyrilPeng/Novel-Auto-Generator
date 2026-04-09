@@ -41,6 +41,7 @@ const defaultSettings = {
     exportIncludeAI: true,
     useRawContent: true,
     extractTags: '',
+    excludeTags: '',
     extractMode: 'all',
     tagSeparator: '\n\n',
     
@@ -157,13 +158,17 @@ function parseTagInput(s) {
     return s.split(/[,;，；\s\n\r]+/).map(t => t.trim()).filter(t => t.length > 0);
 }
 
+function escapeTagName(tag) {
+    return tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function extractTagContents(text, tags, separator = '\n\n') {
     if (!text || !tags || tags.length === 0) return '';
     const parts = [];
     for (const tag of tags) {
         const t = tag.trim();
         if (!t) continue;
-        const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escaped = escapeTagName(t);
         const pattern = new RegExp(`<\\s*${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\s*/\\s*${escaped}\\s*>`, 'gi');
         let match;
         while ((match = pattern.exec(text)) !== null) {
@@ -174,13 +179,51 @@ function extractTagContents(text, tags, separator = '\n\n') {
     return parts.join(separator);
 }
 
+function removeTagContents(text, tags) {
+    if (!text || !tags || tags.length === 0) return text || '';
+    let result = text;
+    for (const tag of tags) {
+        const t = tag.trim();
+        if (!t) continue;
+        const escaped = escapeTagName(t);
+        const pairPattern = new RegExp(`<\\s*${escaped}(?:\\s[^>]*)?>[\\s\\S]*?<\\s*/\\s*${escaped}\\s*>`, 'gi');
+        const selfClosingPattern = new RegExp(`<\\s*${escaped}(?:\\s[^>]*)?/\\s*>`, 'gi');
+        result = result.replace(pairPattern, '').replace(selfClosingPattern, '');
+    }
+    return result.trim();
+}
+
+function applyTagFilters(text, options = {}) {
+    const {
+        extractTags = [],
+        excludeTags = [],
+        extractMode = 'all',
+        separator = '\n\n',
+    } = options;
+    if (!text) return '';
+
+    let result = text;
+    if (extractMode === 'tags' && extractTags.length > 0) {
+        result = extractTagContents(result, extractTags, separator);
+        if (!result) return '';
+    }
+
+    if (excludeTags.length > 0) {
+        result = removeTagContents(result, excludeTags);
+    }
+
+    return result.trim();
+}
+
 // ============================================
 // 章节获取
 // ============================================
 
 function getAllChapters() {
-    const tags = parseTagInput(settings.extractTags);
-    const useTags = settings.extractMode === 'tags' && tags.length > 0;
+    const extractTags = parseTagInput(settings.extractTags);
+    const excludeTags = parseTagInput(settings.excludeTags);
+    const useTagExtract = settings.extractMode === 'tags' && extractTags.length > 0;
+    const useTagFilters = useTagExtract || excludeTags.length > 0;
     const chapters = [];
     
     let startFloor = settings.exportAll ? 0 : settings.exportStartFloor;
@@ -194,8 +237,13 @@ function getAllChapters() {
         
         if (rawMessages?.length) {
             for (const msg of rawMessages) {
-                let content = useTags ? extractTagContents(msg.content, tags, settings.tagSeparator) : msg.content;
-                if (!content && useTags) continue;
+                let content = useTagFilters ? applyTagFilters(msg.content, {
+                    extractTags,
+                    excludeTags,
+                    extractMode: settings.extractMode,
+                    separator: settings.tagSeparator,
+                }) : msg.content;
+                if (!content && useTagFilters) continue;
                 if (content?.length > 10) {
                     chapters.push({ floor: msg.floor, index: chapters.length + 1, isUser: msg.isUser, name: msg.name, content });
                 }
@@ -211,7 +259,12 @@ function getAllChapters() {
         if (!isUser && !settings.exportIncludeAI) return;
         const text = msg.querySelector('.mes_text')?.innerText?.trim();
         if (!text) return;
-        let content = useTags ? extractTagContents(text, tags, settings.tagSeparator) : text;
+        let content = useTagFilters ? applyTagFilters(text, {
+            extractTags,
+            excludeTags,
+            extractMode: settings.extractMode,
+            separator: settings.tagSeparator,
+        }) : text;
         if (content?.length > 10) {
             chapters.push({ floor: idx, index: chapters.length + 1, isUser, content });
         }
@@ -259,11 +312,17 @@ function showHelp(topic) {
 <h4>📌 如何使用</h4>
 <ol>
     <li>✅ 勾选「原始 (chat.mes)」</li>
-    <li>模式选择「标签」</li>
-    <li>填写要提取的标签名</li>
+    <li>若要白名单提取，模式选择「标签」并填写要提取的标签名</li>
+    <li>若只想移除杂项，可保持「全部内容」并填写要移除的标签名</li>
+    <li>白名单提取与黑名单移除可以同时使用</li>
 </ol>
 <h4>📌 多标签</h4>
 <p>用空格、逗号分隔：<code>content detail 正文</code></p>
+<h4>📌 黑名单移除</h4>
+<p>移除标签会删除对应标签及其内部内容，建议同样勾选「原始 (chat.mes)」，并可与白名单提取同时使用。</p>
+<pre>&lt;thinking&gt;思考...&lt;/thinking&gt;
+&lt;content&gt;正文&lt;/content&gt;</pre>
+<p>若移除 <code>thinking</code>，预览和导出将只保留其他内容。</p>
 <h4>📌 调试</h4>
 <p>控制台输入 <code>nagDebug()</code></p>
             `
@@ -391,8 +450,10 @@ function showHelp(topic) {
 
 function refreshPreview() {
     const stChat = getSTChat();
-    const tags = parseTagInput(settings.extractTags);
-    const useTags = settings.extractMode === 'tags' && tags.length > 0;
+    const extractTags = parseTagInput(settings.extractTags);
+    const excludeTags = parseTagInput(settings.excludeTags);
+    const useTagExtract = settings.extractMode === 'tags' && extractTags.length > 0;
+    const useTagExclude = excludeTags.length > 0;
     
     if (!stChat || stChat.length === 0) {
         $('#nag-preview-content').html(`<div class="nag-preview-warning"><b>⚠️ 无法获取聊天数据</b></div>`);
@@ -420,12 +481,30 @@ function refreshPreview() {
         <div class="nag-preview-raw">${rawPreview}${rawContent.length > 200 ? '...' : ''}</div>
     `;
     
-    if (useTags) {
-        const extracted = extractTagContents(rawContent, tags, settings.tagSeparator);
-        if (extracted) {
-            html += `<div class="nag-preview-success"><b>✅ 提取成功</b> (${extracted.length} 字)<div class="nag-preview-text">${escapeHtml(extracted.slice(0, 400))}</div></div>`;
+    if (useTagExtract || useTagExclude) {
+        let previewText = rawContent;
+        if (useTagExtract) {
+            previewText = extractTagContents(rawContent, extractTags, settings.tagSeparator);
+            if (!previewText) {
+                html += `<div class="nag-preview-warning"><b>⚠️ 未找到标签</b> [${extractTags.join(', ')}]</div>`;
+                $('#nag-preview-content').html(html);
+                return;
+            }
+        }
+
+        if (useTagExclude) {
+            previewText = removeTagContents(previewText, excludeTags);
         } else {
-            html += `<div class="nag-preview-warning"><b>⚠️ 未找到标签</b> [${tags.join(', ')}]</div>`;
+            previewText = previewText.trim();
+        }
+
+        if (previewText) {
+            const actions = [];
+            if (useTagExtract) actions.push(`提取标签 [${extractTags.join(', ')}]`);
+            if (useTagExclude) actions.push(`移除标签 [${excludeTags.join(', ')}]`);
+            html += `<div class="nag-preview-success"><b>✅ ${actions.join(' + ')}</b> (${previewText.length} 字)<div class="nag-preview-text">${escapeHtml(previewText.slice(0, 400))}</div></div>`;
+        } else {
+            html += `<div class="nag-preview-warning"><b>⚠️ 移除标签后没有可预览内容</b></div>`;
         }
     } else {
         html += `<div class="nag-preview-info"><b>📄 全部内容模式</b></div>`;
@@ -452,10 +531,24 @@ function debugRawContent(floorIndex) {
     console.log(`\n----- 楼层 ${floorIndex} -----`);
     console.log('mes:', msg.mes?.substring(0, 500));
     
-    const tags = parseTagInput(settings.extractTags);
-    if (tags.length > 0) {
-        console.log(`\n----- 标签测试 [${tags.join(', ')}] -----`);
-        console.log('结果:', extractTagContents(msg.mes, tags, '\n---\n') || '(无匹配)');
+    const extractTags = parseTagInput(settings.extractTags);
+    const excludeTags = parseTagInput(settings.excludeTags);
+    if (extractTags.length > 0 || excludeTags.length > 0) {
+        console.log(`\n----- 标签处理 -----`);
+        if (extractTags.length > 0) {
+            console.log(`提取标签: [${extractTags.join(', ')}]`);
+            console.log('提取结果:', extractTagContents(msg.mes, extractTags, '\n---\n') || '(无匹配)');
+        }
+        if (excludeTags.length > 0) {
+            console.log(`移除标签: [${excludeTags.join(', ')}]`);
+            console.log('移除结果:', removeTagContents(msg.mes, excludeTags) || '(移除后为空)');
+        }
+        console.log('最终结果:', applyTagFilters(msg.mes, {
+            extractTags,
+            excludeTags,
+            extractMode: settings.extractMode,
+            separator: settings.tagSeparator,
+        }) || '(无结果)');
     }
 }
 
@@ -1017,6 +1110,10 @@ function createUI() {
                                 <option value="">无</option>
                             </select>
                         </div>
+                        <div class="nag-setting-item">
+                            <label>移除标签 <span class="nag-hint">(可选，空格/逗号分隔)</span></label>
+                            <textarea id="nag-set-exclude-tags" rows="1" placeholder="thinking summary note"></textarea>
+                        </div>
                         <div class="nag-extract-preview">
                             <div class="nag-preview-header">
                                 <span>📋 预览</span>
@@ -1260,9 +1357,15 @@ function bindEvents() {
         saveSettings(); 
         refreshPreview(); 
     });
+    $('#nag-set-exclude-tags').on('change', function() {
+        settings.excludeTags = $(this).val();
+        saveSettings();
+        refreshPreview();
+    });
     $('#nag-set-separator').on('change', function() { 
         settings.tagSeparator = $(this).val().replace(/\\n/g, '\n'); 
         saveSettings(); 
+        refreshPreview();
     });
     
     // 发送阶段弹窗检测
@@ -1347,6 +1450,7 @@ function syncUI() {
     // 标签提取
     $('#nag-set-extract-mode').val(settings.extractMode);
     $('#nag-set-tags').val(settings.extractTags);
+    $('#nag-set-exclude-tags').val(settings.excludeTags);
     $('#nag-set-separator').val(settings.tagSeparator.replace(/\n/g, '\\n'));
     
     // 发送阶段弹窗检测
