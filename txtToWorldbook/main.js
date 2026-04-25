@@ -794,8 +794,8 @@ async function processMemoryChunkIndependent(options) {
     return getProcessingService().processMemoryChunkIndependent(options);
 }
 
-    async function processMemoryChunksParallel(startIndex, endIndex) {
-        return getProcessingService().processMemoryChunksParallel(startIndex, endIndex);
+    async function processMemoryChunksParallel(startIndex, endIndex, batchSummary) {
+        return getProcessingService().processMemoryChunksParallel(startIndex, endIndex, batchSummary);
     }
 
 // ============================================================

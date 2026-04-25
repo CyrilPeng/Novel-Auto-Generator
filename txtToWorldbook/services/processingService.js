@@ -55,7 +55,7 @@
     };
 
     async function processMemoryChunkIndependent(options) {
-        const { index, retryCount = 0, customPromptSuffix = '' } = options;
+        const { index, retryCount = 0, customPromptSuffix = '', worldbookSummaryContext = '' } = options;
         const memory = AppState.memory.queue[index];
         const maxRetries = 3;
         const taskId = index + 1;
@@ -81,6 +81,11 @@
         }
 
         prompt += `\n\n当前需要分析的内容（第${chapterIndex}章）：\n---\n${memory.content}\n---\n`;
+
+        if (worldbookSummaryContext) {
+            prompt += `\n${worldbookSummaryContext}\n`;
+            prompt += '\n请根据以上已有条目，累积补充或更新世界书。已有的条目如需更新请保留原条目名。\n';
+        }
 
         const enabledCatNamesList = getEnabledCategories().map(c => c.name);
         if (AppState.settings.enablePlotOutline) enabledCatNamesList.push('剧情大纲');
@@ -140,13 +145,13 @@
                 const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
                 updateStreamContent(`🔄 [第${chapterIndex}章] ${delay / 1000}秒后重试...\n`);
                 await new Promise(resolve => setTimeout(resolve, delay));
-                return processMemoryChunkIndependent({ index, retryCount: retryCount + 1, customPromptSuffix });
+                return processMemoryChunkIndependent({ index, retryCount: retryCount + 1, customPromptSuffix, worldbookSummaryContext });
             }
             throw error;
         }
     }
 
-    async function processMemoryChunksParallel(startIndex, endIndex) {
+    async function processMemoryChunksParallel(startIndex, endIndex, batchSummary = '') {
         const tasks = [];
         const results = new Map();
         const tokenLimitIndices = [];
@@ -178,7 +183,7 @@ ${'='.repeat(50)}
             try {
                 debugLog(`[任务${task.index + 1}] 获取信号量成功, 开始处理`);
                 updateProgress(((startIndex + completed) / AppState.memory.queue.length) * 100, `🚀 并行处理中 (${completed}/${tasks.length})`);
-                const result = await processMemoryChunkIndependent({ index: task.index });
+                const result = await processMemoryChunkIndependent({ index: task.index, worldbookSummaryContext: batchSummary });
                 completed++;
                 if (result) {
                     results.set(task.index, result);
@@ -442,10 +447,15 @@ ${'='.repeat(50)}
                 } else {
                     const batchSize = AppState.config.parallel.concurrency;
                     let i = effectiveStartIndex;
+                    let batchWorldbookSummary = '';
+                    if (Object.keys(AppState.worldbook.generated).length > 0) {
+                        batchWorldbookSummary = buildWorldbookSummary(AppState.worldbook.generated);
+                    }
                     while (i < AppState.memory.queue.length && !AppState.processing.isStopped) {
                         const batchEnd = Math.min(i + batchSize, AppState.memory.queue.length);
-                        const { tokenLimitIndices } = await processMemoryChunksParallel(i, batchEnd);
+                        const { tokenLimitIndices } = await processMemoryChunksParallel(i, batchEnd, batchWorldbookSummary);
                         if (AppState.processing.isStopped) break;
+                        batchWorldbookSummary = buildWorldbookSummary(AppState.worldbook.generated);
                         for (const idx of tokenLimitIndices.sort((a, b) => b - a)) splitMemoryIntoTwo(idx);
                         for (let j = i; j < batchEnd && j < AppState.memory.queue.length && !AppState.processing.isStopped; j++) {
                             if (!AppState.memory.queue[j].processed || AppState.memory.queue[j].failed) await processMemoryChunk(j);
