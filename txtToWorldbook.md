@@ -1,732 +1,619 @@
-# TXT转世界书模块 (txtToWorldbook.js) 说明书
+# TXT 转世界书模块文档
 
-## 概述
-
-`txtToWorldbook.js` 是一个用于将TXT格式的小说文本转换为SillyTavern世界书格式的独立JavaScript模块。该模块可以自动提取小说中的角色、地点、组织等关键信息，并生成结构化的世界书条目。
-
-### 主要特性
-
-- 🔄 **智能分块处理**：自动将长篇小说按章节分割成合适大小的记忆块
-- ⚡ **并行处理支持**：可同时处理多个记忆块，大幅提升处理效率
-- 🔌 **多API支持**：支持酒馆API、Gemini、DeepSeek、OpenAI兼容等多种API
-- 📜 **历史追踪**：记录每次处理的变更历史，支持回退操作
-- 🎲 **重Roll功能**：每个记忆块可多次生成，选择最佳结果
-- 📥 **导入导出**：支持多种格式的导入导出，包括SillyTavern格式
-- 🔍 **查找替换**：批量查找和替换世界书中的内容
-- 📚 **自定义分类**：可自由添加、编辑世界书分类
-- 🧠 **AI优化世界书**：让AI自动优化、整理世界书条目内容，提升质量
-- 📊 **条目演变聚合**：追踪条目在不同章节的变化历程，自动聚合历史信息
-- 📊 **模型状态显示**：实时显示API连接状态、模型列表和限流信息
-- 🛠️ **整理条目**：AI自动优化条目内容、去除重复信息
-- 🐳 **清除标签**：一键清理AI输出的 thinking 等标签
+将 TXT 小说转换为 SillyTavern 世界书格式。AI 自动提取角色、地点、组织等结构化信息，生成可直接导入的世界书文件。
 
 ---
 
-## 目录结构
+## 目录
 
-```
-模块结构
-├── 全局状态变量
-├── 默认世界书条目UI数据
-├── 自定义分类系统
-├── 章回正则配置
-├── 分类灯状态配置
-├── 分类默认位置/深度配置
-├── 并行处理配置
-├── 默认设置
-├── 信号量类（并行控制）
-├── IndexedDB数据库操作
-├── 自定义分类管理函数
-├── 工具函数
-├── 分类灯状态管理
-├── 条目位置/深度/顺序配置管理
-├── API调用模块
-│   ├── 酒馆API模式
-│   ├── 自定义API模式
-│   ├── 拉取模型列表
-│   └── 快速测试
-├── 世界书数据处理
-├── 解析AI响应
-├── 分卷功能
-├── 记忆分裂
-├── 系统提示词生成
-├── 并行/串行处理
-├── 主处理流程
-├── 修复失败记忆
-├── 重Roll功能
-├── 导入JSON合并世界书
-├── 条目内容整理功能
-├── 别名识别与合并
-├── 查找/替换功能
-├── 条目/分类配置弹窗
-├── 导出功能
-├── 渲染分类列表
-├── 默认世界书条目UI
-├── 章回检测功能
-├── 帮助弹窗
-├── 记忆内容查看/编辑
-├── UI界面
-├── 条目演变聚合功能 - 追踪条目在不同章节的变化
-├── AI优化世界书功能 - 让AI自动优化、整理世界书条目
-└── 公开API接口
-```
+- [快速上手](#快速上手)
+- [API 配置](#api-配置)
+- [处理模式](#处理模式)
+- [分类系统](#分类系统)
+- [提示词系统](#提示词系统)
+- [章节管理](#章节管理)
+- [世界书操作](#世界书操作)
+- [导入导出](#导入导出)
+- [自动化特性](#自动化特性)
+- [UI 参考](#ui-参考)
+- [模块架构](#模块架构)
+- [数据格式](#数据格式)
+- [常见问题](#常见问题)
 
 ---
 
-## 核心概念
+## 快速上手
 
-### 1. 记忆块 (Memory Chunk)
-
-小说文本被分割成的处理单元。每个记忆块包含：
-
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `title` | string | 记忆块标题（如"记忆1"） |
-| `content` | string | 原文内容 |
-| `processed` | boolean | 是否已处理 |
-| `failed` | boolean | 处理是否失败 |
-| `processing` | boolean | 是否正在处理中 |
-| `result` | object | 处理结果（世界书数据） |
-| `failedError` | string | 失败原因 |
-
-### 2. 世界书 (Worldbook)
-
-生成的结构化数据，按分类组织：
-
-```javascript
-{
-    "角色": {
-        "张三": {
-            "关键词": ["张三", "老张", "张老板"],
-            "内容": "## 基本信息\n**性别**: 男\n**年龄**: 35岁\n..."
-        }
-    },
-    "地点": {
-        "京城": {
-            "关键词": ["京城", "都城"],
-            "内容": "## 地点描述\n..."
-        }
-    },
-    // ...其他分类
-}
-```
-
-### 3. 分类系统
-
-默认内置分类：
-- **角色**：人物信息
-- **地点**：场景位置
-- **组织**：团体机构
-- **道具**：物品装备（默认禁用）
-- **玩法**：规则机制（默认禁用）
-- **章节剧情**：剧情概要（默认禁用）
-- **角色内心**：心理活动（默认禁用）
-
-系统分类（固定）：
-- **剧情大纲**：主线/支线剧情
-- **文风配置**：写作风格
-- **地图环境**：环境描述
-- **剧情节点**：关键节点
-- **知识书**：背景知识
+1. 点击插件面板中的「TXT转世界书」按钮打开模态框
+2. 选择 API 模式（默认使用酒馆当前连接的 AI）
+3. 上传 TXT 小说文件（自动检测 UTF-8/GBK/GB2312/GB18030/Big5 编码）
+4. 系统自动按章节正则分块，在章节队列中预览
+5. 点击「开始转换」，等待 AI 处理
+6. 处理完成后在结果面板中查看、编辑世界书
+7. 导出为 SillyTavern 格式，在酒馆中导入
 
 ---
 
-## 全局状态变量
+## API 配置
 
-```javascript
-// 核心数据
-let generatedWorldbook = {};        // 已生成的世界书数据对象
-let worldbookVolumes = [];          // 分卷模式下的各卷世界书数据
-let currentVolumeIndex = 0;         // 当前处理的卷索引
-let memoryQueue = [];               // 记忆块队列
+### 酒馆 API
 
-// 处理状态
-let isProcessingStopped = false;    // 处理是否被用户停止
-let isRepairingMemories = false;    // 是否正在修复失败的记忆块
-let currentProcessingIndex = 0;     // 当前正在处理的记忆块索引
-let isRerolling = false;            // 是否正在重Roll
+勾选「使用酒馆API」即可，直接使用 SillyTavern 当前连接的 AI，无需额外配置。
 
-// 文件相关
-let currentFile = null;             // 当前上传的文件对象
-let currentFileHash = null;         // 当前文件的哈希值
+> **注意：** 酒馆 API 下消息角色会被酒馆后处理覆盖，且可能注入预设 JB 内容。消息链中的角色设置（system/assistant）不会完全生效。需要精确控制消息角色时，请使用自定义 API。
 
-// 模式设置
-let incrementalOutputMode = true;   // 是否启用增量输出模式
-let useVolumeMode = false;          // 是否启用分卷模式
+### 自定义 API
 
-// 起始位置
-let startFromIndex = 0;             // 开始处理的记忆块索引
-let userSelectedStartIndex = null;  // 用户手动选择的起始索引
+取消勾选酒馆 API 后，可配置以下直连模式：
 
-// 多选模式
-let isMultiSelectMode = false;      // 是否处于多选模式
-let selectedMemoryIndices = new Set(); // 已选中的记忆块索引集合
+| 提供商 | 需要配置 | 说明 |
+|:---|:---|:---|
+| **OpenAI 兼容** | Endpoint + 可选 API Key | 支持本地模型（如 `http://127.0.0.1:5000/v1`）、第三方代理 |
+| **Gemini** | API Key | Google 官方 API，默认模型 `gemini-2.5-flash` |
+| **Anthropic** | API Key | Claude 系列模型 |
 
-// 查找高亮
-let searchHighlightKeyword = '';    // 当前搜索高亮的关键词
+**辅助功能：**
+- **拉取模型** — 自动获取当前 API 的可用模型列表
+- **快速测试** — 验证 API 连接是否正常
+- **模型状态** — 实时显示连接状态和限流信息
 
-// 配置存储
-let entryPositionConfig = {};       // 条目位置/深度/顺序配置
-let categoryDefaultConfig = {};     // 分类默认配置
-```
+### 智能重试
+
+所有 API 模式（含酒馆 API）均支持自动重试，覆盖以下瞬态错误：
+
+- HTTP 429（限流）、500、502、503、529
+- 网络中断、连接重置、请求超时
+- `rate limit`、`resource_exhausted`、`overloaded`、`temporarily unavailable`
+
+自定义 API 使用指数退避重试（默认最多 2 次），酒馆 API 同样包装了重试逻辑。
 
 ---
 
-## 配置说明
+## 处理模式
 
-### 默认设置 (defaultSettings)
+### 串行模式
 
-```javascript
-const defaultSettings = {
-    // 分块设置
-    chunkSize: 15000,              // 每块字数（字符数）
+逐章处理，每章的 prompt 包含前面章节累积的世界书摘要作为上下文。结果最连贯，速度较慢。
 
-    // 功能开关
-    enablePlotOutline: false,      // 是否启用剧情大纲生成
-    enableLiteraryStyle: false,    // 是否启用文风配置生成
-    forceChapterMarker: true,      // 是否强制添加章节标记
+### 并行模式
 
-    // API设置
-    useTavernApi: true,            // 是否使用酒馆API
-    apiTimeout: 120000,            // API超时时间（毫秒）
-    customApiProvider: 'gemini',   // 自定义API提供商
-    customApiKey: '',              // API密钥
-    customApiEndpoint: '',         // API端点
-    customApiModel: 'gemini-2.5-flash', // 模型名称
+同时处理多个章节，通过信号量控制并发数（1-10，默认 3）。两种子模式：
 
-    // 并行设置
-    parallelEnabled: true,         // 是否启用并行处理
-    parallelConcurrency: 3,        // 并发数
-    parallelMode: 'independent',   // 并行模式
+| 模式 | 速度 | 连贯性 | 适用场景 |
+|:---|:---:|:---:|:---|
+| **独立模式** | 最快 | 一般 | 章节独立性强的小说，首次快速提取 |
+| **分批模式** | 较快 | 较好 | 需要上下文连贯的处理，长篇小说 |
 
-    // 分卷设置
-    useVolumeMode: false,          // 是否启用分卷模式
+**分批模式摘要同步：** 每个批次完成后，系统自动生成当前世界书的紧凑摘要，注入下一批次的 prompt。这使得后续批次能感知前面已提取的角色和地点，大幅减少跨批次重复条目。
 
-    // 章节正则
-    chapterRegexPattern: '第[零一二三四五六七八九十百千万0-9]+[章回卷节部篇]',
-    useCustomChapterRegex: false,  // 是否使用自定义正则
+### 增量输出
 
-    // 提示词设置
-    customWorldbookPrompt: '',     // 自定义世界书提示词
-    customPlotPrompt: '',          // 自定义剧情提示词
-    customStylePrompt: '',         // 自定义文风提示词
-    customMergePrompt: '',         // 自定义合并提示词
-    customRerollPrompt: '',        // 自定义重Roll提示词
+开启后 AI 每次只输出变更的条目，而非完整世界书。节省 Token、加快速度，适合大多数场景。
 
-    // 其他
-    language: 'zh',                // 语言
-    defaultWorldbookEntries: '',   // 默认世界书条目（JSON字符串）
-    defaultWorldbookEntriesUI: [], // 默认世界书条目（UI数据）
-    categoryLightSettings: null,   // 分类灯状态
-    categoryDefaultConfig: {},     // 分类默认配置
-    entryPositionConfig: {}        // 条目位置配置
-};
-```
+### 分卷模式
 
-### 并行处理配置
+当上下文 Token 超出模型限制时自动分卷。每卷独立维护世界书，最终可分卷导出。分卷指示器实时显示当前卷和进度。
 
-```javascript
-let parallelConfig = {
-    enabled: true,       // 是否启用并行处理
-    concurrency: 3,      // 并发数（1-5）
-    mode: 'independent'  // 模式：'independent'(独立) 或 'batch'(批量)
-};
-```
+### 章回正则
 
-**模式说明：**
-- **independent（独立模式）**：各记忆块完全独立处理，速度最快
-- **batch（批量模式）**：批量聚合后���处理，结果更连贯
+系统使用正则表达式检测章节标题，按章节边界切分文本。内置三个预设：
+
+| 预设 | 正则 | 匹配示例 |
+|:---|:---|:---|
+| 中文通用 | `第[零一二三四五六七八九十百千万0-9]+[章回卷节部篇]` | 第一章、第100回 |
+| 英文 Chapter | `Chapter\s*\d+` | Chapter 1、Chapter 42 |
+| 数字章节 | `第\d+章` | 第1章、第99章 |
+
+支持自定义正则，并可点击「检测」预览匹配结果。
+
+**每块字数** 控制最大分块大小（默认 15000 字符），超过的章节会被进一步切分；过小的章节会被合并到相邻块。修改字数后点击「重新分块」生效。
 
 ---
 
-## 核心类
+## 分类系统
 
-### Semaphore（信号量类）
+### 内置分类
 
-用于控制并行任务的最大并发数。
+| 分类 | 默认状态 | 提取内容 |
+|:---|:---:|:---|
+| **角色** | 启用 | 姓名、性别、身份、性格、外貌、技能、关系、背景等 |
+| **地点** | 启用 | 名称、位置、特征、关联事件 |
+| **组织** | 启用 | 名称、性质、目标、成员、势力范围 |
+| **道具** | 禁用 | 物品、装备信息 |
+| **玩法** | 禁用 | 游戏/世界规则机制 |
+| **章节剧情** | 禁用 | 各章剧情概要 |
+| **角色内心** | 禁用 | 角色心理活动 |
 
-```javascript
-class Semaphore {
-    constructor(max)    // 创建信号量，max为最大并发数
-    async acquire()     // 获取信号量（如已达上限则等待）
-    release()           // 释放信号量
-    abort()             // 中止所有等待中的任务
-    reset()             // 重置信号量状态
-}
-```
+### 系统分类（通过提示词启用）
 
-**使用示例：**
-```javascript
-const semaphore = new Semaphore(3); // 最多同时3个任务
+- **剧情大纲** — 主线剧情、支线剧情、关键转折点
+- **文风配置** — 作品写作风格分析
 
-async function processTask(task) {
-    await semaphore.acquire();  // 获取信号量
-    try {
-        // 执行任务...
-    } finally {
-        semaphore.release();    // 释放信号量
-    }
-}
-```
+### 自定义分类
 
----
+可自由添加、编辑、删除分类。每个分类可配置：
 
-## 数据持久化
+- **名称** — 分类显示名称
+- **条目示例** — 告诉 AI 该分类下条目长什么样
+- **关键词示例** — 关键词格式参考
+- **内容提取指南** — 指导 AI 提取哪些信息
+- **默认位置/深度/顺序** — 导出时的 SillyTavern 参数
+- **自动递增顺序** — 同分类条目自动递增 order 值
 
-### MemoryHistoryDB
+### 分类灯状态
 
-使用IndexedDB进行数据持久化，包含以下存储表：
+每个分类可设置导出时的激活模式：
 
-| 存储表 | 说明 |
-|--------|------|
-| `history` | 处理历史记录 |
-| `meta` | 元数据（如文件哈希） |
-| `state` | 处理状态（用于断点续传） |
-| `rolls` | Roll历史记录 |
-| `categories` | 自定义分类配置 |
+| 灯色 | SillyTavern 效果 |
+|:---:|:---|
+| 🔵 蓝灯（常驻） | 条目始终激活，constant=true |
+| 🟢 绿灯（触发） | 关键词匹配时激活，selective=true |
 
-**主要方法：**
+### 默认世界书条目
 
-```javascript
-// 数据库操作
-await MemoryHistoryDB.openDB()                    // 打开数据库
-
-// 历史记录
-await MemoryHistoryDB.saveHistory(...)            // 保存历史
-await MemoryHistoryDB.getAllHistory()             // 获取所有历史
-await MemoryHistoryDB.getHistoryById(id)          // 根据ID获取历史
-await MemoryHistoryDB.clearAllHistory()           // 清空所有历史
-
-// 状态管理
-await MemoryHistoryDB.saveState(processedIndex)   // 保存当前状态
-await MemoryHistoryDB.loadState()                 // 加载保存的状态
-await MemoryHistoryDB.clearState()                // 清空状态
-
-// 文件哈希
-await MemoryHistoryDB.saveFileHash(hash)          // 保存文件哈希
-await MemoryHistoryDB.getSavedFileHash()          // 获取保存的哈希
-await MemoryHistoryDB.clearFileHash()             // 清空文件哈希
-
-// 分类管理
-await MemoryHistoryDB.saveCustomCategories(cats)  // 保存自定义分类
-await MemoryHistoryDB.getCustomCategories()       // 获取自定义分类
-
-// Roll历史
-await MemoryHistoryDB.saveRoll(...)               // 保存Roll记录
-await MemoryHistoryDB.getRollsByMemoryIndex(idx)  // 获取指定记忆的Roll历史
-await MemoryHistoryDB.clearAllRolls()             // 清空所有Roll历史
-```
+可预设一批条目，每次转换完成后自动添加到世界书。也可随时手动「立即应用」。每个条目可配置分类、名称、关键词、内容、位置/深度/顺序。
 
 ---
 
-## API调用
+## 提示词系统
 
-### 支持的API提供商
+### 提示词结构
 
-| 提供商 | 说明 | 配置要求 |
-|--------|------|----------|
-| 酒馆API | 使用SillyTavern当前连接的AI | 无需额外配置 |
-| Gemini | Google官方API | API Key |
-| Gemini代理 | 第三方Gemini代理 | Endpoint + API Key |
-| DeepSeek | DeepSeek官方API | API Key |
-| OpenAI兼容 | 兼容OpenAI格式的API | Endpoint + (可选)API Key |
+完整的 prompt 由以下部分按顺序组装：
 
-### API调用流程
+1. **世界书提示词**（核心，必需）— 指导 AI 提取什么信息、输出什么格式
+2. **剧情大纲提示词**（可选）— 开启后额外提取剧情大纲
+3. **文风配置提示词**（可选）— 开启后额外分析写作风格
+4. **后缀提示词**（可选）— 追加到末尾，用于自定义指令
+5. **章节强制标记**（可选）— 告诉 AI 当前处理的是哪一章
+6. **世界书上下文摘要**（串行/分批模式自动注入）— 已有世界书的紧凑摘要
 
-```javascript
-// 统一调用入口
-async function callAPI(prompt, taskId = null) {
-    if (settings.useTavernApi) {
-        return await callSillyTavernAPI(prompt, taskId);
-    } else {
-        return await callCustomAPI(prompt);
-    }
-}
-```
+### 占位符
 
-### 自定义API配置示例
+| 占位符 | 出现位置 | 替换为 |
+|:---|:---|:---|
+| `{DYNAMIC_JSON_TEMPLATE}` | 世界书提示词 | 根据启用分类自动生成的 JSON 输出模板 |
+| `{ENABLED_CATEGORY_NAMES}` | 世界书提示词 | 当前启用的分类名列表 |
+| `{PROMPT}` | 消息链 | 组装好的完整提示词内容 |
 
-**Gemini：**
-```javascript
-settings.customApiProvider = 'gemini';
-settings.customApiKey = 'your-api-key';
-settings.customApiModel = 'gemini-2.5-flash';
-```
+### 消息链
 
-**OpenAI兼容（本地模型）：**
-```javascript
-settings.customApiProvider = 'openai';
-settings.customApiEndpoint = 'http://127.0.0.1:5000/v1';
-settings.customApiModel = 'your-model-name';
-```
+将提示词按对话格式发送给 AI。每条消息可指定角色：
 
----
+| 角色 | 说明 |
+|:---:|:---|
+| 🔷 system | 系统消息 |
+| 🟢 user | 用户消息 |
+| 🟡 assistant | AI 助手消息 |
 
-## 处理流程
+默认为单条 user 消息包含 `{PROMPT}`。可添加多条消息构建复杂对话上下文。
 
-### 主处理流程
+> 酒馆 API 模式下角色设置会被覆盖，需要精确控制请使用自定义 API。
 
-```
-1. 用户上传TXT文件
-       ↓
-2. 文件编码检测与读取
-       ↓
-3. 按章节正则分割内容
-       ↓
-4. 合并小块、分割大块 → 生成记忆队列
-       ↓
-5. 开始AI处理（并行/串行）
-       ↓
-   ┌─────────────────────────────────────┐
-   │  对每个记忆块：                       │
-   │  a. 生成系��提示词                    │
-   │  b. 调用API获取响应                   │
-   │  c. 解析JSON格式的世界书数据          │
-   │  d. 合并到全局世界书                  │
-   │  e. 保存历史记录                      │
-   │  f. 更新UI显示                        │
-   └─────────────────────────────────────┘
-       ↓
-6. 处理完成，显示结果
-       ↓
-7. 用户可进行：编辑、整理、合并、导出
-```
+### Prompt 模板编辑
 
-### 记忆分裂机制
+点击提示词配置区的「预览」按钮，打开 Prompt 预览与编辑模态框：
 
-当AI返回Token超限错误时，自动触发记忆分裂：
+- **预览标签页** — 查看最终组装的完整 prompt（只读）
+- **世界书/剧情/文风标签页** — 直接编辑对应模板，显示占位符说明
+- **恢复默认** — 按当前标签页恢复默认模板
+- **保存** — 将修改写入设置并持久化
 
-```javascript
-function splitMemoryAtIndex(memoryIndex) {
-    const memory = memoryQueue[memoryIndex];
-    const content = memory.content;
-    const midPoint = Math.floor(content.length / 2);
+### 响应过滤标签
 
-    // 在中点附近寻找合适的分割点（段落或句号）
-    let splitPoint = content.lastIndexOf('\n\n', midPoint + 1000);
-    if (splitPoint < midPoint - 1000) {
-        splitPoint = content.lastIndexOf('。', midPoint + 500);
-    }
-
-    // 分裂为两个新记忆块
-    const firstHalf = { ...memory, content: content.slice(0, splitPoint) };
-    const secondHalf = { ...memory, content: content.slice(splitPoint) };
-
-    memoryQueue.splice(memoryIndex, 1, firstHalf, secondHalf);
-}
-```
+处理 AI 响应时自动移除指定标签内容（如 `<thinking>...</thinking>`）。在设置面板的「响应过滤标签」中配置，逗号分隔。`/think` 格式移除从开头到 `</think>` 的内容。
 
 ---
 
-## 世界书数据处理
+## 章节管理
 
-### 数据规范化
+文件上传后，系统按章回正则自动分块，在「章节队列」中显示。
 
-将AI返回的各种格式统一转换为标准格式：
+### 章节操作
 
-```javascript
-// 输入可能的格式
-{
-    "content": "...",      // 英文字段
-    "keywords": [...]
-}
+点击任意章节打开内容查看/编辑弹窗：
 
-// 转换后的标准格式
-{
-    "内容": "...",         // 中文字段
-    "关键词": [...]
-}
-```
+- **查看原文** — 完整章节内容
+- **编辑** — 修改章节文本后保存
+- **复制** — 复制原文到剪贴板
+- **重 Roll** — 重新让 AI 处理该章节（可附加额外提示词）
+- **合并到上/下一章** — 与相邻章节合并，自动更新世界书
 
-### 增量合并
+### 批量操作
 
-增量模式下，只合并变更的条目：
+- **选择起始** — 从任意章节开始处理，跳过前面的章节
+- **已处理** — 查看已完成的章节列表
+- **多选删除** — 进入多选模式，勾选后批量删除（已处理章节会有警告）
 
-```javascript
-function mergeWorldbookDataIncremental(target, source) {
-    for (const category in source) {
-        if (!target[category]) {
-            target[category] = {};
-        }
-        for (const entryName in source[category]) {
-            const entry = source[category][entryName];
-            if (target[category][entryName]) {
-                // 合并关键词（去重）
-                // 追加内容
-            } else {
-                // 新增条目
-                target[category][entryName] = entry;
-            }
-        }
-    }
-}
-```
-
----
-
-## UI功能说明
-
-### 主界面区域
-
-| 区域 | 功能 |
-|------|------|
-| 文件上传区 | 拖拽或点击上传TXT文件 |
-| 设置面板 | API配置、分块设置、并行设置等 |
-| 记忆队列 | 显示所有记忆块及其状态 |
-| 进度区域 | 显示处理进度和实时日志 |
-| 结果预览 | 显示生成的世界书内容 |
-
-### 记忆块状态图标
+### 处理状态图标
 
 | 图标 | 状态 |
-|------|------|
+|:---:|:---|
 | ⏳ | 等待处理 |
 | 🔄 | 处理中 |
 | ✅ | 处理成功 |
 | ❗ | 处理失败 |
 
-### 分类灯状态
+---
 
-| 灯色 | 含义 | SillyTavern中的效果 |
-|------|------|---------------------|
-| 🔵 蓝灯 | 常驻 | 条目始终激活 |
-| 🟢 绿灯 | 触发 | 关键词匹配时激活 |
+## 世界书操作
+
+### 查看与编辑
+
+点击「查看世界书」打开世界书浏览器，按分类组织，每个条目显示：
+- 名称、关键词、内容
+- Token 计数（支持阈值高亮，快速发现过长条目）
+- 操作按钮：编辑、重 Roll、配置位置/深度/顺序
+
+### 查找与替换
+
+- **查找** — 在世界书预览中高亮显示关键词
+- **替换** — 批量替换所有匹配项，支持正则表达式和大小写敏感选项
+- 执行替换前自动保存世界书快照
+
+### 别名合并
+
+处理同一实体的不同称呼（如「张三」和「老张」）：
+
+1. **自动检测** — AI 扫描每个分类，识别疑似同名条目
+2. **两两判断** — AI 对每一对分别判断是否为同一实体，自动串联结果（A=B 且 B=C → A,B,C 合并）
+3. **手动合并** — 跨分类勾选条目，自定义主名称和目标分类
+4. 所有合并操作前自动保存快照
+
+### 条目整理
+
+- **整理条目** — AI 优化条目内容，去除重复信息，标准化格式
+- **AI 优化世界书** — 对整个世界书进行全面深度优化
+- **条目演变聚合** — 追踪条目在不同章节的变化历程，聚合历史信息
+- **清除标签** — 一键清理 `<thinking>` 等 AI 思考标签（不消耗 Token）
+
+### 修改历史
+
+每次 AI 处理、编辑、合并等操作都自动记录变更历史，存储在 IndexedDB 中：
+
+- 左右分栏对比查看变更前后
+- 支持回退到任意历史版本
+- 批量替换/整理/合并操作前自动保存完整快照，可随时回退
 
 ---
 
-## 导出格式
+## 导入导出
 
-### JSON格式
+### 导出
 
-原始世界书数据的JSON导出：
+| 功能 | 说明 |
+|:---|:---|
+| **导出角色卡** | 导出为包含世界书的角色卡 JSON |
+| **导出世界书** | 导出为 SillyTavern 世界书 JSON，可直接导入酒馆 |
+| **分卷导出** | 分卷模式下按卷导出 |
+| **导出变更** | 仅导出上次导出以来新增/修改的条目，方便增量更新 |
+| **导出任务** | 保存完整处理进度（含世界书、章节队列、处理状态），可跨设备恢复 |
+| **导出配置** | 保存提示词、分类、默认条目等所有设置 |
 
-```json
-{
-    "角色": {
-        "张三": {
-            "关键词": ["张三", "老张"],
-            "内容": "..."
-        }
-    },
-    "地点": { ... }
-}
+### 导入
+
+| 功能 | 说明 |
+|:---|:---|
+| **合并世界书** | 导入已有世界书 JSON 进行合并，支持 SillyTavern 格式和内部格式 |
+| **导入任务** | 恢复之前导出的处理进度 |
+| **导入配置** | 恢复之前导出的工具设置 |
+
+### 世界书合并策略
+
+导入世界书时，对重复条目提供多种处理方式：
+
+- **AI 智能合并** — AI 分析两个版本，智能合并内容
+- **覆盖** — 用导入版本覆盖现有版本
+- **保留** — 保留现有版本不变
+- **重命名** — 保留两个版本，导入版本自动改名
+- **内容叠加** — 将导入内容追加到现有内容末尾
+
+---
+
+## 自动化特性
+
+### 自动断点续传
+
+处理期间每 60 秒自动保存状态到 IndexedDB。浏览器崩溃、意外刷新后，重新打开会自动提示恢复上次进度。同时注册 `beforeunload` 事件，页面关闭前标记需要恢复。
+
+### ETA 预估
+
+处理过程中实时预估剩余时间。基于最近 10 个章节的处理耗时滑动平均计算，显示在进度条文本中（如「正在处理第 5/20 章 | 预计剩余 3分20秒」）。
+
+### 自动去重建议
+
+所有章节处理完成后，自动对每个分类运行本地去重扫描（不调用 AI，纯文本相似度匹配）。检测到疑似重复条目时在实时输出中提示，建议使用别名合并功能处理。
+
+### 批量操作快照
+
+以下操作执行前自动保存世界书完整快照到历史记录：
+
+- 批量替换
+- 条目整理（consolidation）
+- 别名合并
+- 手动合并
+
+快照以「快照-操作名称前」命名，可在修改历史中找到并回退。
+
+### 记忆分裂
+
+当 AI 返回 Token 超限错误时，自动将该记忆块从中间切分为两个较小的块（在段落或句号边界），然后重新处理。用户无需手动干预。
+
+---
+
+## UI 参考
+
+### 主界面区域
+
+| 区域 | 说明 |
+|:---|:---|
+| **设置面板** | API 选择、并行配置、章回正则、分块大小、功能开关 |
+| **提示词配置** | 世界书/剧情/文风/后缀提示词、消息链、分类管理 |
+| **默认世界书条目** | 预设自动添加的条目 |
+| **文件上传** | 拖拽或点击上传 TXT，合并世界书、导入导出任务 |
+| **章节队列** | 所有记忆块列表，支持查看/编辑/合并/删除 |
+| **处理进度** | 进度条 + ETA + 暂停/修复/实时输出 |
+| **生成结果** | 世界书预览 + 全部操作按钮 |
+
+### 设置面板选项
+
+| 设置 | 默认值 | 说明 |
+|:---|:---:|:---|
+| 使用酒馆 API | 开启 | 使用 SillyTavern 当前连接的 AI |
+| 并行处理 | 开启 | 多章节同时处理 |
+| 并发数 | 3 | 同时处理的最大章节数 |
+| 并行模式 | 独立 | 独立模式 / 分批模式 |
+| 每块字数 | 15000 | 单个记忆块最大字符数 |
+| API 超时 | 120 秒 | 单次 API 调用超时 |
+| 增量输出 | 开启 | 只输出变更条目 |
+| 分卷模式 | 关闭 | 上下文超限时自动分卷 |
+| 强制章节标记 | 开启 | 在 prompt 中标注当前章节号 |
+| 允许条目递归 | 关闭 | 导出时条目可被其他条目激活 |
+| 调试模式 | 关闭 | 实时输出中打印每步操作和耗时 |
+
+---
+
+## 模块架构
+
+### 目录结构
+
+```
+txtToWorldbook/
+├── main.js                          # 模块入口，依赖注入组装
+├── core/                            # 核心层
+│   ├── state.js                     # AppState 全局状态定义
+│   ├── constants.js                 # 常量、默认分类、prompt 模板
+│   ├── utils.js                     # 通用工具函数
+│   ├── fileUtils.js                 # 文件处理（编码检测、哈希）
+│   ├── errorHandler.js              # 错误处理（用户提示、日志）
+│   ├── logger.js                    # 分模块日志
+│   └── runtime.js                   # 运行时信号量等
+├── infra/                           # 基础设施层
+│   ├── apiCaller.js                 # API 调用封装（重试、限流、超时）
+│   ├── memoryHistoryDB.js           # IndexedDB 持久化
+│   ├── modalFactory.js              # 模态框创建/销毁
+│   └── eventDelegate.js             # 事件委托
+├── services/                        # 业务逻辑层
+│   ├── apiService.js                # API 调用（酒馆/自定义）
+│   ├── processingService.js         # 核心处理流程（串行/并行）
+│   ├── worldbookService.js          # 世界书数据操作、快照
+│   ├── mergeService.js              # 条目合并、去重扫描
+│   ├── mergeWorkflowService.js      # 合并/整理工作流
+│   ├── promptService.js             # prompt 组装
+│   ├── parserService.js             # AI 响应解析
+│   ├── importExportService.js       # 导入导出（含增量导出）
+│   ├── taskStateService.js          # 任务状态、自动保存
+│   ├── settingsPersistenceService.js# 设置持久化
+│   ├── fileImportService.js         # 文件导入处理
+│   ├── rerollService.js             # 重 Roll 逻辑
+│   ├── repairService.js             # 修复失败记忆
+│   ├── tokenMetricsService.js       # Token 计数
+│   └── ...                          # 其他服务
+├── ui/                              # UI 层
+│   ├── settingsPanel.js             # 设置面板 HTML 构建
+│   ├── eventBindings.js             # DOM 事件绑定
+│   ├── modalEventBinder.js          # 模态框事件分发
+│   ├── worldbookView.js             # 世界书浏览器
+│   ├── helpModal.js                 # 帮助弹窗
+│   ├── promptPreviewModal.js        # prompt 预览/编辑
+│   ├── replaceModal.js              # 查找替换
+│   ├── searchModal.js               # 搜索
+│   ├── historyView.js               # 修改历史
+│   └── ...                          # 其他 UI 组件
+├── app/                             # 应用组装层
+│   ├── createApp.js                 # 应用创建入口
+│   ├── createCoreServices.js        # 核心服务工厂
+│   ├── createFeatureServices.js     # 功能服务工厂
+│   ├── createShellRuntime.js        # Shell 运行时
+│   ├── createShellRuntimeConfig.js  # Shell 运行时配置
+│   ├── createRuntimeBridges.js      # 运行时桥接
+│   └── ...                          # 其他组装文件
+└── adapters/
+    └── tavernApiAdapter.js          # 酒馆 API 适配
 ```
 
-### SillyTavern格式
+### 架构模式
 
-符合SillyTavern世界书导入规范的格式：
+模块采用**依赖注入（DI）+ 工厂函数**模式：
+
+- 每个服务/UI 组件是一个工厂函数，接收 `deps` 对象
+- `main.js` 是中央组装点，创建所有实例并注入依赖
+- `app/` 目录负责分层组装：核心服务 → 功能服务 → 运行时桥接 → Shell 运行时
+- 无外部依赖，纯浏览器 JavaScript
+
+### 数据持久化
+
+使用 IndexedDB（数据库名 `TxtToWorldbookDB`），包含 6 个存储表：
+
+| 存储表 | 内容 |
+|:---|:---|
+| `history` | 处理历史记录（含快照） |
+| `meta` | 元数据（文件哈希、导出时间戳等） |
+| `state` | 处理状态（断点续传） |
+| `rolls` | 章节级 Roll 历史 |
+| `categories` | 自定义分类配置 |
+| `entryRolls` | 条目级 Roll 历史 |
+
+### 全局状态 (AppState)
+
+统一状态对象，包含以下顶级字段：
+
+| 字段 | 内容 |
+|:---|:---|
+| `worldbook` | 生成的世界书数据、分卷数据、当前卷索引 |
+| `memory` | 记忆队列、失败队列、当前索引、起始索引 |
+| `file` | 当前文件、文件哈希、小说名称 |
+| `processing` | 处理状态标志（运行/停止/修复/重Roll等） |
+| `ui` | 多选模式、搜索、Token 阈值等 UI 状态 |
+| `config` | 条目配置、分类灯、并行参数、章回正则 |
+| `persistent` | 默认条目、自定义分类 |
+| `settings` | 所有用户设置 |
+
+---
+
+## 数据格式
+
+### 内部世界书格式
 
 ```json
 {
-    "entries": {
-        "0": {
-            "uid": 0,
-            "key": ["张三", "老张"],
-            "keysecondary": [],
-            "comment": "张三",
-            "content": "...",
-            "constant": false,
-            "selective": true,
-            "order": 100,
-            "position": 1,
-            "depth": 4,
-            "enabled": true,
-            // ...其他SillyTavern字段
-        }
+  "角色": {
+    "张三": {
+      "关键词": ["张三", "老张", "张老板"],
+      "内容": "## 基本信息\n**性别**: 男\n**年龄**: 35岁\n..."
     }
+  },
+  "地点": {
+    "京城": {
+      "关键词": ["京城", "都城"],
+      "内容": "## 地点描述\n..."
+    }
+  }
 }
 ```
 
-### 条目配置参数
+### SillyTavern 导出格式
+
+```json
+{
+  "entries": {
+    "0": {
+      "uid": 0,
+      "key": ["张三", "老张"],
+      "keysecondary": [],
+      "comment": "角色-张三",
+      "content": "...",
+      "constant": false,
+      "selective": true,
+      "order": 100,
+      "position": 1,
+      "depth": 4,
+      "enabled": true
+    }
+  }
+}
+```
+
+### 条目导出参数
 
 | 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `position` | 插入位置 | 1 (after_char) |
+|:---|:---|:---:|
+| `position` | 插入位置（0=before_char, 1=after_char 等） | 1 |
 | `depth` | 插入深度 | 4 |
 | `order` | 排序顺序 | 100 |
-| `constant` | 是否常驻（蓝灯） | 取决于分类灯状态 |
+| `constant` | 是否常驻（蓝灯=true） | 取决于分类灯 |
 | `selective` | 是否选择性触发 | true |
 
----
-
-## 公开API
-
-模块对外暴露的接口（挂载在 `window.TxtToWorldbook`）：
-
-```javascript
-window.TxtToWorldbook = {
-    // 状态获取
-    getWorldbook: () => generatedWorldbook,
-    getMemoryQueue: () => memoryQueue,
-    getSettings: () => settings,
-
-    // 操作方法
-    startProcessing: () => startAIProcessing(),
-    stopProcessing: () => { isProcessingStopped = true; },
-    exportWorldbook: () => exportWorldbook(),
-
-    // 历史操作
-    _showHistoryDetail: (id) => showHistoryDetail(id),
-    _rollbackToHistory: (id) => rollbackToHistory(id),
-
-    // 其他内部方法...
-};
-```
-
----
-
-## 使用技巧
-
-### 1. 分块大小建议
-
-| API提供商 | 建议分块大小 |
-|-----------|-------------|
-| Gemini | 15-20万字符 |
-| DeepSeek | 8-10万字符 |
-| 本地模型 | 根据模型上下文长度调整 |
-
-### 2. 并行处理建议
-
-- **并发数2-3**：平衡速度和API压力
-- **独立模式**：适合章节独立性强的小说
-- **批量模式**：适合需要上下文连贯的处理
-
-### 3. 处理失败处理
-
-1. 查看失败原因（点击红色记忆块）
-2. 可以编辑记忆块内容后重试
-3. 使用"修复失败记忆"一键重试所有失败块
-4. 单个记忆块可以使用"重Roll"功能
-
-### 4. 断点续传
-
-- 处理中途可以暂停
-- 刷新页面后会自动提示恢复
-- 进度保存在浏览器IndexedDB中
+每个条目和分类均可单独配置这些参数，通过条目旁的 ⚙️ 按钮操作。
 
 ---
 
 ## 常见问题
 
-### Q: 为什么处理失败？
+### API 相关
 
-**可能原因：**
-1. API连接问题 - 检查网络和API配置
-2. Token超限 - 减小分块大小或等待自动分裂
-3. API返回格式错误 - 查看详细错误信息
+<details>
+<summary><b>API 报错 404？</b></summary>
 
-### Q: 如何提高处理质量？
+1. 检查 API Endpoint 格式（如 `http://127.0.0.1:5000/v1`）
+2. 使用「快速测试」验证连接
+3. 确认模型名称正确
+4. 本地模型确保服务已启动
+5. 或改用酒馆 API 模式
+</details>
 
-1. 使用更强的模型（如Gemini Pro）
-2. 自定义提示词，针对特定类型小说优化
-3. 处理后使用"整理条目"功能优化内容
-4. 使用"别名合并"合并同一实体的不同称呼
+<details>
+<summary><b>频繁触发限流？</b></summary>
 
-### Q: 导出后如何使用？
+- 降低并发数（如从 3 降到 2）
+- 使用分批模式替代独立模式（请求更少）
+- API 智能重试会自动处理偶发限流，但频繁限流说明请求速度超出配额
+</details>
 
-1. 下载SillyTavern格式的JSON文件
-2. 在SillyTavern中进入"世界信息"
+### 处理相关
+
+<details>
+<summary><b>处理速度很慢？</b></summary>
+
+1. 开启并行处理，并发数设 2-3
+2. 选择独立模式（最快）
+3. 使用更快的模型（如 `gemini-2.5-flash`）
+4. 适当减小每块字数
+</details>
+
+<details>
+<summary><b>生成内容不准确？</b></summary>
+
+1. 使用更强的模型
+2. 减小每块字数，让 AI 更专注
+3. 自定义提示词，针对小说类型优化
+4. 处理后用「整理条目」优化
+5. 用「别名合并」清理重复
+</details>
+
+<details>
+<summary><b>Token 超限导致处理失败？</b></summary>
+
+系统会自动分裂超限的记忆块。如果频繁发生：
+- 减小每块字数
+- 关闭剧情大纲/文风配置以减少 prompt 长度
+- 开启分卷模式
+</details>
+
+### 数据相关
+
+<details>
+<summary><b>浏览器刷新后进度丢失？</b></summary>
+
+正常情况下会自动提示恢复。如果没有提示：
+- 确认之前的处理已运行超过 60 秒（自动保存间隔）
+- 检查浏览器是否清除了 IndexedDB 数据
+- 建议长时间处理前手动「导出任务」作为备份
+</details>
+
+<details>
+<summary><b>批量操作后想撤销？</b></summary>
+
+批量替换、整理、合并等操作前会自动保存快照。进入「修改历史」，找到对应快照，回退即可。
+</details>
+
+<details>
+<summary><b>导出后如何在 SillyTavern 中使用？</b></summary>
+
+1. 点击「导出世界书」下载 JSON 文件
+2. 在 SillyTavern 中打开「世界信息」
 3. 点击导入，选择下载的文件
 4. 将世界书绑定到对应角色卡
+</details>
 
----
+### 使用技巧
 
-## 版本信息
-
-- **模块名称**：TXT转世界书独立模块
-- **适用平台**：SillyTavern
-- **依赖**：无外部依赖，纯JavaScript实现
-- **浏览器支持**：支持IndexedDB的现代浏览器
-
----
-
-## 开发者信息
-
-本模块为📚小说自动生成器项目的一部分。
-
-项目地址：https://github.com/CyrilPeng/novel-auto-generator
-
-
----
-
-## 高级功能
-
-### AI优化世界书
-
-让AI自动优化、整理世界书条目内容，提升整体质量。
-
-**功能特点：**
-- **自动优化**：AI分析条目内容，去除冗余信息，优化表述
-- **格式统一**：标准化条目格式，保持风格一致
-- **内容补充**：根据上下文补充缺失的关键信息
-- **智能去重**：识别并合并重复或高度相似的内容
-
-**使用方法：**
-1. 在世界书预览面板点击"🧠 AI优化世界书"按钮
-2. 选择需要优化的分类（可选）
-3. 等待AI处理完成，查看优化后的结果
-
----
-
-### 条目演变聚合
-
-追踪条目在不同章节的变化历程，自动聚合历史信息。
-
-**功能特点：**
-- **变化追踪**：记录条目在每个记忆块中的变化
-- **历史聚合**：将分散在各章节的信息整合到最终条目中
-- **时间线展示**：可视化展示条目的演变过程
-- **智能合并**：自动识别同一实体在不同章节的不同描述
-
-**适用场景：**
-- 长篇小说中角色随剧情成长的记录
-- 地点随故事发展的变化追踪
-- 组织势力范围随时间的变化
-
----
-
-### 整理条目
-
-AI自动优化条目内容、去除重复信息、标准化格式。
-
-**与"AI优化世界书"的区别：**
-- **整理条目**：针对单个条目进行快速整理，操作简单
-- **AI优化世界书**：针对整个世界书进行全面深度优化
-
-**使用方法：**
-1. 在条目操作栏点击"🛠️ 整理"按钮
-2. AI自动分析并优化该条目
-3. 查看优化前后的对比
-
----
-
-### 模型状态显示
-
-实时显示API连接状态、模型列表和限流信息。
-
-**显示内容：**
-- **连接状态**：当前API连接是否成功
-- **可用模型**：列出当前API支持的所有模型
-- **限流信息**：当前限流设置、TPM（每分钟Token数）余量等
-- **响应时间**：API响应延迟统计
-
-**使用建议：**
-- 在开始处理前检查连接状态
-- 关注限流信息，避免触发API限制
-- 根据可用模型列表选择最适合的模型
-
----
-
-### 清除标签
-
-一键清理AI输出的 thinking 、思考等标签内容。
-
-**功能说明：**
-- 部分AI模型（如Claude）会在思考过程中输出 `<thinking>...</thinking>` 标签
-- 这些标签对最终用户没有价值，需要清理
-- "清除标签"功能可一键批量清理世界书中所有此类标签
-
-**使用方法：**
-1. 在世界书预览面板点击"🏷️ 清除标签"按钮
-2. 选择需要清理的标签类型（如 thinking ）
-3. 确认后自动清理所有匹配内容
+| 场景 | 建议 |
+|:---|:---|
+| 首次处理长篇小说 | 并行+独立模式快速提取，完成后用别名合并去重 |
+| 追求高连贯性 | 串行模式或并行+分批模式 |
+| 只更新部分条目 | 使用「导出变更」进行增量导出 |
+| 想精调 prompt | 「预览」按钮进入模板编辑器 |
+| 失败的章节 | 「修复失败」一键重试，或点击单章「重 Roll」 |
+| AI 输出 thinking 标签 | 配置响应过滤标签或用「清除标签」功能 |
+| 同一角色多个名字 | 「别名合并」自动识别（处理完成后也会提示） |
