@@ -30,6 +30,8 @@
         handleRepairMemoryWithSplit,
         setProcessingStatus,
         getProcessingStatus,
+        buildWorldbookSummary,
+        estimateTokenCount,
     } = deps;
 
     const transitionTo = (status) => {
@@ -250,7 +252,11 @@ ${'='.repeat(50)}
 
         if (index > 0) {
             prompt += `\n\n上次阅读结尾：\n---\n${AppState.memory.queue[index - 1].content.slice(-500)}\n---\n`;
-            prompt += `\n当前世界书：\n${JSON.stringify(AppState.worldbook.generated, null, 2)}\n`;
+            const wbSummary = buildWorldbookSummary(AppState.worldbook.generated);
+            if (wbSummary) {
+                prompt += `\n${wbSummary}\n`;
+                prompt += '\n请根据以上已有条目，累积补充或更新世界书。已有的条目如需更新请保留原条目名。\n';
+            }
         }
         prompt += `\n现在阅读的部分（第${chapterIndex}章）：\n---\n${memory.content}\n---\n`;
 
@@ -271,7 +277,11 @@ ${'='.repeat(50)}
         }
 
         try {
-            debugLog(`[串行][第${chapterIndex}章] 调用API, prompt长度=${prompt.length}`);
+            const estimatedTokens = estimateTokenCount(prompt);
+            debugLog(`[串行][第${chapterIndex}章] 调用API, prompt长度=${prompt.length}, 预估token=${estimatedTokens}`);
+            if (estimatedTokens > 100000) {
+                updateStreamContent(`⚠️ [第${chapterIndex}章] 提示词预估 ${estimatedTokens} tokens，较大\n`);
+            }
             const response = await callAPI(prompt);
             memory.processing = false;
 

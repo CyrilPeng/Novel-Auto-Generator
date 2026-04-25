@@ -46,6 +46,52 @@ export function chineseNumToInt(str) {
     return result + section + current;
 }
 
+export function buildWorldbookSummary(worldbook, maxTokens = 4000) {
+    if (!worldbook || typeof worldbook !== 'object') return '';
+
+    const categories = Object.keys(worldbook);
+    if (categories.length === 0) return '';
+
+    let lines = ['【已提取的世界书条目概览】'];
+
+    for (const category of categories) {
+        const entries = worldbook[category];
+        if (!entries || typeof entries !== 'object') continue;
+        const entryNames = Object.keys(entries);
+        if (entryNames.length === 0) continue;
+
+        lines.push(`\n[${category}] (${entryNames.length}条):`);
+        for (const name of entryNames) {
+            const entry = entries[name];
+            const keywords = Array.isArray(entry?.['关键词'])
+                ? entry['关键词'].join(', ')
+                : '';
+            lines.push(keywords ? `  - ${name} (关键词: ${keywords})` : `  - ${name}`);
+        }
+    }
+
+    let summary = lines.join('\n');
+
+    if (estimateTokenCount(summary) > maxTokens) {
+        lines = ['【已提取的世界书条目概览】'];
+        for (const category of categories) {
+            const entries = worldbook[category];
+            if (!entries || typeof entries !== 'object') continue;
+            const entryNames = Object.keys(entries);
+            if (entryNames.length === 0) continue;
+            lines.push(`[${category}]: ${entryNames.join('、')}`);
+        }
+        summary = lines.join('\n');
+    }
+
+    if (estimateTokenCount(summary) > maxTokens) {
+        const maxChars = Math.floor(maxTokens * 1.5);
+        summary = summary.substring(0, maxChars) + '\n...(条目过多，已截断)';
+    }
+
+    return summary;
+}
+
 export function naturalSortEntryNames(names) {
     return [...names].sort((a, b) => {
         const chapterRegex = /第([零一二三四五六七八九十百千万\d]+)[章回卷节部篇]/;

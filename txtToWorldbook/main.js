@@ -78,7 +78,7 @@ import {
     defaultSettings
 } from './core/constants.js';
 import { Logger } from './core/logger.js';
-import { estimateTokenCount, naturalSortEntryNames } from './core/utils.js';
+import { estimateTokenCount, naturalSortEntryNames, buildWorldbookSummary } from './core/utils.js';
 import { createErrorHandler } from './core/errorHandler.js';
 import { Semaphore, PerfUtils, TokenCache } from './core/runtime.js';
 import { ModalFactory } from './infra/modalFactory.js';
@@ -365,13 +365,16 @@ const {
      */
     function isTokenLimitError(errorMsg) {
         if (!errorMsg) return false;
-        // 【修复】只检查前500字符（错误信息不会太长，避免在AI正常响应内容中误匹配）
-        const checkStr = String(errorMsg).substring(0, 500);
+        const checkStr = String(errorMsg).substring(0, 800);
         const patterns = [
             /prompt is too long/i, /tokens? >\s*\d+\s*maximum/i, /max_prompt_tokens/i,
             /tokens?.*exceeded/i, /context.?length.*exceeded/i, /exceeded.*(?:token|limit|context|maximum)/i,
             /input tokens/i, /context_length/i, /too many tokens/i,
-            /token limit/i, /maximum.*tokens/i, /20015.*limit/i, /INVALID_ARGUMENT/i
+            /token limit/i, /maximum.*tokens/i, /20015.*limit/i, /INVALID_ARGUMENT/i,
+            /request too large/i, /payload too large/i, /content.?length.?limit/i,
+            /max.?context/i, /model.?(?:maximum|max).?(?:context|length)/i,
+            /reduce.?(?:the|your).?(?:prompt|input)/i, /too.?(?:long|large).?(?:for|to)/i,
+            /string_above_max_length/i, /over.?(?:the|token).?limit/i,
         ];
         return patterns.some(pattern => pattern.test(checkStr));
     }
@@ -641,6 +644,8 @@ const coreServices = createCoreServices({
         handleRepairMemoryWithSplit,
         setProcessingStatus,
         getProcessingStatus,
+        buildWorldbookSummary,
+        estimateTokenCount,
     }),
     rerollDeps: ({ apiService, parserService }) => ({
         AppState,
@@ -765,6 +770,8 @@ const repairService = createRepairService({
     mergeWorldbookDataWithHistory,
     handleStartNewVolume,
     splitMemoryIntoTwo: (...args) => splitMemoryIntoTwo(...args),
+    buildWorldbookSummary,
+    estimateTokenCount,
 });
 const {
     handleRepairSingleMemory,

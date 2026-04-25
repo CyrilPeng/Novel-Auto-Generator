@@ -15,6 +15,8 @@ export function createRepairService(deps = {}) {
         mergeWorldbookDataWithHistory,
         handleStartNewVolume,
         splitMemoryIntoTwo,
+        buildWorldbookSummary,
+        estimateTokenCount,
     } = deps;
 
     async function handleRepairSingleMemory(index) {
@@ -36,12 +38,23 @@ ${generateDynamicJsonTemplate()}
         }
 
         if (Object.keys(AppState.worldbook.generated).length > 0) {
-            prompt += `当前世界书：\n${JSON.stringify(AppState.worldbook.generated, null, 2)}\n\n`;
+            const wbSummary = buildWorldbookSummary(AppState.worldbook.generated);
+            if (wbSummary) {
+                prompt += `${wbSummary}\n\n`;
+                prompt += '请根据以上已有条目，补充或更新世界书。已有的条目如需更新请保留原条目名。\n\n';
+            }
         }
         prompt += `阅读内容（第${chapterIndex}章）：\n---\n${memory.content}\n---\n\n请输出JSON。`;
 
         if (AppState.settings.forceChapterMarker) {
             prompt += chapterForcePrompt;
+        }
+
+        if (typeof estimateTokenCount === 'function') {
+            const estimatedTokens = estimateTokenCount(prompt);
+            if (estimatedTokens > 100000) {
+                updateProgress(null, `⚠️ 修复[第${chapterIndex}章] 提示词预估 ${estimatedTokens} tokens，较大`);
+            }
         }
 
         const response = await callAPI(prompt);
