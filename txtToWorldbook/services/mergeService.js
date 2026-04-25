@@ -497,6 +497,22 @@ ${pairsContent}
         return totalMerged;
     }
 
+    function quickDuplicateScan(worldbook) {
+        const target = worldbook || AppState.worldbook.generated;
+        let totalSuspected = 0;
+        const categories = [];
+        for (const category of Object.keys(target)) {
+            const entries = target[category];
+            if (!entries || typeof entries !== 'object') continue;
+            const groups = findPotentialDuplicates(category);
+            if (groups.length > 0) {
+                totalSuspected += groups.length;
+                categories.push({ name: category, count: groups.length });
+            }
+        }
+        return { totalSuspected, categories };
+    }
+
     return {
         checkShortNameMatch,
         collectAliasMergeGroups,
@@ -509,6 +525,7 @@ ${pairsContent}
         resolveManualMergeEntryRef,
         executeManualMerge,
         verifyDuplicatesWithAI,
+        quickDuplicateScan,
     };
 }
 

@@ -638,6 +638,7 @@ const coreServices = createCoreServices({
         estimateTokenCount,
         setupAutoSave: () => taskStateService.setupAutoSave(),
         clearAutoSave: () => taskStateService.clearAutoSave(),
+        quickDuplicateScan: (wb) => mergeWorkflowService.quickDuplicateScan(wb),
     }),
     rerollDeps: ({ apiService, parserService }) => ({
         AppState,

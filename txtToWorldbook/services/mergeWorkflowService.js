@@ -1152,5 +1152,6 @@ export function createMergeWorkflowService(deps = {}) {
         showAliasMergeUI,
         verifyDuplicatesWithAI,
         mergeConfirmedDuplicates,
+        quickDuplicateScan: (wb) => mergedService.quickDuplicateScan(wb),
     };
 }

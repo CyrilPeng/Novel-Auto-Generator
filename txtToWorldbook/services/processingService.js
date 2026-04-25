@@ -34,6 +34,7 @@
         estimateTokenCount,
         setupAutoSave,
         clearAutoSave,
+        quickDuplicateScan,
     } = deps;
 
     const transitionTo = (status) => {
@@ -539,6 +540,18 @@ ${'='.repeat(50)}
             showResultSection(true);
             updateWorldbookPreview();
             updateStreamContent(`\n${'='.repeat(50)}\n✅ 处理完成！\n`);
+
+            if (typeof quickDuplicateScan === 'function') {
+                try {
+                    const dupScan = quickDuplicateScan(AppState.worldbook.generated);
+                    if (dupScan.totalSuspected > 0) {
+                        const cats = dupScan.categories.map(c => `${c.name}(${c.count}组)`).join('、');
+                        updateStreamContent(`\n💡 检测到 ${dupScan.totalSuspected} 组疑似重复条目（${cats}），建议使用"别名合并"功能处理\n`);
+                    }
+                } catch (e) {
+                    debugLog(`去重扫描失败: ${e.message}`);
+                }
+            }
 
             await MemoryHistoryDB.saveState(AppState.memory.queue.length);
             await MemoryHistoryDB.clearState();
