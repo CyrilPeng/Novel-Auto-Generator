@@ -134,27 +134,10 @@
         async saveHistory(memoryIndex, memoryTitle, previousWorldbook, newWorldbook, changedEntries) {
             const db = await this.openDB();
             const allowedDuplicates = ['记忆-优化', '记忆-演变总结'];
-            if (!allowedDuplicates.includes(memoryTitle)) {
-                try {
-                    const duplicates = await this.getDuplicateHistoryRecords(memoryTitle);
-                    if (duplicates.length > 0) {
-                        const deleteTransaction = db.transaction([this.storeName], 'readwrite');
-                        const deleteStore = deleteTransaction.objectStore(this.storeName);
-                        for (const dup of duplicates) {
-                            deleteStore.delete(dup.id);
-                        }
-                        await new Promise((resolve, reject) => {
-                            deleteTransaction.oncomplete = () => resolve();
-                            deleteTransaction.onerror = () => reject(deleteTransaction.error);
-                        });
-                    }
-                } catch (error) {
-                    Logger.error('MemoryHistoryDB', '删除重复历史记录失败:', error);
-                }
-            }
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.storeName], 'readwrite');
                 const store = transaction.objectStore(this.storeName);
+
                 const record = {
                     timestamp: Date.now(),
                     memoryIndex,
@@ -165,9 +148,40 @@
                     fileHash: AppState.file.hash || null,
                     volumeIndex: AppState.worldbook.currentVolumeIndex
                 };
-                const request = store.add(record);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
+
+                if (!allowedDuplicates.includes(memoryTitle)) {
+                    const fileHash = AppState.file.hash || null;
+                    let lookupRequest;
+                    if (store.indexNames.contains('memoryTitleFileHash')) {
+                        const index = store.index('memoryTitleFileHash');
+                        lookupRequest = index.getAll([memoryTitle, fileHash]);
+                    } else {
+                        lookupRequest = store.getAll();
+                    }
+                    lookupRequest.onsuccess = () => {
+                        let duplicates = lookupRequest.result || [];
+                        if (!store.indexNames.contains('memoryTitleFileHash')) {
+                            duplicates = duplicates.filter(item => item.memoryTitle === memoryTitle && (item.fileHash || null) === fileHash);
+                        }
+                        for (const dup of duplicates) {
+                            store.delete(dup.id);
+                        }
+                        const addRequest = store.add(record);
+                        addRequest.onsuccess = () => resolve(addRequest.result);
+                        addRequest.onerror = () => reject(addRequest.error);
+                    };
+                    lookupRequest.onerror = () => {
+                        const addRequest = store.add(record);
+                        addRequest.onsuccess = () => resolve(addRequest.result);
+                        addRequest.onerror = () => reject(addRequest.error);
+                    };
+                } else {
+                    const addRequest = store.add(record);
+                    addRequest.onsuccess = () => resolve(addRequest.result);
+                    addRequest.onerror = () => reject(addRequest.error);
+                }
+
+                transaction.onerror = () => reject(transaction.error);
             });
         },
 
@@ -533,15 +547,22 @@
         async rollbackToHistory(historyId) {
             const history = await this.getHistoryById(historyId);
             if (!history) throw new Error('找不到指定的历史记录');
-            AppState.worldbook.generated = JSON.parse(JSON.stringify(history.previousWorldbook));
+
             const db = await this.openDB();
             const allHistory = await this.getAllHistory();
             const toDelete = allHistory.filter(h => h.id >= historyId);
-            const transaction = db.transaction([this.storeName], 'readwrite');
-            const store = transaction.objectStore(this.storeName);
-            for (const h of toDelete) {
-                store.delete(h.id);
-            }
+
+            await new Promise((resolve, reject) => {
+                const transaction = db.transaction([this.storeName], 'readwrite');
+                const store = transaction.objectStore(this.storeName);
+                for (const h of toDelete) {
+                    store.delete(h.id);
+                }
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error);
+            });
+
+            AppState.worldbook.generated = JSON.parse(JSON.stringify(history.previousWorldbook));
             return history;
         },
 
@@ -554,16 +575,17 @@
             const db = await this.openDB();
             const allHistory = await this.getAllHistory();
             const allowedDuplicates = ['记忆-优化', '记忆-演变总结'];
-            const groupedByTitle = {};
+            const grouped = {};
             for (const record of allHistory) {
                 const title = record.memoryTitle;
-                if (!groupedByTitle[title]) groupedByTitle[title] = [];
-                groupedByTitle[title].push(record);
+                if (allowedDuplicates.includes(title)) continue;
+                const key = `${title}||${record.fileHash || ''}`;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(record);
             }
             const toDelete = [];
-            for (const title in groupedByTitle) {
-                if (allowedDuplicates.includes(title)) continue;
-                const records = groupedByTitle[title];
+            for (const key in grouped) {
+                const records = grouped[key];
                 if (records.length > 1) {
                     records.sort((a, b) => b.timestamp - a.timestamp);
                     toDelete.push(...records.slice(1));

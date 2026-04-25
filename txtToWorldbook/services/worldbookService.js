@@ -67,7 +67,7 @@
                     if (sourceEntry['内容']) {
                         const existingContent = targetEntry['内容'] || '';
                         const newContent = sourceEntry['内容'];
-                        if (newContent && !existingContent.includes(newContent.substring(0, 50))) {
+                        if (newContent && existingContent !== newContent && !existingContent.includes(newContent)) {
                             targetEntry['内容'] = existingContent + '\n\n---\n\n' + newContent;
                         }
                     }
