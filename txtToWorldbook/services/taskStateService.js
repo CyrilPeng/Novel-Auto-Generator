@@ -20,6 +20,41 @@ export function createTaskStateService(deps = {}) {
         updateWorldbookPreview,
     } = deps;
 
+    let autoSaveTimerId = null;
+    let beforeUnloadHandler = null;
+
+    function setupAutoSave(interval = 60000) {
+        clearAutoSave();
+        autoSaveTimerId = setInterval(async () => {
+            if (!AppState.processing.isRunning) return;
+            try {
+                const processedCount = AppState.memory.queue.filter(m => m.processed).length;
+                await MemoryHistoryDB.saveState(processedCount);
+            } catch (e) {
+                Logger.warn('AutoSave', '自动保存失败:', e.message);
+            }
+        }, interval);
+
+        beforeUnloadHandler = () => {
+            if (AppState.processing.isRunning && AppState.memory.queue.length > 0) {
+                const processedCount = AppState.memory.queue.filter(m => m.processed).length;
+                try { MemoryHistoryDB.saveState(processedCount); } catch (e) {}
+            }
+        };
+        window.addEventListener('beforeunload', beforeUnloadHandler);
+    }
+
+    function clearAutoSave() {
+        if (autoSaveTimerId) {
+            clearInterval(autoSaveTimerId);
+            autoSaveTimerId = null;
+        }
+        if (beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', beforeUnloadHandler);
+            beforeUnloadHandler = null;
+        }
+    }
+
     async function saveTaskState() {
         const state = {
             version: '2.9.0',
@@ -242,5 +277,7 @@ export function createTaskStateService(deps = {}) {
         loadTaskState,
         checkAndRestoreState,
         restoreExistingState,
+        setupAutoSave,
+        clearAutoSave,
     };
 }

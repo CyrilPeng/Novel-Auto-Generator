@@ -635,6 +635,8 @@ const coreServices = createCoreServices({
         getProcessingStatus,
         buildWorldbookSummary,
         estimateTokenCount,
+        setupAutoSave: () => taskStateService.setupAutoSave(),
+        clearAutoSave: () => taskStateService.clearAutoSave(),
     }),
     rerollDeps: ({ apiService, parserService }) => ({
         AppState,

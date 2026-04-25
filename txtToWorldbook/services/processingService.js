@@ -32,6 +32,8 @@
         getProcessingStatus,
         buildWorldbookSummary,
         estimateTokenCount,
+        setupAutoSave,
+        clearAutoSave,
     } = deps;
 
     const transitionTo = (status) => {
@@ -365,6 +367,7 @@ ${'='.repeat(50)}
 
     function handleStopProcessing() {
         transitionTo('stopped');
+        if (typeof clearAutoSave === 'function') clearAutoSave();
 
         if (AppState.globalSemaphore) AppState.globalSemaphore.abort();
         AppState.processing.activeTasks.clear();
@@ -379,6 +382,8 @@ ${'='.repeat(50)}
 
         showProgressSection(true);
         transitionTo('running');
+
+        if (typeof setupAutoSave === 'function') setupAutoSave();
 
         updateStopButtonVisibility(true);
 
@@ -495,6 +500,7 @@ ${'='.repeat(50)}
             transitionTo('idle');
             updateStartButtonState(false);
             updateStopButtonVisibility(false);
+            if (typeof clearAutoSave === 'function') clearAutoSave();
 
         } catch (error) {
             ErrorHandler.handle(error, 'startAIProcessing');
@@ -503,6 +509,7 @@ ${'='.repeat(50)}
             if (currentStatus() !== 'stopped') transitionTo('idle');
             updateStopButtonVisibility(false);
             updateStartButtonState(false);
+            if (typeof clearAutoSave === 'function') clearAutoSave();
         }
     }
 
@@ -512,6 +519,7 @@ ${'='.repeat(50)}
 
         transitionTo('repairing');
 
+        if (typeof setupAutoSave === 'function') setupAutoSave();
         showProgressSection(true);
         updateStopButtonVisibility(true);
         updateProgress(0, `修复中 (0/${failedMemories.length})`);
@@ -535,6 +543,7 @@ ${'='.repeat(50)}
         ErrorHandler.showUserSuccess(`修复完成！成功: ${stats.successCount}, 仍失败: ${stats.stillFailedCount}`);
         updateMemoryQueueUI();
         updateStopButtonVisibility(false);
+        if (typeof clearAutoSave === 'function') clearAutoSave();
     }
 
     return {
