@@ -65,6 +65,7 @@ export function createFeatureServices(deps = {}) {
         buildAliasMergePlanHtml,
         ListRenderer,
         setManualMergeHighlight,
+        saveWorldbookSnapshot,
     } = deps;
 
     const entryConfigModals = createEntryConfigModals({
@@ -143,6 +144,7 @@ export function createFeatureServices(deps = {}) {
         ErrorHandler,
         confirmAction,
         updateWorldbookPreview,
+        saveWorldbookSnapshot,
     });
 
     const helpModal = createHelpModal({
@@ -219,6 +221,7 @@ export function createFeatureServices(deps = {}) {
         buildAliasMergePlanHtml,
         handleStopProcessing,
         setManualMergeHighlight,
+        saveWorldbookSnapshot,
     });
 
     return {

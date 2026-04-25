@@ -590,6 +590,7 @@ const coreServices = createCoreServices({
         getIncrementalMode: () => AppState.processing.incrementalMode,
         saveHistory: (...args) => MemoryHistoryDB.saveHistory(...args),
         debugLog,
+        _getWorldbook: () => AppState.worldbook.generated,
     },
     tokenMetricsDeps: {
         tokenCacheGet: (text) => TokenCache.get(text),
@@ -718,6 +719,7 @@ const {
     mergeWorldbookDataIncremental,
     findChangedEntries,
     mergeWorldbookDataWithHistory,
+    saveWorldbookSnapshot,
 } = worldbookService;
 const {
     convertToSillyTavernFormat,
@@ -1040,6 +1042,7 @@ const {
         buildAliasMergePlanHtml,
         ListRenderer,
         promptAction,
+        saveWorldbookSnapshot,
     }),
 });
 const featureBindings = createFeatureBindings({

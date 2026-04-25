@@ -7,6 +7,7 @@ export function createReplaceModal(deps = {}) {
         ErrorHandler,
         confirmAction,
         updateWorldbookPreview,
+        saveWorldbookSnapshot,
     } = deps;
 
     function previewReplace(findText, replaceWith, inWorldbook, inResults) {
@@ -476,6 +477,9 @@ export function createReplaceModal(deps = {}) {
                 return;
             }
 
+            if (typeof saveWorldbookSnapshot === 'function') {
+                await saveWorldbookSnapshot('快照-批量替换前');
+            }
             const result = executeReplace(findText, replaceWith, inWorldbook, inResults);
             updateWorldbookPreview();
 

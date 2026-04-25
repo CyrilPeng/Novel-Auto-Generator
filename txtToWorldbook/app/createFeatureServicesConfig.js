@@ -54,6 +54,7 @@ export function createFeatureServicesConfig(deps = {}) {
         buildAliasMergePlanHtml,
         ListRenderer,
         promptAction,
+        saveWorldbookSnapshot,
     } = deps;
 
     return {
@@ -111,6 +112,7 @@ export function createFeatureServicesConfig(deps = {}) {
         buildAliasMergePlanHtml,
         ListRenderer,
         promptAction,
+        saveWorldbookSnapshot,
         setManualMergeHighlight: (category, entryName) => worldbookView?.setManualMergeHighlight(category, entryName),
     };
 }

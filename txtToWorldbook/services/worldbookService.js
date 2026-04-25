@@ -128,6 +128,11 @@
         return changedEntries;
     }
 
+    async function saveWorldbookSnapshot(snapshotTitle) {
+        const snapshot = JSON.parse(JSON.stringify(deps._getWorldbook ? deps._getWorldbook() : {}));
+        await saveHistory(-1, snapshotTitle, snapshot, snapshot, []);
+    }
+
     return {
         normalizeWorldbookEntry,
         normalizeWorldbookData,
@@ -135,5 +140,6 @@
         mergeWorldbookDataIncremental,
         findChangedEntries,
         mergeWorldbookDataWithHistory,
+        saveWorldbookSnapshot,
     };
 }

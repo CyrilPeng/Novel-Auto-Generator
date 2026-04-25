@@ -33,6 +33,7 @@ export function createMergeWorkflowService(deps = {}) {
         buildAliasPairResultsHtml,
         buildAliasMergePlanHtml,
         handleStopProcessing,
+        saveWorldbookSnapshot,
     } = deps;
 
     const mergedService = mergeService || (createMergeService && createMergeService({
@@ -456,6 +457,9 @@ export function createMergeWorkflowService(deps = {}) {
     }
 
     async function consolidateSelectedEntries(entries) {
+        if (typeof saveWorldbookSnapshot === 'function') {
+            await saveWorldbookSnapshot('快照-条目整理前');
+        }
         showProgressSection(true);
         setProcessingStatus('running');
         updateProgress(0, '开始整理条目...');
@@ -834,6 +838,9 @@ export function createMergeWorkflowService(deps = {}) {
             const involvedStr = selectedEntries.map((e) => `[${e.category}] ${e.name}`).join('\n');
             if (!await confirmAction(`确定将以下 ${selectedEntries.length} 个条目合并为「${mainName}」？\n目标分类: ${targetCategory}\n\n${involvedStr}\n\n⚠️ 原条目将被删除！`, { title: '确认手动合并', danger: true })) return;
 
+            if (typeof saveWorldbookSnapshot === 'function') {
+                await saveWorldbookSnapshot('快照-手动合并前');
+            }
             const mergeResult = mergedService.executeManualMerge(selectedEntries, mainName, targetCategory, dedupKeywords, addSeparator);
             if (!mergeResult.success) {
                 ErrorHandler.showUserError(mergeResult.error || '手动合并失败，未匹配到可合并的条目');
@@ -868,6 +875,9 @@ export function createMergeWorkflowService(deps = {}) {
         const categoryList = Object.keys(mergeByCategory).map((c) => `${c}(${mergeByCategory[c].length}组)`).join('、');
         if (!await confirmAction(`确定合并选中的 ${totalSelected} 组条目？\n涉及分类: ${categoryList}`, { title: '批量合并重复条目', danger: true })) return;
 
+        if (typeof saveWorldbookSnapshot === 'function') {
+            await saveWorldbookSnapshot('快照-别名合并前');
+        }
         const totalMerged = await mergedService.executeAliasMergeByCategory(mergeByCategory, aiResultByCategory);
 
         updateWorldbookPreview();
