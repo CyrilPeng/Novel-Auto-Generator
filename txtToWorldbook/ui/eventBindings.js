@@ -54,6 +54,7 @@ export function bindExportEvents(deps = {}) {
         exportCharacterCard,
         exportVolumes,
         exportToSillyTavern,
+        exportChangedEntries,
         showMemoryContentModal,
     } = deps;
 
@@ -67,6 +68,10 @@ export function bindExportEvents(deps = {}) {
     document.getElementById('ttw-export-json').addEventListener('click', exportCharacterCard);
     document.getElementById('ttw-export-volumes').addEventListener('click', exportVolumes);
     document.getElementById('ttw-export-st').addEventListener('click', exportToSillyTavern);
+    const exportChangedBtn = document.getElementById('ttw-export-changed');
+    if (exportChangedBtn && typeof exportChangedEntries === 'function') {
+        exportChangedBtn.addEventListener('click', exportChangedEntries);
+    }
     document.querySelector('[data-section="settings"]').addEventListener('click', () => {
         document.querySelector('.ttw-settings-section').classList.toggle('collapsed');
     });

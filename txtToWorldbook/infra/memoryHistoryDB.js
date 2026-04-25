@@ -604,7 +604,29 @@
                 return toDelete.length;
             }
             return 0;
-        }
+        },
+
+        async saveExportTimestamp() {
+            const db = await this.openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([this.metaStoreName], 'readwrite');
+                const store = transaction.objectStore(this.metaStoreName);
+                const request = store.put({ key: 'lastExportTimestamp', value: Date.now() });
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        },
+
+        async getLastExportTimestamp() {
+            const db = await this.openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([this.metaStoreName], 'readonly');
+                const store = transaction.objectStore(this.metaStoreName);
+                const request = store.get('lastExportTimestamp');
+                request.onsuccess = () => resolve(request.result?.value || null);
+                request.onerror = () => reject(request.error);
+            });
+        },
     };
     return MemoryHistoryDB;
 }

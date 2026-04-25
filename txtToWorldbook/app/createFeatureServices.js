@@ -174,6 +174,7 @@ export function createFeatureServices(deps = {}) {
 
     const importExportService = createImportExportService({
         AppState,
+        MemoryHistoryDB,
         ErrorHandler,
         defaultSettings,
         getAllVolumesWorldbook,

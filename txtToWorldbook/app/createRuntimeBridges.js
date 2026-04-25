@@ -76,6 +76,7 @@ export function createFeatureBindings(featureServices = {}) {
         exportVolumes: importExportService.exportVolumes,
         exportSettings: importExportService.exportSettings,
         importSettings: importExportService.importSettings,
+        exportChangedEntries: importExportService.exportChangedEntries,
         showConsolidateCategorySelector: mergeWorkflowService.showConsolidateCategorySelector,
         showManualMergeUI: mergeWorkflowService.showManualMergeUI,
         showAliasMergeUI: mergeWorkflowService.showAliasMergeUI,

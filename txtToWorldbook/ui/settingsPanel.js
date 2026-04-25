@@ -443,6 +443,7 @@ function buildResultSectionHtml() {
                 <button id="ttw-export-json" class="ttw-btn ttw-btn-primary">🃏 导出角色卡</button>
                 <button id="ttw-export-volumes" class="ttw-btn" style="display:none;">📦 分卷导出</button>
                 <button id="ttw-export-st" class="ttw-btn ttw-btn-primary">📥 导出世界书</button>
+                <button id="ttw-export-changed" class="ttw-btn">📤 导出变更</button>
             </div>
         </div>
     </div>`;

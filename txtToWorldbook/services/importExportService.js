@@ -1,6 +1,7 @@
 export function createImportExportService(deps = {}) {
     const {
         AppState,
+        MemoryHistoryDB,
         ErrorHandler,
         defaultSettings,
         getAllVolumesWorldbook,
@@ -303,11 +304,83 @@ export function createImportExportService(deps = {}) {
         input.click();
     }
 
+    async function exportChangedEntries() {
+        try {
+            const lastExportTs = MemoryHistoryDB ? await MemoryHistoryDB.getLastExportTimestamp() : null;
+
+            if (!lastExportTs) {
+                exportToSillyTavern();
+                if (MemoryHistoryDB) await MemoryHistoryDB.saveExportTimestamp();
+                return;
+            }
+
+            const allHistory = MemoryHistoryDB ? await MemoryHistoryDB.getAllHistory() : [];
+            const recentHistory = allHistory.filter(h => h.timestamp > lastExportTs);
+
+            if (recentHistory.length === 0) {
+                ErrorHandler.showUserSuccess('自上次导出以来没有变更');
+                return;
+            }
+
+            const changedEntryKeys = new Set();
+            for (const record of recentHistory) {
+                if (!record.changedEntries) continue;
+                for (const change of record.changedEntries) {
+                    if (change.type !== 'delete') {
+                        changedEntryKeys.add(`${change.category}::${change.entryName}`);
+                    }
+                }
+            }
+
+            if (changedEntryKeys.size === 0) {
+                ErrorHandler.showUserSuccess('自上次导出以来没有新增/修改的条目');
+                return;
+            }
+
+            const changedWorldbook = {};
+            const worldbook = AppState.worldbook.generated;
+            for (const key of changedEntryKeys) {
+                const [category, entryName] = key.split('::');
+                if (worldbook[category] && worldbook[category][entryName]) {
+                    if (!changedWorldbook[category]) changedWorldbook[category] = {};
+                    changedWorldbook[category][entryName] = worldbook[category][entryName];
+                }
+            }
+
+            const entryCount = Object.values(changedWorldbook).reduce((sum, cat) => sum + Object.keys(cat).length, 0);
+            if (entryCount === 0) {
+                ErrorHandler.showUserSuccess('变更的条目已不存在于当前世界书中');
+                return;
+            }
+
+            const timeString = new Date()
+                .toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                .replace(/[:/\s]/g, '')
+                .replace(/,/g, '-');
+            const baseName = getExportBaseName('变更');
+            const stFormat = convertToSillyTavernFormat(changedWorldbook);
+            const fileName = `${baseName}-变更导出-${timeString}.json`;
+            const blob = new Blob([JSON.stringify(stFormat, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            await MemoryHistoryDB.saveExportTimestamp();
+            ErrorHandler.showUserSuccess(`已导出 ${entryCount} 个变更条目`);
+        } catch (error) {
+            ErrorHandler.showUserError('增量导出失败: ' + error.message);
+        }
+    }
+
     return {
         exportCharacterCard,
         exportToSillyTavern,
         exportVolumes,
         exportSettings,
         importSettings,
+        exportChangedEntries,
     };
 }

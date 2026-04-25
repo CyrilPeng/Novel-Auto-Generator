@@ -23,6 +23,7 @@ export function createFeaturePlaceholders() {
         exportVolumes: noop,
         exportSettings: noop,
         importSettings: noop,
+        exportChangedEntries: noopAsync,
         showConsolidateCategorySelector: noop,
         showManualMergeUI: noop,
         showAliasMergeUI: noop,

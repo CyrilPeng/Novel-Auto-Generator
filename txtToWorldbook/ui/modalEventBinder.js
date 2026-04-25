@@ -60,6 +60,7 @@ export function createModalEventBinder(deps) {
         exportCharacterCard,
         exportVolumes,
         exportToSillyTavern,
+        exportChangedEntries,
         showMemoryContentModal,
     } = deps;
 
@@ -138,6 +139,7 @@ export function createModalEventBinder(deps) {
             exportCharacterCard,
             exportVolumes,
             exportToSillyTavern,
+            exportChangedEntries,
             showMemoryContentModal,
         });
     }

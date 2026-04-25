@@ -76,6 +76,7 @@ export function createShellRuntimeConfig(deps = {}) {
         exportCharacterCard,
         exportVolumes,
         exportToSillyTavern,
+        exportChangedEntries,
         showMemoryContentModal,
         updateStartButtonState,
         showQueueSection,
@@ -179,6 +180,7 @@ export function createShellRuntimeConfig(deps = {}) {
             exportCharacterCard,
             exportVolumes,
             exportToSillyTavern,
+            exportChangedEntries,
             showMemoryContentModal,
         }),
         fileImportDeps: {
