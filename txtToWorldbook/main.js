@@ -913,6 +913,9 @@ const {
     getEnabledCategories,
     handleFetchModelList,
     handleQuickTestModel,
+    defaultWorldbookPrompt,
+    defaultPlotPrompt,
+    defaultStylePrompt,
 });
 
     // ========== UI ==========

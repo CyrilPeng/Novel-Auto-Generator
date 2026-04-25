@@ -31,6 +31,9 @@ export function createUiHelpers(deps = {}) {
         getEnabledCategories,
         handleFetchModelList,
         handleQuickTestModel,
+        defaultWorldbookPrompt,
+        defaultPlotPrompt,
+        defaultStylePrompt,
     } = deps;
 
     let apiModeView = null;
@@ -116,6 +119,10 @@ export function createUiHelpers(deps = {}) {
         buildSystemPrompt,
         getChapterForcePrompt,
         getEnabledCategories,
+        defaultWorldbookPrompt,
+        defaultPlotPrompt,
+        defaultStylePrompt,
+        saveCurrentSettings,
     });
 
     const modelActionsView = createModelActionsView({
