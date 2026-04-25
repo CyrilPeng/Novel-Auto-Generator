@@ -520,7 +520,7 @@ export function createMergeWorkflowService(deps = {}) {
         if (failed > 0) {
             msg += '\n\n再次点击"整理条目"可以只选失败项重试';
         }
-        ErrorHandler.showUserError(msg);
+        ErrorHandler.showUserSuccess(msg);
     }
 
     function showManualMergeUI(onMergeComplete) {

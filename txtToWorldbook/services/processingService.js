@@ -368,7 +368,7 @@ ${'='.repeat(50)}
         AppState.memory.queue.forEach(m => { if (m.processing) m.processing = false; });
         updateMemoryQueueUI();
         updateStreamContent('\n⏸️ 已暂停\n');
-        updateStopButtonVisibility(true);
+        updateStopButtonVisibility(false);
     }
 
     async function handleStartProcessing() {
@@ -489,12 +489,14 @@ ${'='.repeat(50)}
             await MemoryHistoryDB.clearState();
             transitionTo('idle');
             updateStartButtonState(false);
+            updateStopButtonVisibility(false);
 
         } catch (error) {
             ErrorHandler.handle(error, 'startAIProcessing');
             updateProgress(0, `❌ 出错: ${error.message}`);
             updateStreamContent(`\n❌ 错误: ${error.message}\n`);
             if (currentStatus() !== 'stopped') transitionTo('idle');
+            updateStopButtonVisibility(false);
             updateStartButtonState(false);
         }
     }
@@ -527,6 +529,7 @@ ${'='.repeat(50)}
 
         ErrorHandler.showUserSuccess(`修复完成！成功: ${stats.successCount}, 仍失败: ${stats.stillFailedCount}`);
         updateMemoryQueueUI();
+        updateStopButtonVisibility(false);
     }
 
     return {

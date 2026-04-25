@@ -43,14 +43,14 @@ export function createSettingsPersistenceService(deps) {
             AppState.settings.customApiModel = modelInput?.value || 'gemini-2.5-flash';
         }
 
-        try {
-            localStorage.setItem('txtToWorldbookSettings', JSON.stringify(AppState.settings));
-        } catch (e) { }
-
         AppState.settings.allowRecursion = document.getElementById('ttw-allow-recursion')?.checked ?? false;
         AppState.settings.filterResponseTags = document.getElementById('ttw-filter-tags')?.value || 'thinking,/think';
         AppState.settings.debugMode = document.getElementById('ttw-debug-mode')?.checked ?? false;
         AppState.settings.plotOutlineExportConfig = AppState.config.plotOutline;
+
+        try {
+            localStorage.setItem('txtToWorldbookSettings', JSON.stringify(AppState.settings));
+        } catch (e) { }
     }
 
     function loadSavedSettings() {
