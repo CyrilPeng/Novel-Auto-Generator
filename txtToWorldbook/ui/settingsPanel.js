@@ -53,7 +53,7 @@ function buildParallelConfigHtml() {
         <div style="margin-top:10px;">
             <select id="ttw-parallel-mode" class="ttw-select">
                 <option value="independent">🚀 独立模式 - 最快，每章独立提取后合并</option>
-                <option value="batch">📦 分批模式 - 批次间累积上下文，更连贯</option>
+                <option value="batch">📦 分批模式 - 批次间自动同步世界书摘要，更连贯</option>
             </select>
         </div>
     </div>`;
@@ -437,13 +437,13 @@ function buildResultSectionHtml() {
                 <button id="ttw-replace-btn" class="ttw-btn">🔄 替换</button>
                 <button id="ttw-view-worldbook" class="ttw-btn">📖 查看世界书</button>
                 <button id="ttw-view-history" class="ttw-btn">📜 修改历史</button>
-                <button id="ttw-consolidate-entries" class="ttw-btn" title="用AI整理条目，去除重复信息">🧹 整理条目</button>
+                <button id="ttw-consolidate-entries" class="ttw-btn" title="用AI整理条目，去除重复信息（执行前自动保存快照）">🧹 整理条目</button>
                 <button id="ttw-clean-tags" class="ttw-btn" title="清除条目中的标签内容（不消耗Token）">🏷️ 清除标签</button>
-                <button id="ttw-alias-merge" class="ttw-btn" title="识别各分类中同一事物的不同称呼并合并">🔗 别名合并</button>
+                <button id="ttw-alias-merge" class="ttw-btn" title="识别各分类中同一事物的不同称呼并合并（执行前自动保存快照）">🔗 别名合并</button>
                 <button id="ttw-export-json" class="ttw-btn ttw-btn-primary">🃏 导出角色卡</button>
                 <button id="ttw-export-volumes" class="ttw-btn" style="display:none;">📦 分卷导出</button>
                 <button id="ttw-export-st" class="ttw-btn ttw-btn-primary">📥 导出世界书</button>
-                <button id="ttw-export-changed" class="ttw-btn">📤 导出变更</button>
+                <button id="ttw-export-changed" class="ttw-btn" title="仅导出上次导出以来新增或修改的条目">📤 导出变更</button>
             </div>
         </div>
     </div>`;
