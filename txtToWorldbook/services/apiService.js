@@ -17,58 +17,71 @@ export function createApiService(deps = {}) {
         updateStreamContent(`\n📤 ${logPrefix} 发送请求到酒馆API (${messages.length}条消息)...\n`);
         debugLog(`${logPrefix} 酒馆API开始调用, 消息数=${messages.length}, 总长度=${combinedPrompt.length}, 超时=${timeout / 1000}秒`);
 
-        try {
-            if (typeof SillyTavern === 'undefined' || !SillyTavern.getContext) {
-                throw new Error('无法访问SillyTavern上下文');
+        return APICaller.withRetry(async (attempt) => {
+            if (attempt > 0) {
+                updateStreamContent(`🔄 ${logPrefix} 酒馆API 重试 #${attempt}...\n`);
+                debugLog(`${logPrefix} 酒馆API重试 #${attempt}`);
             }
-
-            const context = SillyTavern.getContext();
-            debugLog(`${logPrefix} 获取到SillyTavern上下文`);
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error(`API请求超时 (${timeout / 1000}秒)`)), timeout);
-            });
-
-            let result;
-
-            if (typeof context.generateRaw === 'function') {
-                try {
-                    debugLog(`${logPrefix} 尝试generateRaw消息数组格式 (ST 1.13.2+)`);
-                    result = await Promise.race([
-                        context.generateRaw({ prompt: messages }),
-                        timeoutPromise,
-                    ]);
-                    debugLog(`${logPrefix} generateRaw消息数组格式成功`);
-                } catch (rawError) {
-                    if (rawError.message?.includes('超时') || rawError.message?.includes('timeout') ||
-                        rawError.message?.includes('API') || rawError.message?.includes('limit')) {
-                        throw rawError;
-                    }
-                    debugLog(`${logPrefix} 消息数组格式不支持(${rawError.message})，回退字符串模式`);
-                    updateStreamContent(`⚠️ ${logPrefix} 酒馆不支持消息数组格式，已回退为字符串模式\n`);
-                    result = await Promise.race([
-                        context.generateRaw(combinedPrompt, '', false),
-                        timeoutPromise,
-                    ]);
+            try {
+                if (typeof SillyTavern === 'undefined' || !SillyTavern.getContext) {
+                    throw new Error('无法访问SillyTavern上下文');
                 }
-            } else if (typeof context.generateQuietPrompt === 'function') {
-                debugLog(`${logPrefix} 使用generateQuietPrompt（字符串模式）`);
-                updateStreamContent(`ℹ️ ${logPrefix} 酒馆API: 使用generateQuietPrompt（字符串模式，消息角色不生效）\n`);
-                result = await Promise.race([
-                    context.generateQuietPrompt(combinedPrompt, false, false),
-                    timeoutPromise,
-                ]);
-            } else {
-                throw new Error('无法找到可用的生成函数');
-            }
 
-            debugLog(`${logPrefix} 收到响应, 长度=${result.length}字符`);
-            updateStreamContent(`📥 ${logPrefix} 收到响应 (${result.length}字符)\n`);
-            return result;
-        } catch (error) {
-            debugLog(`${logPrefix} 酒馆API出错: ${error.message}`);
-            updateStreamContent(`\n❌ ${logPrefix} 错误: ${error.message}\n`);
-            throw error;
-        }
+                const context = SillyTavern.getContext();
+                debugLog(`${logPrefix} 获取到SillyTavern上下文`);
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error(`API请求超时 (${timeout / 1000}秒)`)), timeout);
+                });
+
+                let result;
+
+                if (typeof context.generateRaw === 'function') {
+                    try {
+                        debugLog(`${logPrefix} 尝试generateRaw消息数组格式 (ST 1.13.2+)`);
+                        result = await Promise.race([
+                            context.generateRaw({ prompt: messages }),
+                            timeoutPromise,
+                        ]);
+                        debugLog(`${logPrefix} generateRaw消息数组格式成功`);
+                    } catch (rawError) {
+                        if (rawError.message?.includes('超时') || rawError.message?.includes('timeout') ||
+                            rawError.message?.includes('API') || rawError.message?.includes('limit')) {
+                            throw rawError;
+                        }
+                        debugLog(`${logPrefix} 消息数组格式不支持(${rawError.message})，回退字符串模式`);
+                        updateStreamContent(`⚠️ ${logPrefix} 酒馆不支持消息数组格式，已回退为字符串模式\n`);
+                        result = await Promise.race([
+                            context.generateRaw(combinedPrompt, '', false),
+                            timeoutPromise,
+                        ]);
+                    }
+                } else if (typeof context.generateQuietPrompt === 'function') {
+                    debugLog(`${logPrefix} 使用generateQuietPrompt（字符串模式）`);
+                    updateStreamContent(`ℹ️ ${logPrefix} 酒馆API: 使用generateQuietPrompt（字符串模式，消息角色不生效）\n`);
+                    result = await Promise.race([
+                        context.generateQuietPrompt(combinedPrompt, false, false),
+                        timeoutPromise,
+                    ]);
+                } else {
+                    throw new Error('无法找到可用的生成函数');
+                }
+
+                debugLog(`${logPrefix} 收到响应, 长度=${result.length}字符`);
+                updateStreamContent(`📥 ${logPrefix} 收到响应 (${result.length}字符)\n`);
+                return result;
+            } catch (error) {
+                debugLog(`${logPrefix} 酒馆API出错: ${error.message}`);
+                updateStreamContent(`\n❌ ${logPrefix} 错误: ${error.message}\n`);
+                throw error;
+            }
+        }, {
+            retries: 2,
+            shouldRetry: (error) => APICaller.isRetryableError(error),
+            onRetry: async (error, nextAttempt, delay) => {
+                Logger.warn('API', `${logPrefix} 酒馆API重试 #${nextAttempt}: ${error.message}`);
+                updateStreamContent(`⏳ ${logPrefix} ${delay / 1000}秒后重试...\n`);
+            },
+        });
     }
 
     function buildCustomApiRequest(messages) {
@@ -224,10 +237,10 @@ export function createApiService(deps = {}) {
                 return result;
             }, {
                 retries: maxRetries,
-                shouldRetry: (error) => APICaller.isRateLimitError(error),
+                shouldRetry: (error) => APICaller.isRetryableError(error),
                 onRetry: async (error, nextAttempt, delay) => {
-                    Logger.warn('API', `限流重试 #${nextAttempt}: ${error.message}`);
-                    updateStreamContent(`⏳ 遇到限流，${delay}ms后重试...\n`);
+                    Logger.warn('API', `重试 #${nextAttempt}: ${error.message}`);
+                    updateStreamContent(`⏳ 遇到瞬态错误，${delay / 1000}秒后重试...\n`);
                 },
             });
         } catch (error) {

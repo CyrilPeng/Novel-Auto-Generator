@@ -158,6 +158,18 @@ const APICaller = {
 		return error?.status === 429 || message.includes('resource_exhausted') || message.includes('rate limit');
 	},
 
+	isRetryableError(error) {
+		const status = error?.status;
+		if (status === 429 || status === 500 || status === 502 || status === 503 || status === 529) return true;
+		const message = String(error?.responseText || error?.message || '').toLowerCase();
+		const patterns = [
+			'rate limit', 'resource_exhausted', 'overloaded', 'server error',
+			'temporarily unavailable', 'econnreset', 'network error', 'fetch failed',
+			'internal server error', 'bad gateway', 'service unavailable',
+		];
+		return patterns.some(p => message.includes(p));
+	},
+
 	async withRetry(task, config = {}) {
 		const { retries = 0, onRetry = null, shouldRetry = null } = config;
 		let attempt = 0;
