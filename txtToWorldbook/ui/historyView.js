@@ -17,7 +17,9 @@ export function createHistoryView(deps = {}) {
         try {
             await MemoryHistoryDB.cleanDuplicateHistory();
             historyList = await MemoryHistoryDB.getAllHistory();
-        } catch (e) {}
+        } catch (e) {
+            console.warn('[TTW] 历史记录加载失败:', e.message);
+        }
 
         let listHtml = historyList.length === 0
             ? '<div style="text-align:center;color:#888;padding:10px;font-size:11px;">暂无历史</div>'

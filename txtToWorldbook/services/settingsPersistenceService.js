@@ -50,7 +50,9 @@ export function createSettingsPersistenceService(deps) {
 
         try {
             localStorage.setItem('txtToWorldbookSettings', JSON.stringify(AppState.settings));
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[TTW] 设置保存失败:', e.message);
+        }
     }
 
     function loadSavedSettings() {
@@ -80,7 +82,9 @@ export function createSettingsPersistenceService(deps) {
                     AppState.config.plotOutline = AppState.settings.plotOutlineExportConfig;
                 }
             }
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[TTW] 设置加载失败，使用默认值:', e.message);
+        }
 
         updateSettingsUI();
         updateChapterRegexUI();

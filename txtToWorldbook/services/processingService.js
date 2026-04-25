@@ -194,6 +194,9 @@ ${'='.repeat(50)}
                     task.memory.failed = true;
                     task.memory.failedError = error.message;
                     task.memory.processed = true;
+                    if (!AppState.memory.failedQueue.find(m => m.index === task.index)) {
+                        AppState.memory.failedQueue.push({ index: task.index, memory: task.memory, error: error.message });
+                    }
                 }
                 updateMemoryQueueUI();
                 return null;
@@ -372,6 +375,8 @@ ${'='.repeat(50)}
     }
 
     async function handleStartProcessing() {
+        if (currentStatus() === 'running' || currentStatus() === 'repairing' || currentStatus() === 'rerolling') return;
+
         showProgressSection(true);
         transitionTo('running');
 

@@ -94,7 +94,7 @@ import { createWorldbookRuntimeService } from './services/worldbookRuntimeServic
 import { createAppContext } from './app/createApp.js';
 import { createCoreServices } from './app/createCoreServices.js';
 import { createFeatureServicesConfig } from './app/createFeatureServicesConfig.js';
-import { createCompatibilityAliases, createFeaturePlaceholders, createPublicApiConfig, createShellPlaceholders } from './app/createMainBindings.js';
+import { createFeaturePlaceholders, createPublicApiConfig, createShellPlaceholders } from './app/createMainBindings.js';
 import { createPublicApi } from './app/publicApi.js';
 import { createFeatureBindings, createRerollBridge, createShellRuntimeBindings } from './app/createRuntimeBridges.js';
 import { createShellRuntimeConfig } from './app/createShellRuntimeConfig.js';
@@ -198,17 +198,6 @@ let getEntryTotalTokens = () => 0;
 
 // ========== UI常量 ==========
 const UI = {
-	TEXT: {
-		CONFIRM_DELETE: '确定要删除吗？',
-		CONFIRM_MERGE: '确定要合并这些条目吗？',
-		CONFIRM_RESET: '确定要重置吗？此操作不可撤销。',
-		PROCESSING: '处理中...',
-		SUCCESS: '操作成功',
-		FAILED: '操作失败',
-		NO_FILE: '请先选择文件',
-		NO_API_KEY: '请输入API Key',
-		SELECT_START: '请选择起始位置'
-	},
 	ICON: {
 		SUCCESS: '✅',
 		FAILED: '❌',
@@ -1198,22 +1187,6 @@ _bindModalEvents = shellRuntimeBindings.bindModalEvents;
 closeModal = shellRuntimeBindings.closeModal;
 open = shellRuntimeBindings.open;
 
-    // ========== 过渡期兼容别名（热修） ==========
-    const {
-        startAIProcessing,
-        fetchModelList,
-        quickTestModel,
-        startNewVolume,
-        repairSingleMemory,
-        repairMemoryWithSplit,
-    } = createCompatibilityAliases({
-        handleStartProcessing,
-        handleFetchModelList,
-        handleQuickTestModel,
-        handleStartNewVolume,
-        handleRepairSingleMemory,
-        handleRepairMemoryWithSplit,
-    });
     // ========== 公开 API ==========
     window.TxtToWorldbook = createPublicApi(createPublicApiConfig({
         open,

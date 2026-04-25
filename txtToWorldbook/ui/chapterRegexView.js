@@ -11,7 +11,19 @@ export function createChapterRegexView(deps = {}) {
     function detectChaptersWithRegex(content, regexPattern) {
         try {
             const regex = new RegExp(regexPattern, 'g');
-            return [...content.matchAll(regex)];
+            const results = [];
+            const maxTime = 3000;
+            const startTime = Date.now();
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+                results.push(match);
+                if (Date.now() - startTime > maxTime) {
+                    Logger.warn('Regex', '正则匹配超时(3秒)，已中断');
+                    break;
+                }
+                if (match[0].length === 0) regex.lastIndex++;
+            }
+            return results;
         } catch (e) {
             Logger.error('Regex', '正则表达式错误:', e);
             return [];

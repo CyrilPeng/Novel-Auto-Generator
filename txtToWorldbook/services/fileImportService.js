@@ -22,6 +22,12 @@ export function createFileImportService(deps = {}) {
             return;
         }
 
+        const maxFileSize = 100 * 1024 * 1024;
+        if (file.size > maxFileSize) {
+            ErrorHandler.showUserError(`文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），最大支持 100 MB`);
+            return;
+        }
+
         try {
             const { encoding, content } = await fileUtils.detectBestEncoding(file);
             AppState.file.current = file;
@@ -85,7 +91,18 @@ export function createFileImportService(deps = {}) {
         AppState.memory.queue = [];
 
         const chapterRegex = new RegExp(AppState.config.chapterRegex.pattern, 'g');
-        const matches = [...content.matchAll(chapterRegex)];
+        const matches = [];
+        const maxTime = 5000;
+        const startTime = Date.now();
+        let match;
+        while ((match = chapterRegex.exec(content)) !== null) {
+            matches.push(match);
+            if (Date.now() - startTime > maxTime) {
+                Logger.warn('FileImport', '章节正则匹配超时(5秒)，已中断');
+                break;
+            }
+            if (match[0].length === 0) chapterRegex.lastIndex++;
+        }
 
         if (matches.length > 0) {
             const chapters = [];
