@@ -54,6 +54,24 @@
         return AppState.processing.status || 'idle';
     };
 
+    const chapterTimings = [];
+
+    function formatETA(ms) {
+        if (!ms || ms < 0) return '';
+        const totalSec = Math.ceil(ms / 1000);
+        if (totalSec < 60) return `约${totalSec}秒`;
+        const min = Math.floor(totalSec / 60);
+        const sec = totalSec % 60;
+        return sec > 0 ? `约${min}分${sec}秒` : `约${min}分钟`;
+    }
+
+    function getETAText(remainingChapters) {
+        if (chapterTimings.length === 0 || remainingChapters <= 0) return '';
+        const recent = chapterTimings.slice(-10);
+        const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+        return formatETA(avg * remainingChapters);
+    }
+
     async function processMemoryChunkIndependent(options) {
         const { index, retryCount = 0, customPromptSuffix = '', worldbookSummaryContext = '' } = options;
         const memory = AppState.memory.queue[index];
@@ -170,6 +188,7 @@ ${'='.repeat(50)}
         debugLog(`并行处理开始: ${tasks.length}任务, 并发=${AppState.config.parallel.concurrency}, 范围=${startIndex}-${endIndex}`);
 
         let completed = 0;
+        const batchStartTime = Date.now();
         AppState.globalSemaphore = new Semaphore(AppState.config.parallel.concurrency);
 
         const processOne = async (task) => {
@@ -182,7 +201,10 @@ ${'='.repeat(50)}
 
             try {
                 debugLog(`[任务${task.index + 1}] 获取信号量成功, 开始处理`);
-                updateProgress(((startIndex + completed) / AppState.memory.queue.length) * 100, `🚀 并行处理中 (${completed}/${tasks.length})`);
+                const totalRemaining = AppState.memory.queue.length - startIndex - completed;
+                const etaText = getETAText(totalRemaining);
+                const etaSuffix = etaText ? ` | 预计剩余 ${etaText}` : '';
+                updateProgress(((startIndex + completed) / AppState.memory.queue.length) * 100, `🚀 并行处理中 (${completed}/${tasks.length})${etaSuffix}`);
                 const result = await processMemoryChunkIndependent({ index: task.index, worldbookSummaryContext: batchSummary });
                 completed++;
                 if (result) {
@@ -217,6 +239,11 @@ ${'='.repeat(50)}
         AppState.processing.activeTasks.clear();
         AppState.globalSemaphore = null;
 
+        if (results.size > 0) {
+            const avgPerChapter = (Date.now() - batchStartTime) / results.size;
+            chapterTimings.push(avgPerChapter);
+        }
+
         const orderedTasks = tasks.filter(task => results.has(task.index)).sort((a, b) => a.index - b.index);
         for (const task of orderedTasks) {
             const result = results.get(task.index);
@@ -243,9 +270,14 @@ ${'='.repeat(50)}
         const progress = ((index + 1) / AppState.memory.queue.length) * 100;
         const maxRetries = 3;
         const chapterIndex = index + 1;
+        const chunkStartTime = Date.now();
+
+        const remaining = AppState.memory.queue.length - index - 1;
+        const etaText = getETAText(remaining);
+        const etaSuffix = etaText ? ` | 预计剩余 ${etaText}` : '';
 
         debugLog(`[串行][第${chapterIndex}章] 开始, 重试=${retryCount}`);
-        updateProgress(progress, `正在处理: ${memory.title} (第${chapterIndex}章)${retryCount > 0 ? ` (重试 ${retryCount})` : ''}`);
+        updateProgress(progress, `正在处理: ${memory.title} (第${chapterIndex}章)${retryCount > 0 ? ` (重试 ${retryCount})` : ''}${etaSuffix}`);
 
         memory.processing = true;
         updateMemoryQueueUI();
@@ -327,6 +359,7 @@ ${'='.repeat(50)}
 
             memory.processed = true;
             memory.result = memoryUpdate;
+            chapterTimings.push(Date.now() - chunkStartTime);
             updateMemoryQueueUI();
 
         } catch (error) {
@@ -389,6 +422,8 @@ ${'='.repeat(50)}
         transitionTo('running');
 
         if (typeof setupAutoSave === 'function') setupAutoSave();
+
+        chapterTimings.length = 0;
 
         updateStopButtonVisibility(true);
 
