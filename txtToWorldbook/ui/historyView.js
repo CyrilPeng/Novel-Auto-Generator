@@ -1,3 +1,5 @@
+import { escapeHtmlForDisplay } from './renderer.js';
+
 export function createHistoryView(deps = {}) {
     const {
         AppState,
@@ -34,7 +36,7 @@ export function createHistoryView(deps = {}) {
                 const shortTitle = (history.memoryTitle || `第${history.memoryIndex + 1}章`).substring(0, 8);
                 listHtml += `
 			<div class="ttw-history-item" data-history-id="${history.id}">
-				<div class="ttw-history-item-title" title="${history.memoryTitle}">${shortTitle}</div>
+				<div class="ttw-history-item-title" title="${escapeHtmlForDisplay(history.memoryTitle)}">${escapeHtmlForDisplay(shortTitle)}</div>
 				<div class="ttw-history-item-time">${time}</div>
 				<div class="ttw-history-item-info">${changeCount}项</div>
 			</div>
@@ -89,7 +91,7 @@ export function createHistoryView(deps = {}) {
                 const time = new Date(history.timestamp).toLocaleString('zh-CN');
                 let html = `
 			<div style="margin-bottom:15px;padding-bottom:15px;border-bottom:1px solid #444;">
-				<h4 style="color:#e67e22;margin:0 0 10px;font-size:14px;">📝 ${history.memoryTitle}</h4>
+				<h4 style="color:#e67e22;margin:0 0 10px;font-size:14px;">📝 ${escapeHtmlForDisplay(history.memoryTitle)}</h4>
 				<div style="font-size:11px;color:#888;">时间: ${time}</div>
 				<div style="margin-top:10px;"><button class="ttw-btn ttw-btn-small ttw-btn-warning ttw-history-rollback-btn" data-history-id="${historyId}">⏪ 回退到此版本前</button></div>
 			</div>
@@ -102,7 +104,7 @@ export function createHistoryView(deps = {}) {
                         const typeColor = change.type === 'add' ? '#27ae60' : change.type === 'modify' ? '#3498db' : '#e74c3c';
                         html += `<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid ${typeColor};font-size:12px;">
 						<span style="color:${typeColor};">${typeIcon}</span>
-						<span style="color:#e67e22;margin-left:6px;">[${change.category}] ${change.entryName}</span>
+						<span style="color:#e67e22;margin-left:6px;">[${escapeHtmlForDisplay(change.category)}] ${escapeHtmlForDisplay(change.entryName)}</span>
 					</div>`;
                     });
                 } else {

@@ -1,3 +1,5 @@
+import { escapeHtmlForDisplay } from './renderer.js';
+
 export function createMemoryQueueView(deps = {}) {
     const {
         AppState,
@@ -115,7 +117,7 @@ export function createMemoryQueueView(deps = {}) {
             resultHtml = `
 <div style="margin-top:16px;">
 <h4 style="color:#9b59b6;margin:0 0 10px;">📊 处理结果</h4>
-<pre style="max-height:150px;overflow-y:auto;background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;font-size:11px;white-space:pre-wrap;word-break:break-all;">${JSON.stringify(memory.result, null, 2)}</pre>
+<pre style="max-height:150px;overflow-y:auto;background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;font-size:11px;white-space:pre-wrap;word-break:break-all;">${escapeHtmlForDisplay(JSON.stringify(memory.result, null, 2))}</pre>
 </div>
 `;
         }
@@ -132,7 +134,7 @@ export function createMemoryQueueView(deps = {}) {
 <button id="ttw-delete-memory-btn" class="ttw-btn ttw-btn-warning ttw-btn-small">🗑️ 删除</button>
 </div>
 </div>
-${memory.failedError ? `<div style="margin-bottom:16px;padding:10px;background:rgba(231,76,60,0.2);border-radius:6px;color:#e74c3c;font-size:12px;">❌ ${memory.failedError}</div>` : ''}
+${memory.failedError ? `<div style="margin-bottom:16px;padding:10px;background:rgba(231,76,60,0.2);border-radius:6px;color:#e74c3c;font-size:12px;">❌ ${escapeHtmlForDisplay(memory.failedError)}</div>` : ''}
 <div>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
 <h4 style="color:#3498db;margin:0;">📝 原文内容 <span style="font-size:12px;font-weight:normal;color:#888;">(可编辑)</span></h4>
@@ -153,7 +155,7 @@ ${resultHtml}
 
         const contentModal = ModalFactory.create({
             id: 'ttw-memory-content-modal',
-            title: `📄 ${memory.title} (第${index + 1}章)`,
+            title: `📄 ${escapeHtmlForDisplay(memory.title)} (第${index + 1}章)`,
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '900px',
@@ -310,10 +312,10 @@ ${resultHtml}
                 if (memory && memory.result) {
                     detailDiv.innerHTML = `
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-<h4 style="color:#27ae60;margin:0;font-size:14px;">第${index + 1}章 - ${memory.title}</h4>
+<h4 style="color:#27ae60;margin:0;font-size:14px;">第${index + 1}章 - ${escapeHtmlForDisplay(memory.title)}</h4>
 <button class="ttw-btn ttw-btn-small" id="ttw-copy-result">📋 复制</button>
 </div>
-<pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.5;">${JSON.stringify(memory.result, null, 2)}</pre>
+<pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.5;">${escapeHtmlForDisplay(JSON.stringify(memory.result, null, 2))}</pre>
 `;
                     detailDiv.querySelector('#ttw-copy-result').addEventListener('click', () => {
                         navigator.clipboard.writeText(JSON.stringify(memory.result, null, 2)).then(() => {

@@ -1,3 +1,5 @@
+import { escapeHtmlForDisplay, highlightEscapedText } from './renderer.js';
+
 export function createSearchModal(deps = {}) {
     const {
         AppState,
@@ -135,14 +137,13 @@ export function createSearchModal(deps = {}) {
         resultsContainer.dataset.memoryIndices = JSON.stringify([...memoryIndicesSet]);
 
         if (results.length === 0) {
-            resultsContainer.innerHTML = `<div style="text-align:center;color:#888;padding:20px;">未找到包含"${keyword}"的内容</div>`;
+            resultsContainer.innerHTML = `<div style="text-align:center;color:#888;padding:20px;">未找到包含"${escapeHtmlForDisplay(keyword)}"的内容</div>`;
             return { results: [], memoryIndices: memoryIndicesSet };
         }
 
         const highlightKw = (text) => {
             if (!text) return '';
-            const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return text.replace(new RegExp(escaped, 'g'), `<span style="background:#f1c40f;color:#000;padding:1px 2px;border-radius:2px;">${keyword}</span>`);
+            return highlightEscapedText(text, keyword);
         };
 
         let html = `<div style="margin-bottom:12px;font-size:13px;color:#27ae60;">找到 ${results.length} 个匹配项，涉及 ${memoryIndicesSet.size} 个章节</div>`;
@@ -155,12 +156,12 @@ export function createSearchModal(deps = {}) {
                 : '<span style="font-size:9px;color:#f39c12;margin-left:4px;">⚠ 合并数据</span>';
             const matchTexts = result.matches.slice(0, 2).map((m) => {
                 const matchText = (m.text || '').substring(0, 80);
-                return `<span style="color:#888;">${m.field || ''}:</span> ${highlightKw(matchText)}${m.text && m.text.length > 80 ? '...' : ''}`;
+                return `<span style="color:#888;">${escapeHtmlForDisplay(m.field || '')}:</span> ${highlightKw(matchText)}${m.text && m.text.length > 80 ? '...' : ''}`;
             }).join('<br>');
 
             html += '<div class="ttw-search-result-item" data-result-index="' + idx + '" style="background:rgba(0,0,0,0.2);border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #f1c40f;cursor:pointer;transition:background 0.2s;">';
             html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-            html += '<span style="font-weight:bold;color:#e67e22;">[' + result.category + '] ' + highlightKw(result.entryName) + '</span>';
+            html += '<span style="font-weight:bold;color:#e67e22;">[' + escapeHtmlForDisplay(result.category) + '] ' + highlightKw(result.entryName) + '</span>';
             html += '<div style="display:flex;align-items:center;gap:8px;">';
             html += '<span style="font-size:11px;color:' + memoryColor + ';background:rgba(52,152,219,0.2);padding:2px 6px;border-radius:3px;">📍 ' + memoryLabel + '</span>';
             html += sourceTag;
@@ -238,17 +239,17 @@ export function createSearchModal(deps = {}) {
                 let contentHtml = '';
                 if (entry) {
                     const keywordsStr = Array.isArray(entry['关键词']) ? entry['关键词'].join(', ') : '';
-                    let content = (entry['内容'] || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    content = highlightKw(content).replace(/\n/g, '<br>');
+                    const content = entry['内容'] || '';
+                    const escapedContent = highlightKw(content).replace(/\n/g, '<br>');
                     contentHtml = `
-                        <div style="margin-bottom:8px;font-size:11px;color:#888;padding:6px;background:rgba(0,0,0,0.2);border-radius:4px;">${dataSource}</div>
+                        <div style="margin-bottom:8px;font-size:11px;color:#888;padding:6px;background:rgba(0,0,0,0.2);border-radius:4px;">${escapeHtmlForDisplay(dataSource)}</div>
                         <div style="margin-bottom:12px;padding:10px;background:rgba(155,89,182,0.1);border-radius:6px;">
                             <div style="color:#9b59b6;font-size:11px;margin-bottom:4px;">📝 关键词</div>
                             <div style="font-size:12px;">${highlightKw(keywordsStr)}</div>
                         </div>
                         <div style="padding:10px;background:rgba(39,174,96,0.1);border-radius:6px;max-height:250px;overflow-y:auto;">
                             <div style="color:#27ae60;font-size:11px;margin-bottom:4px;">📄 内容</div>
-                            <div style="font-size:12px;line-height:1.6;">${content}</div>
+                            <div style="font-size:12px;line-height:1.6;">${escapedContent}</div>
                         </div>
                     `;
                 } else {
@@ -257,7 +258,7 @@ export function createSearchModal(deps = {}) {
 
                 detailDiv.innerHTML = `
                     <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #444;">
-                        <h4 style="color:#e67e22;margin:0 0 8px;font-size:14px;">[${result.category}] ${result.entryName}</h4>
+                        <h4 style="color:#e67e22;margin:0 0 8px;font-size:14px;">[${escapeHtmlForDisplay(result.category)}] ${escapeHtmlForDisplay(result.entryName)}</h4>
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <span style="font-size:12px;color:#3498db;">📍 来源: ${memoryLabel}</span>
                             ${result.memoryIndex >= 0 ? `<button class="ttw-btn ttw-btn-small ttw-btn-warning" id="ttw-detail-reroll-btn" data-mem-idx="${result.memoryIndex}">🎲 重Roll此章节</button>` : ''}

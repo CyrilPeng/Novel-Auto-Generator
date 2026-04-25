@@ -1,3 +1,5 @@
+import { escapeHtmlForDisplay } from './renderer.js';
+
 export function createChapterRegexView(deps = {}) {
     const {
         AppState,
@@ -39,7 +41,7 @@ export function createChapterRegexView(deps = {}) {
             const modal = ModalFactory.create({
                 id: 'ttw-regex-test-modal',
                 title: '❌ 未检测到章节',
-                body: `<div style="white-space: pre-wrap; padding: 10px;">当前正则: <code>${pattern}</code>\n\n建议:\n1. 尝试使用快速选择按钮\n2. 检查正则表达式是否正确</div>`,
+                body: `<div style="white-space: pre-wrap; padding: 10px;">当前正则: <code>${escapeHtmlForDisplay(pattern)}</code>\n\n建议:\n1. 尝试使用快速选择按钮\n2. 检查正则表达式是否正确</div>`,
                 footer: '<button class="ttw-btn ttw-btn-primary" id="ttw-close-regex-test">关闭</button>',
             });
             modal.querySelector('#ttw-close-regex-test')
@@ -47,7 +49,7 @@ export function createChapterRegexView(deps = {}) {
             return;
         }
 
-        const previewChapters = matches.slice(0, 10).map((m) => m[0]).join('\n');
+        const previewChapters = matches.slice(0, 10).map((m) => escapeHtmlForDisplay(m[0])).join('\n');
         const modal = ModalFactory.create({
             id: 'ttw-regex-test-modal',
             title: `✅ 检测到 ${matches.length} 个章节`,

@@ -1,3 +1,5 @@
+import { escapeHtmlForDisplay, highlightEscapedText } from './renderer.js';
+
 export function createReplaceModal(deps = {}) {
     const {
         AppState,
@@ -399,21 +401,18 @@ export function createReplaceModal(deps = {}) {
             previewDiv.style.maxHeight = '350px';
 
             if (preview.count === 0) {
-                previewDiv.innerHTML = `<div style="color:#888;text-align:center;padding:20px;">未找到"${findText}"</div>`;
+                previewDiv.innerHTML = `<div style="color:#888;text-align:center;padding:20px;">未找到"${escapeHtmlForDisplay(findText)}"</div>`;
             } else {
-                const highlightText = (text) => text.replace(
-                    new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
-                    `<span style="background:#f1c40f;color:#000;padding:1px 2px;border-radius:2px;">${findText}</span>`
-                );
+                const highlightText = (text) => highlightEscapedText(text, findText);
 
                 const itemsHtml = preview.allMatches.map((match, idx) => `
                     <div class="ttw-replace-item" data-index="${idx}" style="font-size:11px;margin-bottom:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:4px;border-left:3px solid #e67e22;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <div style="color:#888;font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${match.location}">${match.locationShort}</div>
+                            <div style="color:#888;font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtmlForDisplay(match.location)}">${escapeHtmlForDisplay(match.locationShort)}</div>
                             <button class="ttw-btn-tiny ttw-replace-single-btn" data-index="${idx}" style="background:rgba(230,126,34,0.5);flex-shrink:0;margin-left:8px;">替换此项</button>
                         </div>
-                        <div style="color:#e74c3c;text-decoration:line-through;word-break:break-all;margin-bottom:4px;">${highlightText(match.before.replace(/</g, '&lt;').replace(/>/g, '&gt;'))}</div>
-                        <div style="color:#27ae60;word-break:break-all;">${match.after.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                        <div style="color:#e74c3c;text-decoration:line-through;word-break:break-all;margin-bottom:4px;">${highlightText(match.before)}</div>
+                        <div style="color:#27ae60;word-break:break-all;">${escapeHtmlForDisplay(match.after)}</div>
                     </div>
                 `).join('');
 
