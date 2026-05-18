@@ -10,6 +10,9 @@ export function createApiService(deps = {}) {
         applyMessageChain,
     } = deps;
 
+    let tavernGenerateRawMode = null;
+    let tavernArrayFallbackNotified = false;
+
     async function callSillyTavernAPI(messages, taskId = null) {
         const timeout = AppState.settings.apiTimeout || 120000;
         const logPrefix = taskId !== null ? `[任务${taskId}]` : '';
@@ -37,19 +40,32 @@ export function createApiService(deps = {}) {
 
                 if (typeof context.generateRaw === 'function') {
                     try {
-                        debugLog(`${logPrefix} 尝试generateRaw消息数组格式 (ST 1.13.2+)`);
-                        result = await Promise.race([
-                            context.generateRaw({ prompt: messages }),
-                            timeoutPromise,
-                        ]);
-                        debugLog(`${logPrefix} generateRaw消息数组格式成功`);
+                        if (tavernGenerateRawMode === 'string' || messages.length === 1) {
+                            debugLog(`${logPrefix} 使用generateRaw字符串模式`);
+                            result = await Promise.race([
+                                context.generateRaw(combinedPrompt, '', false),
+                                timeoutPromise,
+                            ]);
+                        } else {
+                            debugLog(`${logPrefix} 尝试generateRaw消息数组格式 (ST 1.13.2+)`);
+                            result = await Promise.race([
+                                context.generateRaw({ prompt: messages }),
+                                timeoutPromise,
+                            ]);
+                            tavernGenerateRawMode = 'messages';
+                            debugLog(`${logPrefix} generateRaw消息数组格式成功`);
+                        }
                     } catch (rawError) {
                         if (rawError.message?.includes('超时') || rawError.message?.includes('timeout') ||
                             rawError.message?.includes('API') || rawError.message?.includes('limit')) {
                             throw rawError;
                         }
-                        debugLog(`${logPrefix} 消息数组格式不支持(${rawError.message})，回退字符串模式`);
-                        updateStreamContent(`⚠️ ${logPrefix} 酒馆不支持消息数组格式，已回退为字符串模式\n`);
+                        tavernGenerateRawMode = 'string';
+                        debugLog(`${logPrefix} 消息数组格式不支持(${rawError.message})，已缓存字符串模式`);
+                        if (!tavernArrayFallbackNotified) {
+                            updateStreamContent(`ℹ️ ${logPrefix} 当前酒馆不支持消息数组格式，已切换为字符串模式（后续不再提示）\n`);
+                            tavernArrayFallbackNotified = true;
+                        }
                         result = await Promise.race([
                             context.generateRaw(combinedPrompt, '', false),
                             timeoutPromise,

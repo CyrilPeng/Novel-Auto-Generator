@@ -145,6 +145,88 @@ export function createParserService(deps = {}) {
         return result;
     }
 
+    function normalizeJsonLikeText(text) {
+        return String(text || '')
+            .replace(/^\uFEFF/, '')
+            .replace(/[\u201C\u201D]/g, '"')
+            .replace(/[\u2018\u2019]/g, "'")
+            .replace(/,\s*([}\]])/g, '$1')
+            .trim();
+    }
+
+    function extractJsonCandidate(text) {
+        const cleaned = normalizeJsonLikeText(text);
+        const fencedMatch = cleaned.match(/```(?:json|JSON)?\s*([\s\S]*?)```/);
+        let candidate = fencedMatch ? fencedMatch[1].trim() : cleaned;
+        const firstObject = candidate.indexOf('{');
+        const firstArray = candidate.indexOf('[');
+        let first = -1;
+        if (firstObject !== -1 && firstArray !== -1) first = Math.min(firstObject, firstArray);
+        else first = Math.max(firstObject, firstArray);
+
+        const lastObject = candidate.lastIndexOf('}');
+        const lastArray = candidate.lastIndexOf(']');
+        const last = Math.max(lastObject, lastArray);
+        if (first !== -1 && last > first) candidate = candidate.substring(first, last + 1);
+        return normalizeJsonLikeText(candidate);
+    }
+
+    function getMissingJsonClosers(text) {
+        const stack = [];
+        let inString = false;
+        let escaped = false;
+
+        for (const char of text) {
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (char === '\\') {
+                    escaped = true;
+                } else if (char === '"') {
+                    inString = false;
+                }
+                continue;
+            }
+
+            if (char === '"') {
+                inString = true;
+            } else if (char === '{') {
+                stack.push('}');
+            } else if (char === '[') {
+                stack.push(']');
+            } else if ((char === '}' || char === ']') && stack[stack.length - 1] === char) {
+                stack.pop();
+            }
+        }
+
+        return stack.reverse().join('');
+    }
+
+    function parseLenientJson(input) {
+        const attempts = [];
+        const base = extractJsonCandidate(input);
+        attempts.push(base);
+        attempts.push(repairJsonUnescapedQuotes(base));
+
+        const missingClosers = getMissingJsonClosers(base);
+        if (missingClosers) {
+            const patched = base + missingClosers;
+            attempts.push(patched);
+            attempts.push(repairJsonUnescapedQuotes(patched));
+        }
+
+        let lastError = null;
+        for (const attempt of attempts) {
+            if (!attempt) continue;
+            try {
+                return { ok: true, value: JSON.parse(attempt), candidate: attempt };
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        return { ok: false, error: lastError, candidate: base };
+    }
+
     function parseAIResponse(response, options = {}) {
         const { strict = true } = options;
         const rawResponse = String(response ?? '');
@@ -162,49 +244,25 @@ export function createParserService(deps = {}) {
         const directResult = tryParse(directText);
         if (directResult.ok) return directResult.value;
 
-        let fenced = directText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
-        const first = fenced.indexOf('{');
-        const last = fenced.lastIndexOf('}');
-        if (first !== -1 && last > first) fenced = fenced.substring(first, last + 1);
+        let fenced = extractJsonCandidate(directText);
 
         const fencedResult = tryParse(fenced);
         if (fencedResult.ok) return fencedResult.value;
 
-        if (strict) {
-            const summary = directText.slice(0, 200).replace(/\s+/g, ' ');
-            throw new Error(`JSON解析失败（严格模式）。请检查模型输出是否为完整JSON。响应摘要: ${summary}${directText.length > 200 ? '...' : ''}`);
-        }
-
-        try {
-            const repaired = repairJsonUnescapedQuotes(fenced);
-            return JSON.parse(repaired);
-        } catch (repairError) {
-            debugLog('修复未转义引号后仍解析失败，进入bracket补全/regex fallback');
-        }
-
-        const open = (fenced.match(/{/g) || []).length;
-        const close = (fenced.match(/}/g) || []).length;
-        if (open > close) {
-            const patched = fenced + '}'.repeat(open - close);
-            try {
-                return JSON.parse(patched);
-            } catch (patchError) {
-                try {
-                    const repairedPatched = repairJsonUnescapedQuotes(patched);
-                    return JSON.parse(repairedPatched);
-                } catch (patchRepairError) {
-                    debugLog('补全括号与修复引号后仍失败，进入regex fallback');
-                }
-            }
+        const repairedResult = parseLenientJson(fenced);
+        if (repairedResult.ok) {
+            debugLog(`JSON直接解析失败，已通过${strict ? '严格模式兼容修复' : '宽松修复'}解析成功`);
+            return repairedResult.value;
         }
 
         const extracted = extractWorldbookDataByRegex(fenced);
         if (extracted && typeof extracted === 'object' && Object.keys(extracted).length > 0) {
+            debugLog('JSON解析失败，已通过世界书正则兜底提取成功');
             return extracted;
         }
 
         const summary = directText.slice(0, 200).replace(/\s+/g, ' ');
-        throw new Error(`JSON修复失败。响应摘要: ${summary}${directText.length > 200 ? '...' : ''}`);
+        throw new Error(`JSON解析失败${strict ? '（已尝试自动修复）' : ''}。响应摘要: ${summary}${directText.length > 200 ? '...' : ''}`);
     }
 
     return {
