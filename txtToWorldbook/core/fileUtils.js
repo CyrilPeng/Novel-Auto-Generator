@@ -31,10 +31,11 @@ export function createFileUtils(deps = {}) {
 
     async function detectBestEncoding(file) {
         const encodings = ['UTF-8', 'GBK', 'GB2312', 'GB18030', 'Big5'];
+        const replacementChar = String.fromCharCode(0xFFFD);
         for (const encoding of encodings) {
             try {
                 const content = await readFileWithEncoding(file, encoding);
-                if (!content.includes('�') && !content.includes('\uFFFD')) {
+                if (!content.includes(replacementChar)) {
                     return { encoding, content };
                 }
             } catch (e) {

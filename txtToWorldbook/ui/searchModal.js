@@ -301,7 +301,7 @@ export function createSearchModal(deps = {}) {
 
         const bodyHtml = `
 		<div style="margin-bottom:16px;">
-			<label style="display:block;margin-bottom:8px;font-size:13px;">输入要查找的字符（如乱码字符 �）</label>
+			<label style="display:block;margin-bottom:8px;font-size:13px;">输入要查找的字符（如乱码字符 U+FFFD）</label>
 			<input type="text" id="ttw-search-input" class="ttw-input" placeholder="输入要查找的内容..." value="${AppState.ui.searchKeyword}">
 		</div>
 		<div style="margin-bottom:16px;padding:12px;background:rgba(155,89,182,0.15);border-radius:8px;">
