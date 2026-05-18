@@ -53,17 +53,35 @@ export function createMergeWorkflowService(deps = {}) {
 
     let lastConsolidateFailedEntries = [];
 
+    function cleanConsolidateResponse(response) {
+        let text = filterResponseContent(response || '').trim();
+        const fenced = text.match(/```(?:markdown|md|text|txt)?\s*([\s\S]*?)```/i);
+        if (fenced) text = fenced[1].trim();
+
+        try {
+            const parsed = parseAIResponse(text, { strict: false });
+            if (typeof parsed === 'string') return parsed.trim();
+            if (parsed && typeof parsed === 'object') {
+                const content = parsed['内容'] || parsed.content || parsed.text || parsed.result;
+                if (typeof content === 'string') return content.trim();
+            }
+        } catch (e) {
+            // 整理条目允许纯文本输出，JSON解析失败时保留清洗后的文本。
+        }
+
+        return text
+            .replace(/^整理后的内容[:：]\s*/i, '')
+            .trim();
+    }
+
     async function consolidateEntry(category, entryName, promptTemplate) {
         const entry = AppState.worldbook.generated[category]?.[entryName];
         if (!entry || !entry['内容']) return;
 
         const template = (promptTemplate && promptTemplate.trim()) ? promptTemplate.trim() : defaultConsolidatePrompt;
         const prompt = template.replace('{CONTENT}', entry['内容']);
-        let response = await callAPI(getLanguagePrefix() + prompt);
-
-        response = filterResponseContent(response);
-
-        const finalContent = response ? response.trim() : '';
+        const response = await callAPI(getLanguagePrefix() + prompt);
+        const finalContent = cleanConsolidateResponse(response);
         if (!finalContent) {
             throw new Error('AI 返回了空内容，保留原条目内容');
         }
@@ -462,6 +480,7 @@ export function createMergeWorkflowService(deps = {}) {
         }
         showProgressSection(true);
         setProcessingStatus('running');
+        AppState.processing.isStopped = false;
         updateProgress(0, '开始整理条目...');
         updateStreamContent('', true);
         updateStreamContent(`🧹 开始整理 ${entries.length} 个条目\n${'='.repeat(50)}\n`);
@@ -1080,6 +1099,7 @@ export function createMergeWorkflowService(deps = {}) {
             btn.disabled = true;
             btn.textContent = '🔄 AI判断中...';
             stopBtn.style.display = 'inline-block';
+            AppState.processing.isStopped = false;
 
             try {
                 const useParallel = modal.querySelector('#ttw-alias-parallel')?.checked ?? AppState.config.parallel.enabled;

@@ -250,6 +250,48 @@
         return suspectedGroups;
     }
 
+    function normalizeSameFlag(value) {
+        if (value === true || value === 1) return true;
+        if (value === false || value === 0) return false;
+        const text = String(value ?? '').trim().toLowerCase();
+        if (['true', 'yes', 'y', 'same', '同一', '相同', '是'].includes(text)) return true;
+        return text.includes('同一') || text.includes('相同') || text.includes('同个') || text.includes('same');
+    }
+
+    function getAIResultsArray(aiResult) {
+        if (Array.isArray(aiResult)) return aiResult;
+        if (!aiResult || typeof aiResult !== 'object') return [];
+        if (Array.isArray(aiResult.results)) return aiResult.results;
+        if (Array.isArray(aiResult.result)) return aiResult.result;
+        if (Array.isArray(aiResult.pairs)) return aiResult.pairs;
+        if (Array.isArray(aiResult.judgements)) return aiResult.judgements;
+        if (Array.isArray(aiResult.judgments)) return aiResult.judgments;
+        return [];
+    }
+
+    function resolvePairIndex(result, pairs, batchStartIndex = 0) {
+        const rawPair = Number.parseInt(result.pair ?? result.index ?? result.id, 10);
+        if (Number.isInteger(rawPair)) {
+            const asGlobal = rawPair - 1;
+            if (asGlobal >= batchStartIndex && asGlobal < batchStartIndex + pairs.length) return asGlobal;
+            const asLocal = batchStartIndex + rawPair - 1;
+            if (asLocal >= batchStartIndex && asLocal < batchStartIndex + pairs.length) return asLocal;
+        }
+
+        const resultNameA = result.nameA || result.a || result.entryA || result.itemA;
+        const resultNameB = result.nameB || result.b || result.entryB || result.itemB;
+        if (resultNameA && resultNameB) {
+            for (let i = 0; i < pairs.length; i++) {
+                const [nameA, nameB] = pairs[i];
+                if ((nameA === resultNameA && nameB === resultNameB) || (nameA === resultNameB && nameB === resultNameA)) {
+                    return batchStartIndex + i;
+                }
+            }
+        }
+
+        return -1;
+    }
+
     async function verifyDuplicatesWithAI(suspectedGroups, useParallel = true, threshold = 5, categoryName = '角色') {
         if (suspectedGroups.length === 0) return { pairResults: [], mergedGroups: [] };
 
@@ -316,6 +358,27 @@ ${pairsContent}
         };
 
         const pairResults = [];
+        const failedBatches = [];
+
+        const appendPairResults = (aiResult, pairs, batchStartIndex = 0) => {
+            const results = getAIResultsArray(aiResult);
+            for (let i = 0; i < results.length; i++) {
+                const result = results[i];
+                let globalPairIndex = resolvePairIndex(result, pairs, batchStartIndex);
+                if (globalPairIndex < 0 && i < pairs.length) globalPairIndex = batchStartIndex + i;
+                if (globalPairIndex < 0 || globalPairIndex >= allPairs.length) continue;
+
+                const [nameA, nameB] = allPairs[globalPairIndex];
+                pairResults.push({
+                    nameA: result.nameA || result.a || result.entryA || result.itemA || nameA,
+                    nameB: result.nameB || result.b || result.entryB || result.itemB || nameB,
+                    isSamePerson: normalizeSameFlag(result.isSamePerson ?? result.isSame ?? result.same ?? result.samePerson ?? result.result),
+                    mainName: result.mainName || result.primaryName || result.keepName || result.name || (normalizeSameFlag(result.isSamePerson ?? result.isSame ?? result.same ?? result.samePerson ?? result.result) ? nameA : ''),
+                    reason: result.reason || result.explanation || result.note || '',
+                    _globalIndex: globalPairIndex
+                });
+            }
+        };
 
         if (useParallel && allPairs.length > threshold) {
             updateStreamContent('\n🚀 并发模式处理配对判断...\n');
@@ -342,26 +405,12 @@ ${pairsContent}
                     const prompt = buildPrompt(pairsContent);
                     const response = await callAPI(prompt);
                     const aiResult = parseAIResponse(response);
-
-                    for (const result of aiResult.results || []) {
-                        const localPairIndex = (result.pair || 1) - 1;
-                        const globalPairIndex = batch.startIndex + localPairIndex;
-                        if (globalPairIndex < 0 || globalPairIndex >= allPairs.length) continue;
-
-                        const [nameA, nameB] = allPairs[globalPairIndex];
-                        pairResults.push({
-                            nameA: result.nameA || nameA,
-                            nameB: result.nameB || nameB,
-                            isSamePerson: result.isSamePerson,
-                            mainName: result.mainName,
-                            reason: result.reason,
-                            _globalIndex: globalPairIndex
-                        });
-                    }
+                    appendPairResults(aiResult, batch.pairs, batch.startIndex);
 
                     completed++;
                     updateStreamContent(`✅ [批次${batchIndex + 1}] 完成 (${completed}/${batches.length})\n`);
                 } catch (error) {
+                    failedBatches.push({ batchIndex, error });
                     updateStreamContent(`❌ [批次${batchIndex + 1}] 失败: ${error.message}\n`);
                 } finally {
                     semaphore.release();
@@ -376,21 +425,11 @@ ${pairsContent}
             const prompt = buildPrompt(pairsContent);
             const response = await callAPI(prompt);
             const aiResult = parseAIResponse(response);
+            appendPairResults(aiResult, allPairs, 0);
+        }
 
-            for (const result of aiResult.results || []) {
-                const pairIndex = (result.pair || 1) - 1;
-                if (pairIndex < 0 || pairIndex >= allPairs.length) continue;
-
-                const [nameA, nameB] = allPairs[pairIndex];
-                pairResults.push({
-                    nameA: result.nameA || nameA,
-                    nameB: result.nameB || nameB,
-                    isSamePerson: result.isSamePerson,
-                    mainName: result.mainName,
-                    reason: result.reason,
-                    _globalIndex: pairIndex
-                });
-            }
+        if (pairResults.length === 0 && failedBatches.length > 0) {
+            throw new Error(`所有别名判断批次都失败，最后错误: ${failedBatches[failedBatches.length - 1].error.message}`);
         }
 
         const uf = new UnionFind([...allNames]);
@@ -528,5 +567,3 @@ ${pairsContent}
         quickDuplicateScan,
     };
 }
-
-
