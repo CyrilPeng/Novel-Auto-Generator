@@ -1,3 +1,48 @@
+const CONSOLIDATE_ERROR_RESPONSE_PATTERNS = [
+    /proxy queue error/i,
+    /too many concurrent requests/i,
+    /another request in the queue/i,
+    /your ip or user token/i,
+    /resource[_\s-]?exhausted/i,
+    /rate limit(?:ed)?/i,
+    /\b429\b/,
+    /overloaded/i,
+    /temporarily unavailable/i,
+    /service unavailable/i,
+    /server error/i,
+    /bad gateway/i,
+    /internal server error/i,
+    /请求过于频繁/,
+    /请求太频繁/,
+    /限流/,
+];
+
+const STRICT_CONSOLIDATE_ERROR_RESPONSE_PATTERNS = [
+    /proxy queue error/i,
+    /too many concurrent requests/i,
+    /another request in the queue/i,
+    /resource[_\s-]?exhausted/i,
+];
+
+export function isConsolidateErrorResponse(responseText) {
+    const text = String(responseText || '').trim();
+    if (!text) return false;
+
+    const compactText = text.replace(/\s+/g, ' ');
+    const patterns =
+        compactText.length > 2000
+            ? STRICT_CONSOLIDATE_ERROR_RESPONSE_PATTERNS
+            : CONSOLIDATE_ERROR_RESPONSE_PATTERNS;
+    return patterns.some((pattern) => pattern.test(compactText));
+}
+
+function createConsolidateRetryableError() {
+    const error = new Error('AI/API 返回排队或限流错误，已保留原条目内容。请稍后重试，或降低并发数后再整理');
+    error.retryable = true;
+    error.code = 'CONSOLIDATE_RETRYABLE_RESPONSE';
+    return error;
+}
+
 export function createMergeWorkflowService(deps = {}) {
     const {
         AppState,
@@ -68,7 +113,7 @@ export function createMergeWorkflowService(deps = {}) {
                 const content = parsed['内容'] || parsed.content || parsed.text || parsed.result;
                 if (typeof content === 'string') return content.trim();
             }
-        } catch (e) {
+        } catch {
             // 整理条目允许纯文本输出，JSON解析失败时保留清洗后的文本。
         }
 
@@ -80,16 +125,26 @@ export function createMergeWorkflowService(deps = {}) {
         if (!entry || !entry['内容']) return;
 
         const template = promptTemplate && promptTemplate.trim() ? promptTemplate.trim() : defaultConsolidatePrompt;
-        const prompt = template.replace('{CONTENT}', entry['内容']);
-        const response = await callAPI(getLanguagePrefix() + prompt);
-        const finalContent = cleanConsolidateResponse(response);
-        if (!finalContent) {
-            throw new Error('AI 返回了空内容，保留原条目内容');
-        }
+        const originalContent = entry['内容'];
+        const prompt = template.replace('{CONTENT}', originalContent);
 
-        entry['内容'] = finalContent;
-        if (Array.isArray(entry['关键词'])) {
-            entry['关键词'] = [...new Set(entry['关键词'])];
+        try {
+            const response = await callAPI(getLanguagePrefix() + prompt);
+            const finalContent = cleanConsolidateResponse(response);
+            if (!finalContent) {
+                throw new Error('AI 返回了空内容，保留原条目内容');
+            }
+            if (isConsolidateErrorResponse(finalContent)) {
+                throw createConsolidateRetryableError();
+            }
+
+            entry['内容'] = finalContent;
+            if (Array.isArray(entry['关键词'])) {
+                entry['关键词'] = [...new Set(entry['关键词'])];
+            }
+        } catch (error) {
+            entry['内容'] = originalContent;
+            throw error;
         }
     }
 
@@ -546,7 +601,9 @@ export function createMergeWorkflowService(deps = {}) {
         updateStreamContent('', true);
         updateStreamContent(`🧹 开始整理 ${entries.length} 个条目\n${'='.repeat(50)}\n`);
 
-        const semaphore = new Semaphore(AppState.config.parallel.concurrency);
+        const consolidateConcurrency =
+            AppState.config.parallel.enabled === false ? 1 : AppState.config.parallel.concurrency || 1;
+        const semaphore = new Semaphore(consolidateConcurrency);
         let completed = 0;
         let failed = 0;
         const failedEntries = [];
@@ -1307,6 +1364,7 @@ export function createMergeWorkflowService(deps = {}) {
     }
 
     return {
+        consolidateEntry,
         showConsolidateCategorySelector,
         showManualMergeUI,
         showAliasMergeUI,
