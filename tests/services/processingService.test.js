@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createProcessingService } from '../../txtToWorldbook/services/processingService.js';
+import {
+    createProcessingService,
+    countMeaningfulWorldbookEntries,
+} from '../../txtToWorldbook/services/processingService.js';
 
 // ============================================================
 // 测试辅助 - AppState 与 service 创建
@@ -47,7 +50,9 @@ function createTestService(overrides = {}) {
         debugLog: vi.fn(),
         callAPI: overrides.callAPI || vi.fn().mockResolvedValue('{}'),
         isTokenLimitError: overrides.isTokenLimitError || vi.fn().mockReturnValue(false),
-        parseAIResponse: overrides.parseAIResponse || vi.fn().mockReturnValue({}),
+        parseAIResponse:
+            overrides.parseAIResponse ||
+            vi.fn().mockReturnValue({ 角色: { 测试角色: { 关键词: ['测试角色'], 内容: '测试内容' } } }),
         postProcessResultWithChapterIndex: overrides.postProcessResultWithChapterIndex || vi.fn((r) => r),
         mergeWorldbookDataWithHistory: overrides.mergeWorldbookDataWithHistory || vi.fn().mockResolvedValue([]),
         getChapterForcePrompt: vi.fn().mockReturnValue(''),
@@ -95,6 +100,29 @@ function makeMemory(title, content, opts = {}) {
 }
 
 // ============================================================
+// countMeaningfulWorldbookEntries
+// ============================================================
+describe('countMeaningfulWorldbookEntries', () => {
+    it('空对象和空分类不计为有效条目', () => {
+        expect(countMeaningfulWorldbookEntries({})).toBe(0);
+        expect(countMeaningfulWorldbookEntries({ 角色: {} })).toBe(0);
+        expect(countMeaningfulWorldbookEntries({ 角色: { 张三: {} } })).toBe(0);
+    });
+
+    it('统计包含内容或关键词的有效条目', () => {
+        const data = {
+            角色: {
+                张三: { 关键词: ['张三'], 内容: '' },
+                李四: { 关键词: [], 内容: '李四是张三的好友' },
+                空条目: { 关键词: [], 内容: '   ' },
+            },
+        };
+
+        expect(countMeaningfulWorldbookEntries(data)).toBe(2);
+    });
+});
+
+// ============================================================
 // processMemoryChunkIndependent
 // ============================================================
 describe('processMemoryChunkIndependent', () => {
@@ -116,13 +144,35 @@ describe('processMemoryChunkIndependent', () => {
         expect(mocks.parseAIResponse).toHaveBeenCalledOnce();
     });
 
+    it('空世界书结果不会被当作成功处理', async () => {
+        vi.useFakeTimers();
+        try {
+            const callAPI = vi.fn().mockResolvedValue('{}');
+            const { service } = createTestService({
+                queue: [makeMemory('第1章', '内容A')],
+                callAPI,
+                parseAIResponse: vi.fn().mockReturnValue({}),
+            });
+
+            const promise = service.processMemoryChunkIndependent({ index: 0 });
+            const expectation = expect(promise).rejects.toThrow('空世界书结果');
+
+            await vi.runAllTimersAsync();
+            await expectation;
+
+            expect(callAPI).toHaveBeenCalledTimes(4);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('失败后自动重试至 maxRetries', async () => {
         const callAPI = vi
             .fn()
             .mockRejectedValueOnce(new Error('网络错误'))
             .mockRejectedValueOnce(new Error('网络错误'))
             .mockResolvedValue('ok');
-        const mockResult = { 角色: {} };
+        const mockResult = { 角色: { 张三: { 关键词: ['张三'], 内容: '测试' } } };
         const { service } = createTestService({
             queue: [makeMemory('第1章', '内容')],
             callAPI,
@@ -259,7 +309,7 @@ describe('processMemoryChunksParallel', () => {
         const { service } = createTestService({
             queue: [makeMemory('第1章', 'A', { processed: true, failed: false }), makeMemory('第2章', 'B')],
             callAPI,
-            parseAIResponse: vi.fn().mockReturnValue({}),
+            parseAIResponse: vi.fn().mockReturnValue({ 角色: { 李四: { 关键词: ['李四'], 内容: '测试' } } }),
             Semaphore,
             concurrency: 2,
         });
@@ -279,7 +329,7 @@ describe('processMemoryChunksParallel', () => {
         const { service } = createTestService({
             queue: [makeMemory('第1章', 'A'), makeMemory('第2章', 'B')],
             callAPI,
-            parseAIResponse: vi.fn().mockReturnValue({}),
+            parseAIResponse: vi.fn().mockReturnValue({ 角色: { 李四: { 关键词: ['李四'], 内容: '测试' } } }),
             isTokenLimitError: vi.fn().mockImplementation((msg) => msg?.includes('TOKEN_LIMIT')),
             Semaphore,
             concurrency: 1,

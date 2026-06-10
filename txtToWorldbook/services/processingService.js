@@ -147,9 +147,10 @@
 
             debugLog(`[第${chapterIndex}章] 后处理章节索引...`);
             memoryUpdate = postProcessResultWithChapterIndex(memoryUpdate, chapterIndex);
+            const entryCount = ensureMeaningfulWorldbookUpdate(memoryUpdate, chapterIndex);
 
-            debugLog(`[第${chapterIndex}章] 处理完成`);
-            updateStreamContent(`✅ [第${chapterIndex}章] 处理完成\n`);
+            debugLog(`[第${chapterIndex}章] 处理完成, 有效条目=${entryCount}`);
+            updateStreamContent(`✅ [第${chapterIndex}章] 处理完成（有效条目 ${entryCount} 个）\n`);
             return memoryUpdate;
         } catch (error) {
             memory.processing = false;
@@ -388,6 +389,7 @@ ${'='.repeat(50)}
             debugLog(`[串行][第${chapterIndex}章] 解析AI响应...`);
             let memoryUpdate = parseAIResponse(response);
             memoryUpdate = postProcessResultWithChapterIndex(memoryUpdate, chapterIndex);
+            const entryCount = ensureMeaningfulWorldbookUpdate(memoryUpdate, chapterIndex);
 
             debugLog(`[串行][第${chapterIndex}章] 合并世界书...`);
             await mergeWorldbookDataWithHistory({
@@ -398,7 +400,7 @@ ${'='.repeat(50)}
             });
             debugLog(`[串行][第${chapterIndex}章] 保存Roll结果...`);
             await MemoryHistoryDB.saveRollResult(index, memoryUpdate);
-            debugLog(`[串行][第${chapterIndex}章] 完成`);
+            debugLog(`[串行][第${chapterIndex}章] 完成, 有效条目=${entryCount}`);
 
             memory.processed = true;
             memory.result = memoryUpdate;
@@ -688,4 +690,51 @@ ${'='.repeat(50)}
         handleStartProcessing,
         handleRepairFailedMemories,
     };
+}
+
+function isWorldbookEntryLike(value) {
+    return (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        ('内容' in value || 'content' in value || '关键词' in value)
+    );
+}
+
+function hasMeaningfulWorldbookEntry(entry) {
+    if (!isWorldbookEntryLike(entry)) return false;
+    const content = entry['内容'] ?? entry.content;
+    if (typeof content === 'string' && content.trim()) return true;
+    return Array.isArray(entry['关键词']) && entry['关键词'].some((keyword) => String(keyword || '').trim());
+}
+
+export function countMeaningfulWorldbookEntries(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return 0;
+    if (isWorldbookEntryLike(data)) return hasMeaningfulWorldbookEntry(data) ? 1 : 0;
+
+    let count = 0;
+    for (const categoryData of Object.values(data)) {
+        if (!categoryData || typeof categoryData !== 'object' || Array.isArray(categoryData)) continue;
+        if (isWorldbookEntryLike(categoryData)) {
+            if (hasMeaningfulWorldbookEntry(categoryData)) count++;
+            continue;
+        }
+        for (const entry of Object.values(categoryData)) {
+            if (hasMeaningfulWorldbookEntry(entry)) count++;
+        }
+    }
+    return count;
+}
+
+function ensureMeaningfulWorldbookUpdate(memoryUpdate, chapterIndex) {
+    const entryCount = countMeaningfulWorldbookEntries(memoryUpdate);
+    if (entryCount === 0) {
+        const error = new Error(
+            `AI 返回了空世界书结果（第${chapterIndex}章没有有效条目），疑似未实际处理，请重试或检查模型/API配置`,
+        );
+        error.retryable = true;
+        error.code = 'EMPTY_WORLDBOOK_UPDATE';
+        throw error;
+    }
+    return entryCount;
 }
