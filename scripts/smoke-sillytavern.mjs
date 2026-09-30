@@ -85,6 +85,22 @@ try {
     assert.deepEqual(after, before);
     assert.equal(requests, 2, 'Quick test + conversion; recovery must not generate');
     assert.equal(await page.locator('#nag-container').count(), 1);
+    assert.equal(await page.locator('#ttw-styles').count(), 1);
+    await page.evaluate(async () => {
+        const { ModalFactory } =
+            await import('/scripts/extensions/third-party/Novel-Auto-Generator/txtToWorldbook/infra/modalFactory.js');
+        ModalFactory.create({ id: 'qa-outer', title: '外层测试', body: '<button id="qa-focus">焦点测试</button>' });
+        ModalFactory.create({ id: 'qa-inner', title: '内层测试' });
+    });
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#qa-inner').count(), 0);
+    assert.equal(await page.locator('#qa-outer').count(), 1);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#qa-outer').count(), 0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const panel = await page.locator('#txt-to-worldbook-modal .ttw-modal').boundingBox();
+    assert.ok(panel && panel.x >= 0 && panel.x + panel.width <= 391, 'Mobile panel stays in viewport');
+    if (process.env.ST_SCREENSHOT) await page.screenshot({ path: process.env.ST_SCREENSHOT });
     assert.deepEqual(errors, []);
     console.log(
         JSON.stringify({
@@ -92,7 +108,15 @@ try {
             browser: browser.version(),
             requests,
             chunks: after.queue.length,
-            checks: ['load', 'quick-test', 'convert', 'export-task', 'reload-restore'],
+            checks: [
+                'load',
+                'quick-test',
+                'convert',
+                'export-task',
+                'reload-restore',
+                'nested-modal-escape',
+                'mobile-layout',
+            ],
             errors,
         }),
     );

@@ -32,12 +32,17 @@ const ModalFactory = {
             closeOnEscape = true,
         } = config;
 
+        const previousFocus = document.activeElement;
         const container = document.createElement('div');
         container.id = id || `ttw-modal-${Date.now()}`;
         container.className = 'ttw-modal-container';
 
         const modal = document.createElement('div');
         modal.className = 'ttw-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', String(title || '对话框'));
+        modal.tabIndex = -1;
         modal.style.width = width;
         modal.style.maxWidth = maxWidth;
 
@@ -51,6 +56,7 @@ const ModalFactory = {
         const closeBtnEl = document.createElement('button');
         closeBtnEl.className = 'ttw-modal-close';
         closeBtnEl.type = 'button';
+        closeBtnEl.setAttribute('aria-label', t('common.close'));
         closeBtnEl.textContent = '✕';
 
         header.appendChild(titleEl);
@@ -126,7 +132,8 @@ const ModalFactory = {
 
         if (closeOnEscape) {
             escapeHandler = (e) => {
-                if (e.key === 'Escape') {
+                if (e.key === 'Escape' && [...document.querySelectorAll('.ttw-modal-container')].at(-1) === container) {
+                    e.stopImmediatePropagation();
                     doClose();
                 }
             };
@@ -134,6 +141,40 @@ const ModalFactory = {
             registerCleanup(() => document.removeEventListener('keydown', escapeHandler));
         }
 
+        const focusHandler = (event) => {
+            if (event.key !== 'Tab' || [...document.querySelectorAll('.ttw-modal-container')].at(-1) !== container)
+                return;
+            const controls = [
+                ...container.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'),
+            ].filter((element) => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length);
+            const first = controls[0] || modal,
+                last = controls.at(-1) || modal;
+            if (event.shiftKey && (document.activeElement === first || !container.contains(document.activeElement))) {
+                event.preventDefault();
+                last.focus();
+            } else if (
+                !event.shiftKey &&
+                (document.activeElement === last || !container.contains(document.activeElement))
+            ) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener('keydown', focusHandler);
+        registerCleanup(() => document.removeEventListener('keydown', focusHandler));
+        registerCleanup(() =>
+            queueMicrotask(() => {
+                if (previousFocus?.isConnected) previousFocus.focus();
+            }),
+        );
+        const observer = new MutationObserver(() => {
+            if (!container.isConnected) this.close(container);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        registerCleanup(() => observer.disconnect());
+        queueMicrotask(() => {
+            if (container.isConnected) closeBtnEl.focus();
+        });
         container.__ttwModalCleanup = cleanupCallbacks;
         container.__ttwModalOnClose = onClose;
         container.__ttwModalClosed = false;
