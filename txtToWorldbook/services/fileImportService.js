@@ -91,6 +91,7 @@ export function createFileImportService(deps = {}) {
         const chunkSize = AppState.settings.chunkSize;
         const minChunkSize = Math.max(chunkSize * 0.3, 5000);
         AppState.memory.queue = [];
+        AppState.task = null;
 
         const chapterRegex = new RegExp(AppState.config.chapterRegex.pattern, 'g');
         const matches = [];

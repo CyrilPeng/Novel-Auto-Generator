@@ -60,6 +60,7 @@ export function createTaskStateService(deps = {}) {
     async function saveTaskState() {
         const state = {
             version: '2.9.0',
+            task: AppState.task || null,
             timestamp: Date.now(),
             memoryQueue: AppState.memory.queue,
             generatedWorldbook: AppState.worldbook.generated,
@@ -114,6 +115,7 @@ export function createTaskStateService(deps = {}) {
                 const state = JSON.parse(content);
                 if (!state.memoryQueue || !Array.isArray(state.memoryQueue)) throw new Error('无效的任务状态文件');
                 AppState.memory.queue = state.memoryQueue;
+                AppState.task = state.task || null;
                 AppState.worldbook.generated = state.generatedWorldbook || {};
                 AppState.worldbook.volumes = state.worldbookVolumes || [];
                 AppState.worldbook.currentVolumeIndex = state.currentVolumeIndex || 0;
@@ -251,6 +253,7 @@ export function createTaskStateService(deps = {}) {
                     )
                 ) {
                     AppState.memory.queue = savedState.memoryQueue;
+                    AppState.task = savedState.task || null;
                     AppState.worldbook.generated = savedState.generatedWorldbook || {};
                     AppState.worldbook.volumes = savedState.worldbookVolumes || [];
                     AppState.worldbook.currentVolumeIndex = savedState.currentVolumeIndex || 0;

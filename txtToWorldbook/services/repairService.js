@@ -4,6 +4,7 @@ import { abortableDelay } from '../core/requestPolicy.js';
 export function createRepairService(deps = {}) {
     const {
         AppState,
+        commitMemoryResult,
         MemoryHistoryDB,
         updateProgress,
         updateMemoryQueueUI,
@@ -65,17 +66,21 @@ ${generateDynamicJsonTemplate()}
         const response = await guardAwait(guard, callAPI(prompt, null, { signal: guard.signal }));
         let memoryUpdate = parseAIResponse(response);
         memoryUpdate = postProcessResultWithChapterIndex(memoryUpdate, chapterIndex);
-        await guardAwait(
-            guard,
-            mergeWorldbookDataWithHistory({
-                target: AppState.worldbook.generated,
-                source: memoryUpdate,
-                memoryIndex: index,
-                memoryTitle: `修复-${memory.title}`,
-            }),
-        );
-        await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, memoryUpdate));
-        memory.result = memoryUpdate;
+        if (commitMemoryResult) {
+            await guardAwait(guard, commitMemoryResult(index, memoryUpdate, guard, { operation: 'repair' }));
+        } else {
+            await guardAwait(
+                guard,
+                mergeWorldbookDataWithHistory({
+                    target: AppState.worldbook.generated,
+                    source: memoryUpdate,
+                    memoryIndex: index,
+                    memoryTitle: `修复-${memory.title}`,
+                }),
+            );
+            await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, memoryUpdate));
+            memory.result = memoryUpdate;
+        }
     }
 
     async function handleRepairMemoryWithSplit(memoryIndex, stats, recovery = createRecoveryBudget()) {

@@ -2,6 +2,7 @@ import { captureRun, guardAwait, executeRun } from '../core/runContext.js';
 export function createRerollService(deps = {}) {
     const {
         AppState,
+        commitMemoryResult,
         MemoryHistoryDB,
         updateStopButtonVisibility,
         updateStreamContent,
@@ -86,19 +87,21 @@ export function createRerollService(deps = {}) {
             memory.processing = false;
 
             if (result) {
-                await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, result));
-                memory.result = result;
-                memory.processed = true;
-                memory.failed = false;
-                await guardAwait(
-                    guard,
-                    mergeWorldbookDataWithHistory({
-                        target: AppState.worldbook.generated,
-                        source: result,
-                        memoryIndex: index,
-                        memoryTitle: `${memory.title}-重Roll`,
-                    }),
-                );
+                if (commitMemoryResult) {
+                    await guardAwait(guard, commitMemoryResult(index, result, guard, { operation: 'reroll' }));
+                } else {
+                    await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, result));
+                    await guardAwait(
+                        guard,
+                        mergeWorldbookDataWithHistory({
+                            target: AppState.worldbook.generated,
+                            source: result,
+                            memoryIndex: index,
+                            memoryTitle: `${memory.title}-重Roll`,
+                        }),
+                    );
+                    Object.assign(memory, { result, processed: true, failed: false });
+                }
                 updateStreamContent(`✅ 重Roll完成: ${memory.title}\n`);
                 updateMemoryQueueUI();
                 updateWorldbookPreview();
@@ -216,31 +219,42 @@ export function createRerollService(deps = {}) {
             }
 
             if (entryUpdate && entryUpdate[category] && entryUpdate[category][entryName]) {
-                if (!memory.result) {
-                    memory.result = {};
+                const patch = { [category]: { [entryName]: entryUpdate[category][entryName] } };
+                const nextResult = structuredClone(memory.result || {});
+                nextResult[category] ??= {};
+                nextResult[category][entryName] = entryUpdate[category][entryName];
+                if (commitMemoryResult) {
+                    await guardAwait(
+                        guard,
+                        commitMemoryResult(memoryIndex, nextResult, guard, {
+                            operation: 'entry-reroll',
+                            replaceEntries: true,
+                            patch,
+                            entryRoll: {
+                                entryKey: category + ':' + entryName,
+                                category,
+                                entryName,
+                                result: entryUpdate[category][entryName],
+                                customPrompt,
+                            },
+                        }),
+                    );
+                } else {
+                    await guardAwait(guard, MemoryHistoryDB.saveRollResult(memoryIndex, nextResult));
+                    await guardAwait(
+                        guard,
+                        MemoryHistoryDB.saveEntryRollResult(
+                            category,
+                            entryName,
+                            memoryIndex,
+                            entryUpdate[category][entryName],
+                            customPrompt,
+                        ),
+                    );
+                    memory.result = nextResult;
+                    AppState.worldbook.generated[category] ??= {};
+                    AppState.worldbook.generated[category][entryName] = entryUpdate[category][entryName];
                 }
-                if (!memory.result[category]) {
-                    memory.result[category] = {};
-                }
-                memory.result[category][entryName] = entryUpdate[category][entryName];
-
-                await guardAwait(guard, MemoryHistoryDB.saveRollResult(memoryIndex, memory.result));
-                await guardAwait(
-                    guard,
-                    MemoryHistoryDB.saveEntryRollResult(
-                        category,
-                        entryName,
-                        memoryIndex,
-                        entryUpdate[category][entryName],
-                        customPrompt,
-                    ),
-                );
-
-                if (!AppState.worldbook.generated[category]) {
-                    AppState.worldbook.generated[category] = {};
-                }
-                AppState.worldbook.generated[category][entryName] = entryUpdate[category][entryName];
-
                 updateStreamContent(`✅ 条目重Roll完成: [${category}] ${entryName}\n`);
                 updateMemoryQueueUI();
                 updateWorldbookPreview();

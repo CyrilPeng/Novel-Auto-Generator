@@ -1,4 +1,4 @@
-﻿/**
+import { createChunkCommitService } from '../src/storage/chunkCommitService.js'; /**
  * TXT转世界书模块
  *
  * @file txtToWorldbook/main.js
@@ -63,7 +63,6 @@
  * @property {boolean} enabled - 是否启用
  * @property {string} color - 显示颜色
  */
-
 import {
     DEFAULT_CHAPTER_REGEX,
     DEFAULT_CATEGORY_LIGHT,
@@ -438,6 +437,7 @@ import { ensureModalStyles } from './ui/modalStyles.js';
             getEntryConfig,
         },
         processingDeps: ({ apiService, parserService }) => ({
+            commitMemoryResult: (...args) => chunkCommitService.commit(...args),
             AppState,
             MemoryHistoryDB,
             Semaphore,
@@ -475,6 +475,7 @@ import { ensureModalStyles } from './ui/modalStyles.js';
             quickDuplicateScan: (wb) => mergeWorkflowService.quickDuplicateScan(wb),
         }),
         rerollDeps: ({ apiService, parserService }) => ({
+            commitMemoryResult: (...args) => chunkCommitService.commit(...args),
             AppState,
             MemoryHistoryDB,
             updateStopButtonVisibility,
@@ -531,6 +532,7 @@ import { ensureModalStyles } from './ui/modalStyles.js';
     const { filterResponseContent, parseAIResponse } = parserService;
     const { callSillyTavernAPI, callCustomAPI, handleFetchModelList, handleQuickTestModel, callAPI } = apiService;
     const { mergeWorldbookDataIncremental, mergeWorldbookDataWithHistory, saveWorldbookSnapshot } = worldbookService;
+    const chunkCommitService = createChunkCommitService({ AppState, MemoryHistoryDB, worldbookService });
     const { convertToSillyTavernFormat } = exportFormatService;
     getEntryTotalTokens = (entry) => tokenMetricsService.getEntryTotalTokens(entry);
 
@@ -556,6 +558,7 @@ import { ensureModalStyles } from './ui/modalStyles.js';
         applyDefaultWorldbookEntries,
     } = worldbookRuntimeService;
     const repairService = createRepairService({
+        commitMemoryResult: (...args) => chunkCommitService.commit(...args),
         AppState,
         MemoryHistoryDB,
         updateProgress: (...args) => updateProgress(...args),

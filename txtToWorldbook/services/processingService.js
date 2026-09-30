@@ -6,6 +6,7 @@ import { createRequestBudget, abortableDelay, throwIfAborted } from '../core/req
 export function createProcessingService(deps = {}) {
     const {
         AppState,
+        commitMemoryResult,
         MemoryHistoryDB,
         Semaphore,
         updateMemoryQueueUI,
@@ -326,20 +327,24 @@ ${'='.repeat(50)}
         const orderedTasks = tasks.filter((task) => results.has(task.index)).sort((a, b) => a.index - b.index);
         for (const task of orderedTasks) {
             const result = results.get(task.index);
-            task.memory.processed = true;
-            task.memory.failed = false;
-            task.memory.processing = false;
-            task.memory.result = result;
-            await guardAwait(
-                guard,
-                mergeWorldbookDataWithHistory({
-                    target: AppState.worldbook.generated,
-                    source: result,
-                    memoryIndex: task.index,
-                    memoryTitle: task.memory.title,
-                }),
-            );
-            await guardAwait(guard, MemoryHistoryDB.saveRollResult(task.index, result));
+            if (commitMemoryResult) {
+                await guardAwait(guard, commitMemoryResult(task.index, result, guard));
+            } else {
+                await guardAwait(
+                    guard,
+                    mergeWorldbookDataWithHistory({
+                        target: AppState.worldbook.generated,
+                        source: result,
+                        memoryIndex: task.index,
+                        memoryTitle: task.memory.title,
+                    }),
+                );
+                await guardAwait(guard, MemoryHistoryDB.saveRollResult(task.index, result));
+                task.memory.processed = true;
+                task.memory.failed = false;
+                task.memory.processing = false;
+                task.memory.result = result;
+            }
         }
 
         if (fatalError) throw fatalError;
@@ -454,21 +459,24 @@ ${'='.repeat(50)}
             const { update: memoryUpdate, entryCount } = parseMemoryUpdate(response, chapterIndex);
 
             debugLog(`[串行][第${chapterIndex}章] 合并世界书...`);
-            await guardAwait(
-                guard,
-                mergeWorldbookDataWithHistory({
-                    target: AppState.worldbook.generated,
-                    source: memoryUpdate,
-                    memoryIndex: index,
-                    memoryTitle: memory.title,
-                }),
-            );
-            debugLog(`[串行][第${chapterIndex}章] 保存Roll结果...`);
-            await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, memoryUpdate));
+            if (commitMemoryResult) {
+                await guardAwait(guard, commitMemoryResult(index, memoryUpdate, guard));
+            } else {
+                await guardAwait(
+                    guard,
+                    mergeWorldbookDataWithHistory({
+                        target: AppState.worldbook.generated,
+                        source: memoryUpdate,
+                        memoryIndex: index,
+                        memoryTitle: memory.title,
+                    }),
+                );
+                await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, memoryUpdate));
+            }
             debugLog(`[串行][第${chapterIndex}章] 完成, 有效条目=${entryCount}`);
 
             memory.processed = true;
-            memory.result = memoryUpdate;
+            if (!commitMemoryResult) memory.result = memoryUpdate;
             chapterTimings.push(Date.now() - chunkStartTime);
             updateMemoryQueueUI();
         } catch (error) {

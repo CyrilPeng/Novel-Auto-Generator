@@ -381,6 +381,7 @@ export function createMemoryHistoryDB(AppState, _Logger) {
                 const store = transaction.objectStore(this.stateStoreName);
                 const state = {
                     key: 'currentState',
+                    task: AppState.task ? JSON.parse(JSON.stringify(AppState.task)) : null,
                     processedIndex,
                     memoryQueue: JSON.parse(JSON.stringify(AppState.memory.queue)),
                     generatedWorldbook: JSON.parse(JSON.stringify(AppState.worldbook.generated)),
