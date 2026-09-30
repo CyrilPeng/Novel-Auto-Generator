@@ -1,4 +1,4 @@
-﻿export function createMemoryHistoryDB(AppState, Logger) {
+﻿export function createMemoryHistoryDB(AppState, _Logger) {
     // ========== 写操作并发队列 ==========
     // 保护 saveHistory 等复合读-改-写操作的原子性
     // 同一 memoryTitle 的写操作被序列化，避免并行处理时互相覆盖

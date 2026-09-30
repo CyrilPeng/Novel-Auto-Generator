@@ -359,23 +359,9 @@
 
 ## 三、自动化测试覆盖
 
-以下功能已有自动化测试覆盖，无需手动回归：
+自动化测试覆盖工具、错误、国际化、差异、响应解析、世界书合并、任务处理、API URL、IndexedDB 和公开 API 契约。实际文件数与用例数以 `npm test` 输出为准。
 
-| 模块             | 测试文件                                  | 用例数 |
-| :--------------- | :---------------------------------------- | :----: |
-| 工具函数         | `tests/core/utils.test.js`                |   21   |
-| 响应解析         | `tests/services/parserService.test.js`    |   12   |
-| 世界书服务       | `tests/services/worldbookService.test.js` |   21   |
-| IndexedDB 持久化 | `tests/infra/memoryHistoryDB.test.js`     |   32   |
-| **合计**         |                                           | **86** |
-
-运行命令：
-
-```bash
-npm test
-```
-
----
+工程与兼容测试基线见 [B00 基线记录](../docs/baseline.md)。自动化测试不能替代真实酒馆、浏览器和恢复流程的手动回归。
 
 ## 四、回归流程
 
@@ -387,7 +373,7 @@ npm test
    npm test
    ```
 
-   确保所有 86 个用例通过。
+   确保全部自动化用例通过。
 
 2. **手动验证清单**：按顺序完成 1～17 项测试，每项勾选对应复选框。
 

@@ -206,7 +206,7 @@ export function createImportMergeService(deps = {}) {
                 };
             }
             return result;
-        } catch (e) {
+        } catch {
             return {
                 关键词: [...new Set([...(entryA['关键词'] || []), ...(entryB['关键词'] || [])])],
                 内容: `${entryA['内容'] || ''}\n\n---\n\n${entryB['内容'] || ''}`,

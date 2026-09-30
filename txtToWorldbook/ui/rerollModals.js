@@ -671,7 +671,7 @@
             let resultToUse;
             try {
                 resultToUse = JSON.parse(editArea.value);
-            } catch (e) {
+            } catch {
                 if (
                     !(await confirmAction('编辑框中的JSON格式有误，是否使用原始结果？\n\n点击"取消"可继续编辑修复。', {
                         title: 'JSON 格式有误',

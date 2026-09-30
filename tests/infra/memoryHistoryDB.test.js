@@ -36,13 +36,13 @@ describe('MemoryHistoryDB', () => {
     beforeEach(async () => {
         // 每个测试前重置 IndexedDB，避免跨测试数据泄漏
         try {
-            await new Promise((resolve, reject) => {
+            await new Promise((resolve) => {
                 const req = indexedDB.deleteDatabase('TxtToWorldbookDB');
                 req.onsuccess = () => resolve();
                 req.onerror = () => resolve();
                 req.onblocked = () => resolve();
             });
-        } catch (_) {
+        } catch {
             /* ignore */
         }
 
@@ -329,9 +329,9 @@ describe('MemoryHistoryDB', () => {
     // ============================================================
     describe('回滚到历史', () => {
         it('回滚移除该历史及之后的所有记录', async () => {
-            const id1 = await testDB.db.saveHistory(0, '第1章', {}, { step: 1 }, []);
+            await testDB.db.saveHistory(0, '第1章', {}, { step: 1 }, []);
             const id2 = await testDB.db.saveHistory(1, '第2章', {}, { step: 2 }, []);
-            const id3 = await testDB.db.saveHistory(2, '第3章', {}, { step: 3 }, []);
+            await testDB.db.saveHistory(2, '第3章', {}, { step: 3 }, []);
 
             await testDB.db.rollbackToHistory(id2);
 

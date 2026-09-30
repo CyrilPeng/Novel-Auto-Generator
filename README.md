@@ -208,6 +208,8 @@ novel-auto-generator/
 
 本项目使用 [Vitest](https://vitest.dev/) 作为自动化测试框架，覆盖 TXT 转世界书核心模块。
 
+后续结构调整与可靠性改进见 [重构与可靠性改进方案](docs/refactoring-plan.md)，包含任务生命周期、兼容迁移、分批实施和验收标准。
+
 ### 运行测试
 
 ```bash
@@ -223,13 +225,9 @@ npm run test:watch
 
 ### 测试覆盖范围
 
-| 模块                                              | 测试文件                                  | 用例数 |
-| :------------------------------------------------ | :---------------------------------------- | :----: |
-| 工具函数 (estimateTokenCount, chineseNumToInt 等) | `tests/core/utils.test.js`                |   21   |
-| 响应解析 (filterTags, parseAIResponse, JSON 修复) | `tests/services/parserService.test.js`    |   12   |
-| 世界书服务 (normalize, merge, diff, history)      | `tests/services/worldbookService.test.js` |   21   |
-| IndexedDB 持久化 (6 个存储表全 CRUD 测试)         | `tests/infra/memoryHistoryDB.test.js`     |   32   |
-| **合计**                                          |                                           | **86** |
+自动化测试覆盖工具、错误、国际化、差异、响应解析、世界书合并、任务处理、API URL、IndexedDB 和公开 API 契约。实际文件数与用例数以 `npm test` 输出为准。
+
+工程与兼容测试基线见 [B00 基线记录](docs/baseline.md)。自动化测试不能替代真实酒馆、浏览器和恢复流程的手动回归。
 
 ### 手动回归测试
 

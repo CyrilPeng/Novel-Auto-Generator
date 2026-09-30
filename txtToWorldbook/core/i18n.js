@@ -87,7 +87,7 @@ export function setLocale(locale) {
     for (const listener of _listeners) {
         try {
             listener(_currentLocale);
-        } catch (_e) {}
+        } catch {}
     }
 }
 

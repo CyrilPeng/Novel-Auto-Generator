@@ -39,7 +39,7 @@ export function createFileUtils(deps = {}) {
                 if (!content.includes(replacementChar)) {
                     return { encoding, content };
                 }
-            } catch (e) {
+            } catch {
                 continue;
             }
         }

@@ -30,9 +30,7 @@ export function isConsolidateErrorResponse(responseText) {
 
     const compactText = text.replace(/\s+/g, ' ');
     const patterns =
-        compactText.length > 2000
-            ? STRICT_CONSOLIDATE_ERROR_RESPONSE_PATTERNS
-            : CONSOLIDATE_ERROR_RESPONSE_PATTERNS;
+        compactText.length > 2000 ? STRICT_CONSOLIDATE_ERROR_RESPONSE_PATTERNS : CONSOLIDATE_ERROR_RESPONSE_PATTERNS;
     return patterns.some((pattern) => pattern.test(compactText));
 }
 

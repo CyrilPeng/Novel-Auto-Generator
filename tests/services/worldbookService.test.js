@@ -237,7 +237,7 @@ describe('mergeWorldbookDataWithHistory', () => {
     });
 
     it('增量模式下使用增量合并', async () => {
-        const { service, historyCalls } = createTestService({ incrementalMode: () => true });
+        const { service } = createTestService({ incrementalMode: () => true });
         const target = { 角色: { 张三: { 关键词: ['张三'], 内容: 'A' } } };
         const source = { 角色: { 张三: { 关键词: ['老张'], 内容: 'B' } } };
 

@@ -92,14 +92,14 @@ function getSTChat() {
             const ctx = SillyTavern.getContext();
             if (ctx?.chat && Array.isArray(ctx.chat)) return ctx.chat;
         }
-    } catch (e) {}
+    } catch {}
 
     try {
         if (typeof getContext === 'function') {
             const ctx = getContext();
             if (ctx?.chat && Array.isArray(ctx.chat)) return ctx.chat;
         }
-    } catch (e) {}
+    } catch {}
 
     if (window.chat && Array.isArray(window.chat)) return window.chat;
     if (typeof chat !== 'undefined' && Array.isArray(chat)) return chat;
@@ -138,10 +138,6 @@ function getRawMessages(startFloor, endFloor, opts = {}) {
         }
     }
     return messages;
-}
-
-function getAIMessageCount() {
-    return document.querySelectorAll('#chat .mes[is_user="false"]').length;
 }
 
 function getLastAIMessageLength() {

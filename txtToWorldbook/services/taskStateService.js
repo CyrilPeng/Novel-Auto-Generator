@@ -40,7 +40,7 @@ export function createTaskStateService(deps = {}) {
                 const processedCount = AppState.memory.queue.filter((m) => m.processed).length;
                 try {
                     MemoryHistoryDB.saveState(processedCount);
-                } catch (e) {}
+                } catch {}
             }
         };
         window.addEventListener('beforeunload', beforeUnloadHandler);

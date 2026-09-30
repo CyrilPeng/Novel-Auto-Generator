@@ -83,7 +83,7 @@ export function createParserService(deps = {}) {
                     content = entryContent.substring(contentStartPos, contentEndPos);
                     try {
                         content = JSON.parse(`"${content.replace(/(?<!\\)"/g, '\\"')}"`);
-                    } catch (e) {
+                    } catch {
                         content = content.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
                     }
                 }

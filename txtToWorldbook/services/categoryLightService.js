@@ -5,7 +5,7 @@ export function createCategoryLightService(deps) {
         AppState.settings.categoryLightSettings = { ...AppState.config.categoryLight };
         try {
             localStorage.setItem(storageKey, JSON.stringify(AppState.settings));
-        } catch (e) {}
+        } catch {}
     }
 
     function loadCategoryLightSettings() {

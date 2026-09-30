@@ -39,7 +39,7 @@ const APICaller = {
             let text = '';
             try {
                 text = await response.text();
-            } catch (_e) {}
+            } catch {}
             const message = `API请求失败: ${response.status} ${response.statusText}${text ? ` - ${text.substring(0, 200)}` : ''}`;
             const ErrorClass = HTTP_RETRYABLE.has(response.status) ? RetryableError : FatalError;
             throw new ErrorClass(message, {
@@ -69,20 +69,20 @@ const APICaller = {
     extractJSON(text) {
         try {
             return JSON.parse(text);
-        } catch (e) {}
+        } catch {}
 
         const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonBlockMatch) {
             try {
                 return JSON.parse(jsonBlockMatch[1].trim());
-            } catch (e) {}
+            } catch {}
         }
 
         const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
         if (jsonObjectMatch) {
             try {
                 return JSON.parse(jsonObjectMatch[0]);
-            } catch (e) {}
+            } catch {}
         }
 
         throw new Error('无法从响应中提取有效的JSON');
@@ -116,7 +116,7 @@ const APICaller = {
             inactivityTimer = setTimeout(() => {
                 try {
                     reader.cancel();
-                } catch (e) {}
+                } catch {}
             }, inactivityTimeout);
         };
 
@@ -132,7 +132,7 @@ const APICaller = {
                     fullContent += delta;
                     if (typeof onChunk === 'function') onChunk(delta, fullContent, parsed);
                 }
-            } catch (e) {}
+            } catch {}
         };
 
         resetInactivityTimer();
