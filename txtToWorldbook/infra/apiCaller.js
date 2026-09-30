@@ -1,34 +1,12 @@
 ﻿import { Logger } from '../core/logger.js';
 import { RetryableError, FatalError, isRetryable, isAborted, HTTP_RETRYABLE } from '../core/errors.js';
 import { abortableDelay, throwIfAborted, parseRetryAfter } from '../core/requestPolicy.js';
+import { fetchManaged, readResponseText, consumeBody } from './requestLifecycle.js';
+import { createSSEParser } from './sseParser.js';
 
 const APICaller = {
-    /**
-     * fetchWithTimeout
-     *
-     * @param {*} url
-     * @param {*} options
-     * @param {*} timeout
-     * @returns {Promise<any>}
-     */
     async fetchWithTimeout(url, options = {}, timeout = 120000) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-        try {
-            const response = await fetch(url, {
-                ...options,
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            return response;
-        } catch (error) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
-                throw new RetryableError('请求超时', { httpStatus: 408, code: 'TIMEOUT' });
-            }
-            throw new RetryableError(`网络错误: ${error.message}`, { code: 'NETWORK_ERROR' });
-        }
+        return fetchManaged(url, options, timeout);
     },
 
     async request(url, options = {}) {
@@ -37,27 +15,29 @@ const APICaller = {
         if (!response.ok) {
             let text = '';
             try {
-                text = await response.text();
-            } catch {}
-            const message = `API请求失败: ${response.status} ${response.statusText}${text ? ` - ${text.substring(0, 200)}` : ''}`;
+                text = await readResponseText(response, { maxBytes: 65536 });
+            } catch (error) {
+                if (isAborted(error)) throw error;
+            }
             const ErrorClass = HTTP_RETRYABLE.has(response.status) ? RetryableError : FatalError;
-            throw new ErrorClass(message, {
-                httpStatus: response.status,
-                code: `HTTP_${response.status}`,
-                retryAfterMs: parseRetryAfter(response.headers.get('Retry-After')),
-            });
+            throw new ErrorClass(
+                'API请求失败: ' +
+                    response.status +
+                    ' ' +
+                    response.statusText +
+                    (text ? ' - ' + text.slice(0, 200) : ''),
+                {
+                    httpStatus: response.status,
+                    code: 'HTTP_' + response.status,
+                    retryAfterMs: parseRetryAfter(response.headers.get('Retry-After')),
+                },
+            );
         }
         return response;
     },
 
-    /**
-     * parseResponse
-     *
-     * @param {*} response
-     * @returns {Promise<any>}
-     */
-    async parseResponse(response) {
-        return response.text();
+    async parseResponse(response, options = {}) {
+        return readResponseText(response, options);
     },
 
     /**
@@ -90,79 +70,31 @@ const APICaller = {
 
     async requestJSON(url, options = {}) {
         const response = await this.request(url, options);
-        const text = await this.parseResponse(response);
+        const text = await this.parseResponse(response, options);
         return this.extractJSON(text);
     },
 
     async requestText(url, options = {}) {
         const response = await this.request(url, options);
-        return this.parseResponse(response);
+        return this.parseResponse(response, options);
     },
 
     async parseSSEStream(response, config = {}) {
-        const { onChunk = null, inactivityTimeout = 120000 } = config;
-        if (!response.body) {
-            throw new Error('流式响应不可用');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullContent = '';
-        let buffer = '';
-        let inactivityTimer = null;
-
-        const resetInactivityTimer = () => {
-            if (inactivityTimer) clearTimeout(inactivityTimer);
-            inactivityTimer = setTimeout(() => {
-                try {
-                    reader.cancel();
-                } catch {}
-            }, inactivityTimeout);
-        };
-
-        const consumeLine = (line) => {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(':') || !trimmed.startsWith('data: ')) return;
-            const dataStr = trimmed.slice(6).trim();
-            if (dataStr === '[DONE]') return;
-            try {
-                const parsed = JSON.parse(dataStr);
-                const delta = parsed.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                    fullContent += delta;
-                    if (typeof onChunk === 'function') onChunk(delta, fullContent, parsed);
-                }
-            } catch {}
-        };
-
-        resetInactivityTimer();
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                resetInactivityTimer();
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                for (const line of lines) {
-                    consumeLine(line);
-                }
-            }
-        } finally {
-            if (inactivityTimer) clearTimeout(inactivityTimer);
-        }
-
-        if (buffer.trim()) {
-            consumeLine(buffer);
-        }
-
-        return fullContent;
+        const parser = createSSEParser(config);
+        await consumeBody(response, (bytes) => parser.push(bytes), { ...config, isComplete: () => parser.complete });
+        return parser.finish();
     },
 
     async requestStream(url, options = {}) {
-        const { onChunk = null, inactivityTimeout = 120000, ...requestOptions } = options;
+        const { onChunk, inactivityTimeout, allowEOF, maxBytes, ...requestOptions } = options;
         const response = await this.request(url, requestOptions);
-        return this.parseSSEStream(response, { onChunk, inactivityTimeout });
+        return this.parseSSEStream(response, {
+            onChunk,
+            inactivityTimeout,
+            allowEOF,
+            maxBytes,
+            signal: options.signal,
+        });
     },
 
     isRateLimitError(error) {

@@ -51,6 +51,59 @@ function setup() {
 const response = (text) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }));
 
 describe('real API and chapter retry integration', () => {
+    it('rejects JSON output explicitly truncated by the model without retrying transport', async () => {
+        const fetch = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{}' }] } }],
+                }),
+            ),
+        );
+        vi.stubGlobal('fetch', fetch);
+        const { api } = setup();
+        await expect(api.callCustomAPI([{ role: 'user', content: 'fixture' }])).rejects.toMatchObject({
+            code: 'TOKEN_LIMIT',
+        });
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('joins all Gemini text parts and excludes thought parts', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(
+                new Response(
+                    JSON.stringify({
+                        candidates: [
+                            {
+                                finishReason: 'STOP',
+                                content: {
+                                    parts: [{ text: '思考', thought: true }, { text: '前半' }, { text: '后半' }],
+                                },
+                            },
+                        ],
+                    }),
+                ),
+            ),
+        );
+        const { api } = setup();
+        await expect(api.callCustomAPI([{ role: 'user', content: 'fixture' }])).resolves.toBe('前半后半');
+    });
+
+    it('cancels local waiting for an uncancellable host and cleans timers', async () => {
+        vi.useFakeTimers();
+        const generateRaw = vi.fn().mockReturnValue(new Promise(() => {}));
+        vi.stubGlobal('SillyTavern', { getContext: () => ({ generateRaw }) });
+        const controller = new AbortController();
+        const { api } = setup();
+        const result = api
+            .callSillyTavernAPI([{ role: 'user', content: 'fixture' }], null, { signal: controller.signal })
+            .catch((error) => error);
+        controller.abort();
+        expect(await result).toMatchObject({ code: 'ABORTED' });
+        expect(generateRaw).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('caps nested transport/processing retry at four physical calls', async () => {
         vi.useFakeTimers();
         const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response('unavailable', { status: 503 })));

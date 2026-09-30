@@ -1,4 +1,4 @@
-import { FatalError, UserError } from '../core/errors.js';
+import { FatalError, UserError, RetryableError, TokenLimitError, AbortedError } from '../core/errors.js';
 import { createRequestBudget } from '../core/requestPolicy.js';
 
 /**
@@ -88,6 +88,7 @@ export function createApiService(deps = {}) {
                     debugLog(`${logPrefix} 酒馆API重试 #${attempt}`);
                 }
                 let timeoutId;
+                let onAbort;
                 try {
                     if (typeof SillyTavern === 'undefined' || !SillyTavern.getContext) {
                         throw new UserError('无法访问SillyTavern上下文');
@@ -96,6 +97,9 @@ export function createApiService(deps = {}) {
                     const context = SillyTavern.getContext();
                     debugLog(`${logPrefix} 获取到SillyTavern上下文`);
                     const timeoutPromise = new Promise((_, reject) => {
+                        onAbort = () => reject(new AbortedError());
+                        options.signal?.addEventListener('abort', onAbort, { once: true });
+                        if (options.signal?.aborted) onAbort();
                         timeoutId = setTimeout(
                             () =>
                                 reject(
@@ -175,6 +179,7 @@ export function createApiService(deps = {}) {
                     throw error;
                 } finally {
                     clearTimeout(timeoutId);
+                    if (onAbort) options.signal?.removeEventListener('abort', onAbort);
                 }
             },
             {
@@ -287,11 +292,31 @@ export function createApiService(deps = {}) {
     }
 
     function extractCustomApiText(provider, data) {
+        if (data.error)
+            throw new RetryableError('API错误: ' + (data.error.message || '未知错误'), { code: 'API_ERROR' });
+        const finish =
+            provider === 'gemini'
+                ? data.candidates?.[0]?.finishReason
+                : provider === 'anthropic'
+                  ? data.stop_reason
+                  : data.choices?.[0]?.finish_reason;
+        if (['MAX_TOKENS', 'max_tokens', 'length'].includes(finish)) {
+            throw new TokenLimitError('Token limit exceeded: 模型输出被截断');
+        }
+        if (finish && !['STOP', 'end_turn', 'stop_sequence', 'stop'].includes(finish)) {
+            throw new FatalError('模型未正常完成: ' + finish, { code: 'INVALID_FINISH_REASON' });
+        }
         if (provider === 'gemini') {
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            return (data.candidates?.[0]?.content?.parts || [])
+                .filter((part) => !part.thought && typeof part.text === 'string')
+                .map((part) => part.text)
+                .join('');
         }
         if (provider === 'anthropic') {
-            return data.content?.[0]?.text || '';
+            return (data.content || [])
+                .filter((part) => (!part.type || part.type === 'text') && typeof part.text === 'string')
+                .map((part) => part.text)
+                .join('');
         }
         return data.choices?.[0]?.message?.content || '';
     }
