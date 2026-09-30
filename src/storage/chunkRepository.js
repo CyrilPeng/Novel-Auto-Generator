@@ -75,7 +75,12 @@ export function createChunkRepository(database) {
                                 const state = {
                                     ...data.state,
                                     key: 'currentState',
-                                    task: { id: data.taskId, revision: nextRevision, fileHash: data.state.fileHash },
+                                    task: {
+                                        ...data.state.task,
+                                        id: data.taskId,
+                                        revision: nextRevision,
+                                        fileHash: data.state.fileHash,
+                                    },
                                 };
                                 states.put(state);
                                 tx.objectStore(database.rollStoreName).add({

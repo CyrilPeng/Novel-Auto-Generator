@@ -691,6 +691,7 @@ ${'='.repeat(50)}
             }
 
             if (run.pauseRequested) {
+                if (AppState.task) AppState.task.lifecycle = 'paused';
                 const next = AppState.memory.queue.findIndex((m) => !m.processed || m.failed);
                 await guardAwait(guard, MemoryHistoryDB.saveState(next < 0 ? AppState.memory.queue.length : next));
                 transitionTo('paused');
@@ -731,8 +732,9 @@ ${'='.repeat(50)}
                 }
             }
 
+            if (AppState.task) AppState.task.lifecycle = 'completed';
             await guardAwait(guard, MemoryHistoryDB.saveState(AppState.memory.queue.length));
-            await guardAwait(guard, MemoryHistoryDB.clearState());
+
             transitionTo('idle');
             updateStartButtonState(false);
             updateStopButtonVisibility(false);

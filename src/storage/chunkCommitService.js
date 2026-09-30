@@ -1,3 +1,4 @@
+import { captureTaskState } from './taskSchema.js';
 import { ensureChunkIdentities, newIdentity } from '../../txtToWorldbook/core/chunkIdentity.js';
 import { AbortedError } from '../../txtToWorldbook/core/errors.js';
 import { createChunkRepository } from './chunkRepository.js';
@@ -41,16 +42,7 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
                 failedError: null,
                 processing: false,
             });
-            const state = {
-                processedIndex: index + 1,
-                memoryQueue: queue,
-                generatedWorldbook: next,
-                worldbookVolumes: structuredClone(AppState.worldbook.volumes),
-                currentVolumeIndex: AppState.worldbook.currentVolumeIndex,
-                fileHash: AppState.file.hash,
-                novelName: AppState.file.novelName || '',
-                timestamp: Date.now(),
-            };
+            const state = { ...captureTaskState(AppState, index + 1), memoryQueue: queue, generatedWorldbook: next };
             const saved = await repository.commit({
                 taskId: AppState.task.id,
                 expectedRevision: AppState.task.revision,

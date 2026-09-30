@@ -57,6 +57,34 @@ describe('MemoryHistoryDB', () => {
         }
     });
 
+    it('rejects an autosave snapshot older than the committed task revision', async () => {
+        await testDB.db.saveState(1);
+        const db = await testDB.db.openDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction([testDB.db.metaStoreName], 'readwrite');
+            tx.objectStore(testDB.db.metaStoreName).put({ key: 'task:' + testDB.AppState.task.id, revision: 2 });
+            tx.oncomplete = resolve;
+            tx.onabort = reject;
+        });
+        await expect(testDB.db.saveState(2)).rejects.toMatchObject({ code: 'REVISION_CONFLICT' });
+        expect((await testDB.db.loadState()).processedIndex).toBe(1);
+    });
+
+    it('keeps a readable legacy backup when first saving the new schema', async () => {
+        const legacy = { key: 'currentState', memoryQueue: [{ content: 'old' }], processedIndex: 1 };
+        const db = await testDB.db.openDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction([testDB.db.stateStoreName], 'readwrite');
+            tx.objectStore(testDB.db.stateStoreName).put(legacy);
+            tx.oncomplete = resolve;
+            tx.onabort = reject;
+        });
+        await testDB.db.saveState(2);
+        await testDB.db.saveState(3);
+        expect(await testDB.db.loadLegacyStateBackup()).toEqual(legacy);
+        expect((await testDB.db.loadState()).schemaVersion).toBe(1);
+    });
+
     it('rejects state saving if the transaction aborts after a successful put and keeps the old checkpoint', async () => {
         await testDB.db.saveState(1);
         const original = IDBObjectStore.prototype.put;
@@ -66,7 +94,7 @@ describe('MemoryHistoryDB', () => {
             return request;
         });
         try {
-            await expect(testDB.db.saveState(2)).rejects.toMatchObject({ name: 'AbortError' });
+            await expect(testDB.db.saveState(2)).rejects.toMatchObject({ code: 'STORAGE_SAVE_FAILED' });
         } finally {
             spy.mockRestore();
         }

@@ -1,3 +1,4 @@
+import { migrateTaskState, withoutCredentials } from '../../src/storage/taskSchema.js';
 export function createTaskStateService(deps = {}) {
     const {
         AppState,
@@ -39,7 +40,7 @@ export function createTaskStateService(deps = {}) {
             if (AppState.processing.isRunning && AppState.memory.queue.length > 0) {
                 const processedCount = AppState.memory.queue.filter((m) => m.processed).length;
                 try {
-                    MemoryHistoryDB.saveState(processedCount);
+                    MemoryHistoryDB.saveState(processedCount).catch((error) => Logger.warn('AutoSave', error.message));
                 } catch {}
             }
         };
@@ -67,7 +68,8 @@ export function createTaskStateService(deps = {}) {
             worldbookVolumes: AppState.worldbook.volumes,
             currentVolumeIndex: AppState.worldbook.currentVolumeIndex,
             fileHash: AppState.file.hash,
-            settings: AppState.settings,
+            settings: withoutCredentials(AppState.settings),
+            schemaVersion: 1,
             parallelConfig: AppState.config.parallel,
             categoryLightSettings: AppState.config.categoryLight,
             customWorldbookCategories: AppState.persistent.customCategories,
@@ -103,6 +105,26 @@ export function createTaskStateService(deps = {}) {
         ErrorHandler.showUserSuccess(`任务状态已导出！已处理: ${processedCount}/${AppState.memory.queue.length}`);
     }
 
+    function assertCanRestore() {
+        if (AppState.processing.run?.pending || AppState.processing.isRunning)
+            throw new Error('请先停止当前任务并等待收尾，再导入或恢复');
+    }
+
+    function restoreConfiguration(state) {
+        AppState.settings = { ...defaultSettings, ...AppState.settings, ...state.settings };
+        for (const [source, target] of Object.entries({
+            parallelConfig: 'parallel',
+            categoryLightSettings: 'categoryLight',
+            chapterRegexSettings: 'chapterRegex',
+            categoryDefaultConfig: 'categoryDefault',
+            entryPositionConfig: 'entryPosition',
+        })) {
+            if (state[source]) AppState.config[target] = state[source];
+        }
+        if (state.customWorldbookCategories) AppState.persistent.customCategories = state.customWorldbookCategories;
+        if (state.defaultWorldbookEntriesUI) AppState.persistent.defaultEntries = state.defaultWorldbookEntriesUI;
+    }
+
     async function loadTaskState() {
         const input = document.createElement('input');
         input.type = 'file';
@@ -112,8 +134,9 @@ export function createTaskStateService(deps = {}) {
             if (!file) return;
             try {
                 const content = await file.text();
-                const state = JSON.parse(content);
+                const state = migrateTaskState(JSON.parse(content), { fork: true });
                 if (!state.memoryQueue || !Array.isArray(state.memoryQueue)) throw new Error('无效的任务状态文件');
+                assertCanRestore();
                 AppState.memory.queue = state.memoryQueue;
                 AppState.task = state.task || null;
                 AppState.worldbook.generated = state.generatedWorldbook || {};
@@ -121,21 +144,7 @@ export function createTaskStateService(deps = {}) {
                 AppState.worldbook.currentVolumeIndex = state.currentVolumeIndex || 0;
                 AppState.file.hash = state.fileHash || null;
 
-                if (state.settings) AppState.settings = { ...defaultSettings, ...state.settings };
-                if (state.parallelConfig)
-                    AppState.config.parallel = { ...AppState.config.parallel, ...state.parallelConfig };
-                if (state.categoryLightSettings)
-                    AppState.config.categoryLight = {
-                        ...AppState.config.categoryLight,
-                        ...state.categoryLightSettings,
-                    };
-                if (state.customWorldbookCategories)
-                    AppState.persistent.customCategories = state.customWorldbookCategories;
-                if (state.chapterRegexSettings) AppState.config.chapterRegex = state.chapterRegexSettings;
-                if (state.defaultWorldbookEntriesUI)
-                    AppState.persistent.defaultEntries = state.defaultWorldbookEntriesUI;
-                if (state.categoryDefaultConfig) AppState.config.categoryDefault = state.categoryDefaultConfig;
-                if (state.entryPositionConfig) AppState.config.entryPosition = state.entryPositionConfig;
+                restoreConfiguration(state);
 
                 if (state.novelName) {
                     AppState.file.novelName = state.novelName;
@@ -243,17 +252,20 @@ export function createTaskStateService(deps = {}) {
 
     async function checkAndRestoreState() {
         try {
-            const savedState = await MemoryHistoryDB.loadState();
+            const rawState = await MemoryHistoryDB.loadState();
+            const savedState = rawState ? migrateTaskState(rawState) : null;
             if (savedState && savedState.memoryQueue && savedState.memoryQueue.length > 0) {
                 const processedCount = savedState.memoryQueue.filter((m) => m.processed).length;
                 if (
                     await confirmAction(
-                        `检测到未完成任务\n已处理: ${processedCount}/${savedState.memoryQueue.length}\n\n是否恢复？`,
-                        { title: '恢复未完成任务' },
+                        `检测到已保存任务\n已处理: ${processedCount}/${savedState.memoryQueue.length}\n\n是否恢复？`,
+                        { title: '恢复已保存任务' },
                     )
                 ) {
+                    assertCanRestore();
                     AppState.memory.queue = savedState.memoryQueue;
                     AppState.task = savedState.task || null;
+                    restoreConfiguration(savedState);
                     AppState.worldbook.generated = savedState.generatedWorldbook || {};
                     AppState.worldbook.volumes = savedState.worldbookVolumes || [];
                     AppState.worldbook.currentVolumeIndex = savedState.currentVolumeIndex || 0;
@@ -281,6 +293,9 @@ export function createTaskStateService(deps = {}) {
                     }
                     updateStartButtonState(false);
                     updateSettingsUI();
+                    renderCategoriesList();
+                    renderDefaultWorldbookEntriesUI();
+                    updateChapterRegexUI();
                     document.getElementById('ttw-start-btn').disabled = false;
 
                     document.getElementById('ttw-upload-area').style.display = 'none';
@@ -293,8 +308,6 @@ export function createTaskStateService(deps = {}) {
                     if (novelNameRow) novelNameRow.style.display = 'flex';
                     const novelNameInput = document.getElementById('ttw-novel-name-input');
                     if (novelNameInput && AppState.file.novelName) novelNameInput.value = AppState.file.novelName;
-                } else {
-                    await MemoryHistoryDB.clearState();
                 }
             }
         } catch (e) {
