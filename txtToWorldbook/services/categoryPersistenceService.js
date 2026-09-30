@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 export function createCategoryPersistenceService(deps) {
     const {
         AppState,
@@ -48,7 +49,7 @@ export function createCategoryPersistenceService(deps) {
     }
 
     function getEnabledCategories() {
-        return AppState.persistent.customCategories.filter((category) => category.enabled);
+        return runConfiguration(AppState).persistent.customCategories.filter((category) => category.enabled);
     }
 
     function generateDynamicJsonTemplate() {

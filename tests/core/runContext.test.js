@@ -33,3 +33,42 @@ it('keeps a completed run terminal and records failure', () => {
     expect(run.lifecycle).toBe('failed');
     expect(pauseRun(processing)).toBe(false);
 });
+
+it('captures run configuration and releases the writer only after finalization', async () => {
+    const { configureRunEnvironment, runConfiguration, executeRun } =
+        await import('../../txtToWorldbook/core/runContext.js');
+    let released = 0;
+    const state = {
+        processing: {},
+        settings: { customApiModel: 'first' },
+        config: { parallel: { concurrency: 2 } },
+        persistent: { customCategories: [] },
+    };
+    configureRunEnvironment(state, async () => () => released++);
+    const task = executeRun(state.processing, 'convert', async () => {
+        expect(runConfiguration(state).settings.customApiModel).toBe('first');
+        expect(runConfiguration(state).config.parallel.concurrency).toBe(2);
+        expect(released).toBe(0);
+    });
+    state.settings.customApiModel = 'second';
+    state.config.parallel.concurrency = 8;
+    await task;
+    expect(released).toBe(1);
+    expect(runConfiguration(state).settings.customApiModel).toBe('second');
+});
+
+it('does not enter the command when another page holds the writer', async () => {
+    const { configureRunEnvironment, executeRun } = await import('../../txtToWorldbook/core/runContext.js');
+    const state = { processing: {}, settings: {}, config: {}, persistent: { customCategories: [] } };
+    configureRunEnvironment(state, async () => {
+        throw new Error('busy');
+    });
+    let entered = false;
+    await expect(
+        executeRun(state.processing, 'convert', () => {
+            entered = true;
+        }),
+    ).rejects.toThrow('busy');
+    expect(entered).toBe(false);
+    expect(state.processing.run.pending).toBe(false);
+});

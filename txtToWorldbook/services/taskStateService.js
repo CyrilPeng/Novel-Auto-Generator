@@ -1,4 +1,4 @@
-import { migrateTaskState, withoutCredentials } from '../../src/storage/taskSchema.js';
+import { migrateTaskState, captureTaskState } from '../../src/storage/taskSchema.js';
 export function createTaskStateService(deps = {}) {
     const {
         AppState,
@@ -59,27 +59,8 @@ export function createTaskStateService(deps = {}) {
     }
 
     async function saveTaskState() {
-        const state = {
-            version: '2.9.0',
-            task: AppState.task || null,
-            timestamp: Date.now(),
-            memoryQueue: AppState.memory.queue,
-            generatedWorldbook: AppState.worldbook.generated,
-            worldbookVolumes: AppState.worldbook.volumes,
-            currentVolumeIndex: AppState.worldbook.currentVolumeIndex,
-            fileHash: AppState.file.hash,
-            settings: withoutCredentials(AppState.settings),
-            schemaVersion: 1,
-            parallelConfig: AppState.config.parallel,
-            categoryLightSettings: AppState.config.categoryLight,
-            customWorldbookCategories: AppState.persistent.customCategories,
-            chapterRegexSettings: AppState.config.chapterRegex,
-            defaultWorldbookEntriesUI: AppState.persistent.defaultEntries,
-            categoryDefaultConfig: AppState.config.categoryDefault,
-            entryPositionConfig: AppState.config.entryPosition,
-            originalFileName: AppState.file.current ? AppState.file.current.name : null,
-            novelName: AppState.file.novelName || '',
-        };
+        const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
+        state.originalFileName = AppState.file.current?.name || null;
         const timeString = new Date()
             .toLocaleString('zh-CN', {
                 year: 'numeric',
@@ -111,6 +92,8 @@ export function createTaskStateService(deps = {}) {
     }
 
     function restoreConfiguration(state) {
+        AppState.processing.volumeMode = state.processingOptions?.volumeMode ?? state.settings?.useVolumeMode ?? false;
+        AppState.processing.incrementalMode = state.processingOptions?.incrementalMode ?? true;
         AppState.settings = { ...defaultSettings, ...AppState.settings, ...state.settings };
         for (const [source, target] of Object.entries({
             parallelConfig: 'parallel',

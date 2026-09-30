@@ -1,4 +1,6 @@
-﻿import { createInitialAppState } from '../core/state.js';
+import { configureRunEnvironment } from '../core/runContext.js';
+import { acquireWriter } from '../../src/storage/writerLock.js';
+import { createInitialAppState } from '../core/state.js';
 import { createMemoryHistoryDB } from '../infra/memoryHistoryDB.js';
 
 /**
@@ -24,6 +26,7 @@ export function createAppContext(options = {}) {
         defaultSettings,
     });
 
+    configureRunEnvironment(AppState, acquireWriter);
     const MemoryHistoryDB = createMemoryHistoryDB(AppState, Logger);
 
     return {

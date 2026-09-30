@@ -1,3 +1,4 @@
+import { runConfiguration } from '../../txtToWorldbook/core/runContext.js';
 import { FatalError, UserError, AbortedError } from '../../txtToWorldbook/core/errors.js';
 import { createRequestBudget } from '../../txtToWorldbook/core/requestPolicy.js';
 import { getSillyTavernContext } from './sillyTavern.js';
@@ -18,7 +19,7 @@ export function createHostGeneration({
 
     async function callSillyTavernAPI(messages, taskId = null, options = {}) {
         const budget = options.budget || createRequestBudget();
-        const timeout = AppState.settings.apiTimeout || 120000;
+        const timeout = runConfiguration(AppState).settings.apiTimeout || 120000;
         const logPrefix = taskId !== null ? `[任务${taskId}]` : '';
         const combinedPrompt = messagesToString(messages);
         updateStreamContent(`\n📤 ${logPrefix} 发送请求到酒馆API (${messages.length}条消息)...\n`);

@@ -1,9 +1,10 @@
+import { runConfiguration } from '../core/runContext.js';
 export function createParserService(deps = {}) {
     const { AppState, debugLog, getEnabledCategoryNames } = deps;
 
     function filterResponseContent(text) {
         if (!text) return text;
-        const filterTagsStr = AppState.settings.filterResponseTags || 'thinking,/think';
+        const filterTagsStr = runConfiguration(AppState).settings.filterResponseTags || 'thinking,/think';
         const filterTags = filterTagsStr
             .split(',')
             .map((t) => t.trim())

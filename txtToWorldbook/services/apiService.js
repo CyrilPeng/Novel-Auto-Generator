@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 import { buildCustomApiRequest, extractCustomApiText, buildModelsRequest } from '../infra/providers/customProviders.js';
 export { buildChatUrl, buildModelsUrl } from '../infra/providers/endpoints.js';
 import { UserError } from '../core/errors.js';
@@ -28,8 +29,13 @@ export function createApiService(deps = {}) {
     async function callCustomAPI(messages, options = {}) {
         const budget = options.budget || createRequestBudget();
         const maxRetries = 3;
-        const timeout = AppState.settings.apiTimeout || 120000;
-        const requestConfig = buildCustomApiRequest(AppState.settings, messages, convertToGeminiContents, options);
+        const timeout = runConfiguration(AppState).settings.apiTimeout || 120000;
+        const requestConfig = buildCustomApiRequest(
+            runConfiguration(AppState).settings,
+            messages,
+            convertToGeminiContents,
+            options,
+        );
         const combinedPrompt = messagesToString(messages);
 
         updateStreamContent(`\n📤 发送请求到自定义API (${requestConfig.provider}, ${messages.length}条消息)...\n`);
@@ -84,7 +90,7 @@ export function createApiService(deps = {}) {
     }
 
     async function handleFetchModelList(options = {}) {
-        const settings = { ...AppState.settings };
+        const settings = { ...runConfiguration(AppState).settings };
         const request = buildModelsRequest(settings);
         const url = new URL(request.url);
         const models = [];
@@ -137,7 +143,7 @@ export function createApiService(deps = {}) {
     async function callAPI(prompt, taskId = null, options = {}) {
         const messages = applyMessageChain(prompt);
         debugLog(`callAPI: 消息链转换完成, ${messages.length}条消息, roles=[${messages.map((m) => m.role).join(',')}]`);
-        if (AppState.settings.useTavernApi) {
+        if (runConfiguration(AppState).settings.useTavernApi) {
             return callSillyTavernAPI(messages, taskId, options);
         }
         return callCustomAPI(messages, options);

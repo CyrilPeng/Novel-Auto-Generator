@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 import { createRecoveryBudget } from '../core/recoveryBudget.js';
 import { beginRun, captureRun, stopRun, pauseRun, finishRun, guardAwait, executeRun } from '../core/runContext.js';
 import { isRetryable, isAborted, RetryableError } from '../core/errors.js';
@@ -111,7 +112,9 @@ export function createProcessingService(deps = {}) {
         memory.processing = true;
         updateMemoryQueueUI();
 
-        const chapterForcePrompt = AppState.settings.forceChapterMarker ? getChapterForcePrompt(chapterIndex) : '';
+        const chapterForcePrompt = runConfiguration(AppState).settings.forceChapterMarker
+            ? getChapterForcePrompt(chapterIndex)
+            : '';
 
         let prompt = chapterForcePrompt;
         prompt += getLanguagePrefix() + buildSystemPrompt();
@@ -133,14 +136,14 @@ export function createProcessingService(deps = {}) {
         }
 
         const enabledCatNamesList = getEnabledCategories().map((c) => c.name);
-        if (AppState.settings.enablePlotOutline) enabledCatNamesList.push('剧情大纲');
-        if (AppState.settings.enableLiteraryStyle) enabledCatNamesList.push('文风配置');
+        if (runConfiguration(AppState).settings.enablePlotOutline) enabledCatNamesList.push('剧情大纲');
+        if (runConfiguration(AppState).settings.enableLiteraryStyle) enabledCatNamesList.push('文风配置');
 
         const enabledCatNamesStr = enabledCatNamesList.join('、');
 
         prompt += `\n\n【输出限制】只允许输出以下分类：${enabledCatNamesStr}。禁止输出未列出的任何其他分类，直接输出JSON。`;
 
-        if (AppState.settings.forceChapterMarker) {
+        if (runConfiguration(AppState).settings.forceChapterMarker) {
             prompt += `\n\n【重要提醒】如果输出剧情大纲或剧情节点或章节剧情，条目名称必须包含"第${chapterIndex}章"！`;
             prompt += chapterForcePrompt;
         }
@@ -149,8 +152,11 @@ export function createProcessingService(deps = {}) {
             prompt += `\n\n${customPromptSuffix}`;
         }
 
-        if (AppState.settings.customSuffixPrompt && AppState.settings.customSuffixPrompt.trim()) {
-            prompt += `\n\n${AppState.settings.customSuffixPrompt.trim()}`;
+        if (
+            runConfiguration(AppState).settings.customSuffixPrompt &&
+            runConfiguration(AppState).settings.customSuffixPrompt.trim()
+        ) {
+            prompt += `\n\n${runConfiguration(AppState).settings.customSuffixPrompt.trim()}`;
         }
 
         updateStreamContent(`\n🔄 [第${chapterIndex}章] 开始处理: ${memory.title}\n`);
@@ -223,17 +229,17 @@ export function createProcessingService(deps = {}) {
         if (tasks.length === 0) return { tokenLimitIndices };
 
         updateStreamContent(`
-🚀 并行处理 ${tasks.length} 个记忆块 (并发: ${AppState.config.parallel.concurrency})
+🚀 并行处理 ${tasks.length} 个记忆块 (并发: ${runConfiguration(AppState).config.parallel.concurrency})
 ${'='.repeat(50)}
 `);
         debugLog(
-            `并行处理开始: ${tasks.length}任务, 并发=${AppState.config.parallel.concurrency}, 范围=${startIndex}-${endIndex}`,
+            `并行处理开始: ${tasks.length}任务, 并发=${runConfiguration(AppState).config.parallel.concurrency}, 范围=${startIndex}-${endIndex}`,
         );
 
         let completed = 0;
         let fatalError = null;
         const batchStartTime = Date.now();
-        const semaphore = new Semaphore(AppState.config.parallel.concurrency);
+        const semaphore = new Semaphore(runConfiguration(AppState).config.parallel.concurrency);
         AppState.globalSemaphore = semaphore;
 
         const processOne = async (task) => {
@@ -385,7 +391,9 @@ ${'='.repeat(50)}
         memory.processing = true;
         updateMemoryQueueUI();
 
-        const chapterForcePrompt = AppState.settings.forceChapterMarker ? getChapterForcePrompt(chapterIndex) : '';
+        const chapterForcePrompt = runConfiguration(AppState).settings.forceChapterMarker
+            ? getChapterForcePrompt(chapterIndex)
+            : '';
 
         let prompt = chapterForcePrompt;
         prompt += getLanguagePrefix() + buildSystemPrompt();
@@ -407,13 +415,13 @@ ${'='.repeat(50)}
 
         if (index === 0 || index === AppState.memory.startIndex) {
             prompt += '\n请开始分析小说内容。';
-        } else if (AppState.processing.incrementalMode) {
+        } else if (runConfiguration(AppState).processing.incrementalMode) {
             prompt += '\n请增量更新世界书，只输出变更的条目。';
         } else {
             prompt += '\n请累积补充世界书。';
         }
 
-        if (AppState.settings.forceChapterMarker) {
+        if (runConfiguration(AppState).settings.forceChapterMarker) {
             prompt += `\n\n【重要提醒】如果输出剧情大纲或剧情节点或章节剧情，条目名称必须包含"第${chapterIndex}章"！`;
             prompt += '\n直接输出JSON格式结果。';
             prompt += chapterForcePrompt;
@@ -437,7 +445,7 @@ ${'='.repeat(50)}
 
             debugLog(`[串行][第${chapterIndex}章] 检查TokenLimit...`);
             if (isTokenLimitError(response)) {
-                if (AppState.processing.volumeMode) {
+                if (runConfiguration(AppState).processing.volumeMode) {
                     recovery.consume();
                     handleStartNewVolume();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
@@ -485,7 +493,7 @@ ${'='.repeat(50)}
             if (isAborted(error) || error.retryable === false) throw error;
 
             if (isTokenLimitError(error.message || '')) {
-                if (AppState.processing.volumeMode) {
+                if (runConfiguration(AppState).processing.volumeMode) {
                     recovery.consume();
                     handleStartNewVolume();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
@@ -563,55 +571,61 @@ ${'='.repeat(50)}
         const run = beginRun(AppState.processing);
         let failure = null;
         const guard = captureRun(AppState.processing);
-        showProgressSection(true);
-        transitionTo('running');
-
-        if (typeof setupAutoSave === 'function') setupAutoSave();
-
-        chapterTimings.length = 0;
-
-        updateStopButtonVisibility(true);
-
-        if (AppState.globalSemaphore) AppState.globalSemaphore.abort();
-        AppState.processing.activeTasks.clear();
-
-        updateStreamContent('', true);
-
-        const enabledCatNames = getEnabledCategories()
-            .map((c) => c.name)
-            .join(', ');
-        const chainDesc = (AppState.settings.promptMessageChain || []).filter((m) => m.enabled !== false);
-        const chainSummary =
-            chainDesc.length <= 1
-                ? '默认(单条用户消息)'
-                : `${chainDesc.length}条消息[${chainDesc.map((m) => (m.role === 'system' ? '系统' : m.role === 'assistant' ? 'AI' : '用户')).join('→')}]`;
-        updateStreamContent(
-            `🚀 开始处理...\n📊 处理模式: ${AppState.config.parallel.enabled ? `并行 (${AppState.config.parallel.concurrency}并发)` : '串行'}\n🔧 API模式: ${AppState.settings.useTavernApi ? '酒馆API' : '自定义API (' + AppState.settings.customApiProvider + ')'}\n📌 强制章节标记: ${AppState.settings.forceChapterMarker ? '开启' : '关闭'}\n💬 消息链: ${chainSummary}\n🏷️ 启用分类: ${enabledCatNames}\n${'='.repeat(50)}\n`,
-        );
-        debugLog('调试模式已开启 - 将记录每步耗时');
-
-        const effectiveStartIndex =
-            AppState.memory.userSelectedIndex !== null ? AppState.memory.userSelectedIndex : AppState.memory.startIndex;
-
-        if (effectiveStartIndex === 0) {
-            const hasProcessedMemories = AppState.memory.queue.some((m) => m.processed && !m.failed && m.result);
-            if (!hasProcessedMemories) {
-                AppState.worldbook.volumes = [];
-                AppState.worldbook.currentVolumeIndex = 0;
-
-                AppState.worldbook.generated = { 地图环境: {}, 剧情节点: {}, 角色: {}, 知识书: {} };
-                applyDefaultWorldbookEntries();
-            }
-        }
-
-        AppState.memory.userSelectedIndex = null;
-
-        if (AppState.processing.volumeMode) updateVolumeIndicator();
-        updateStartButtonState(true);
-
         try {
-            if (AppState.config.parallel.enabled) {
-                if (AppState.config.parallel.mode === 'independent') {
+            if (run.ready) await run.ready;
+            throwIfAborted(run.controller.signal);
+            showProgressSection(true);
+            transitionTo('running');
+
+            if (typeof setupAutoSave === 'function') setupAutoSave();
+
+            chapterTimings.length = 0;
+
+            updateStopButtonVisibility(true);
+
+            if (AppState.globalSemaphore) AppState.globalSemaphore.abort();
+            AppState.processing.activeTasks.clear();
+
+            updateStreamContent('', true);
+
+            const enabledCatNames = getEnabledCategories()
+                .map((c) => c.name)
+                .join(', ');
+            const chainDesc = (runConfiguration(AppState).settings.promptMessageChain || []).filter(
+                (m) => m.enabled !== false,
+            );
+            const chainSummary =
+                chainDesc.length <= 1
+                    ? '默认(单条用户消息)'
+                    : `${chainDesc.length}条消息[${chainDesc.map((m) => (m.role === 'system' ? '系统' : m.role === 'assistant' ? 'AI' : '用户')).join('→')}]`;
+            updateStreamContent(
+                `🚀 开始处理...\n📊 处理模式: ${runConfiguration(AppState).config.parallel.enabled ? `并行 (${runConfiguration(AppState).config.parallel.concurrency}并发)` : '串行'}\n🔧 API模式: ${runConfiguration(AppState).settings.useTavernApi ? '酒馆API' : '自定义API (' + runConfiguration(AppState).settings.customApiProvider + ')'}\n📌 强制章节标记: ${runConfiguration(AppState).settings.forceChapterMarker ? '开启' : '关闭'}\n💬 消息链: ${chainSummary}\n🏷️ 启用分类: ${enabledCatNames}\n${'='.repeat(50)}\n`,
+            );
+            debugLog('调试模式已开启 - 将记录每步耗时');
+
+            const effectiveStartIndex =
+                AppState.memory.userSelectedIndex !== null
+                    ? AppState.memory.userSelectedIndex
+                    : AppState.memory.startIndex;
+
+            if (effectiveStartIndex === 0) {
+                const hasProcessedMemories = AppState.memory.queue.some((m) => m.processed && !m.failed && m.result);
+                if (!hasProcessedMemories) {
+                    AppState.worldbook.volumes = [];
+                    AppState.worldbook.currentVolumeIndex = 0;
+
+                    AppState.worldbook.generated = { 地图环境: {}, 剧情节点: {}, 角色: {}, 知识书: {} };
+                    applyDefaultWorldbookEntries();
+                }
+            }
+
+            AppState.memory.userSelectedIndex = null;
+
+            if (runConfiguration(AppState).processing.volumeMode) updateVolumeIndicator();
+            updateStartButtonState(true);
+
+            if (runConfiguration(AppState).config.parallel.enabled) {
+                if (runConfiguration(AppState).config.parallel.mode === 'independent') {
                     const { tokenLimitIndices } = await guardAwait(
                         guard,
                         processMemoryChunksParallel(effectiveStartIndex, AppState.memory.queue.length),
@@ -636,7 +650,7 @@ ${'='.repeat(50)}
                         }
                     }
                 } else {
-                    const batchSize = AppState.config.parallel.concurrency;
+                    const batchSize = runConfiguration(AppState).config.parallel.concurrency;
                     let i = effectiveStartIndex;
                     let batchWorldbookSummary = '';
                     if (Object.keys(AppState.worldbook.generated).length > 0) {
@@ -699,7 +713,10 @@ ${'='.repeat(50)}
                 return;
             }
 
-            if (AppState.processing.volumeMode && Object.keys(AppState.worldbook.generated).length > 0) {
+            if (
+                runConfiguration(AppState).processing.volumeMode &&
+                Object.keys(AppState.worldbook.generated).length > 0
+            ) {
                 AppState.worldbook.volumes.push({
                     volumeIndex: AppState.worldbook.currentVolumeIndex,
                     worldbook: JSON.parse(JSON.stringify(AppState.worldbook.generated)),

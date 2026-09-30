@@ -1,6 +1,13 @@
 import { AbortedError, UserError } from './errors.js';
 
 let nextId = 0;
+const environments = new WeakMap();
+export function configureRunEnvironment(state, acquire) {
+    environments.set(state.processing, { state, acquire });
+}
+export function runConfiguration(state) {
+    return (state.processing?.run?.pending && state.processing.run.configuration) || state;
+}
 
 export function beginRun(processing, operation = 'convert') {
     if (processing.run?.pending || processing.isRunning) throw new UserError('上一任务正在结束，请稍后再开始');
@@ -13,6 +20,22 @@ export function beginRun(processing, operation = 'convert') {
         pending: true,
         pauseRequested: false,
     };
+    const environment = environments.get(processing);
+    if (environment) {
+        run.configuration = structuredClone({
+            settings: environment.state.settings,
+            processing: { volumeMode: processing.volumeMode, incrementalMode: processing.incrementalMode },
+            config: environment.state.config,
+            persistent: { customCategories: environment.state.persistent.customCategories },
+        });
+        run.ready = Promise.resolve()
+            .then(() => environment.acquire(run.controller.signal))
+            .then((release) => {
+                if (!run.pending) release();
+                else run.release = release;
+            });
+        run.ready.catch(() => {});
+    }
     processing.run = run;
     return run;
 }
@@ -35,6 +58,7 @@ export function stopRun(processing) {
 export function finishRun(processing, run, error = null) {
     if (!run.pending) return processing.run === run;
     run.pending = false;
+    run.release?.();
     run.lifecycle = run.controller.signal.aborted
         ? 'stopped'
         : error
@@ -72,6 +96,8 @@ export async function executeRun(processing, operation, callback, hooks = {}) {
     const guard = captureRun(processing);
     let failure = null;
     try {
+        if (run.ready) await run.ready;
+        if (run.controller.signal.aborted) throw new AbortedError();
         hooks.start?.(run);
         const result = await callback(guard);
         guard.assert();

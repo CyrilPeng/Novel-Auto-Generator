@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 export function createPromptService(deps = {}) {
     const {
         AppState,
@@ -9,7 +10,7 @@ export function createPromptService(deps = {}) {
     } = deps;
 
     function getLanguagePrefix() {
-        return AppState.settings.language === 'zh' ? '请用中文回复。\n\n' : '';
+        return runConfiguration(AppState).settings.language === 'zh' ? '请用中文回复。\n\n' : '';
     }
 
     function messagesToString(messages) {
@@ -25,7 +26,7 @@ export function createPromptService(deps = {}) {
     }
 
     function applyMessageChain(prompt) {
-        const chain = AppState.settings.promptMessageChain;
+        const chain = runConfiguration(AppState).settings.promptMessageChain;
         if (!Array.isArray(chain) || chain.length === 0) {
             return [{ role: 'user', content: prompt }];
         }
@@ -69,22 +70,23 @@ export function createPromptService(deps = {}) {
     }
 
     function buildSystemPrompt() {
-        let worldbookPrompt = AppState.settings.customWorldbookPrompt?.trim() || defaultWorldbookPrompt;
+        let worldbookPrompt =
+            runConfiguration(AppState).settings.customWorldbookPrompt?.trim() || defaultWorldbookPrompt;
 
         const dynamicTemplate = generateDynamicJsonTemplate();
         worldbookPrompt = worldbookPrompt.replace('{DYNAMIC_JSON_TEMPLATE}', dynamicTemplate);
 
         const enabledCatNames = getEnabledCategories().map((c) => c.name);
-        if (AppState.settings.enablePlotOutline) enabledCatNames.push('剧情大纲');
-        if (AppState.settings.enableLiteraryStyle) enabledCatNames.push('文风配置');
+        if (runConfiguration(AppState).settings.enablePlotOutline) enabledCatNames.push('剧情大纲');
+        if (runConfiguration(AppState).settings.enableLiteraryStyle) enabledCatNames.push('文风配置');
         worldbookPrompt = worldbookPrompt.replace('{ENABLED_CATEGORY_NAMES}', enabledCatNames.join('、'));
 
         const additionalParts = [];
-        if (AppState.settings.enablePlotOutline) {
-            additionalParts.push(AppState.settings.customPlotPrompt?.trim() || defaultPlotPrompt);
+        if (runConfiguration(AppState).settings.enablePlotOutline) {
+            additionalParts.push(runConfiguration(AppState).settings.customPlotPrompt?.trim() || defaultPlotPrompt);
         }
-        if (AppState.settings.enableLiteraryStyle) {
-            additionalParts.push(AppState.settings.customStylePrompt?.trim() || defaultStylePrompt);
+        if (runConfiguration(AppState).settings.enableLiteraryStyle) {
+            additionalParts.push(runConfiguration(AppState).settings.customStylePrompt?.trim() || defaultStylePrompt);
         }
         if (additionalParts.length === 0) return worldbookPrompt;
 

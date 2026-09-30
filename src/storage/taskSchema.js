@@ -1,3 +1,4 @@
+import { runConfiguration } from '../../txtToWorldbook/core/runContext.js';
 import { ensureChunkIdentities, newIdentity } from '../../txtToWorldbook/core/chunkIdentity.js';
 import { UserError } from '../../txtToWorldbook/core/errors.js';
 
@@ -32,6 +33,7 @@ export function captureTaskState(state, processedIndex) {
     ensureChunkIdentities(state.memory.queue);
     if (!state.task || state.task.fileHash !== state.file.hash)
         state.task = { id: newIdentity('task'), revision: 0, fileHash: state.file.hash };
+    const configuration = runConfiguration(state);
     return structuredClone({
         schemaVersion: 1,
         version: '2.9.0',
@@ -45,14 +47,18 @@ export function captureTaskState(state, processedIndex) {
         fileHash: state.file.hash,
         novelName: state.file.novelName || '',
         timestamp: Date.now(),
-        settings: withoutCredentials(state.settings),
-        parallelConfig: state.config?.parallel,
-        categoryLightSettings: state.config?.categoryLight,
-        customWorldbookCategories: state.persistent?.customCategories,
-        chapterRegexSettings: state.config?.chapterRegex,
+        settings: withoutCredentials(configuration.settings),
+        processingOptions: {
+            volumeMode: configuration.processing?.volumeMode,
+            incrementalMode: configuration.processing?.incrementalMode,
+        },
+        parallelConfig: configuration.config?.parallel,
+        categoryLightSettings: configuration.config?.categoryLight,
+        customWorldbookCategories: configuration.persistent?.customCategories,
+        chapterRegexSettings: configuration.config?.chapterRegex,
         defaultWorldbookEntriesUI: state.persistent?.defaultEntries,
-        categoryDefaultConfig: state.config?.categoryDefault,
-        entryPositionConfig: state.config?.entryPosition,
+        categoryDefaultConfig: configuration.config?.categoryDefault,
+        entryPositionConfig: configuration.config?.entryPosition,
     });
 }
 

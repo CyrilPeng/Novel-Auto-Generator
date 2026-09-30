@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 import { captureRun, guardAwait, executeRun } from '../core/runContext.js';
 export function createRerollService(deps = {}) {
     const {
@@ -139,12 +140,14 @@ export function createRerollService(deps = {}) {
         updateStreamContent(`\n🎯 开始单独重Roll条目: [${category}] ${entryName} (来自第${memoryIndex + 1}章)\n`);
 
         const chapterIndex = memoryIndex + 1;
-        const chapterForcePrompt = AppState.settings.forceChapterMarker ? getChapterForcePrompt(chapterIndex) : '';
+        const chapterForcePrompt = runConfiguration(AppState).settings.forceChapterMarker
+            ? getChapterForcePrompt(chapterIndex)
+            : '';
 
         let prompt = chapterForcePrompt;
         prompt += getLanguagePrefix();
 
-        const categoryConfig = AppState.persistent.customCategories.find((c) => c.name === category);
+        const categoryConfig = runConfiguration(AppState).persistent.customCategories.find((c) => c.name === category);
         const contentGuide = categoryConfig ? categoryConfig.contentGuide : '';
 
         prompt += '\n你是一个专业的小说世界书条目生成助手。请根据以下原文内容，专门重新生成指定的条目。\n';
@@ -181,14 +184,17 @@ export function createRerollService(deps = {}) {
         }
 
         if (
-            AppState.settings.forceChapterMarker &&
+            runConfiguration(AppState).settings.forceChapterMarker &&
             (category === '剧情大纲' || category === '剧情节点' || category === '章节剧情')
         ) {
             prompt += `\n\n【重要提醒】条目名称必须包含"第${chapterIndex}章"！`;
         }
 
-        if (AppState.settings.customSuffixPrompt && AppState.settings.customSuffixPrompt.trim()) {
-            prompt += `\n\n${AppState.settings.customSuffixPrompt.trim()}`;
+        if (
+            runConfiguration(AppState).settings.customSuffixPrompt &&
+            runConfiguration(AppState).settings.customSuffixPrompt.trim()
+        ) {
+            prompt += `\n\n${runConfiguration(AppState).settings.customSuffixPrompt.trim()}`;
         }
 
         prompt += '\n\n直接输出JSON格式结果，不要有其他内容。';
@@ -278,7 +284,7 @@ export function createRerollService(deps = {}) {
         const {
             memoryIndices = [],
             customPrompt = '',
-            useParallel = AppState.config.parallel.enabled && memoryIndices.length > 1,
+            useParallel = runConfiguration(AppState).config.parallel.enabled && memoryIndices.length > 1,
             onStep,
         } = options;
 
@@ -296,10 +302,10 @@ export function createRerollService(deps = {}) {
 
         if (useParallel) {
             updateStreamContent(
-                `\n🚀 批量重Roll开始 (并行模式, ${AppState.config.parallel.concurrency}并发)\n${'='.repeat(50)}\n`,
+                `\n🚀 批量重Roll开始 (并行模式, ${runConfiguration(AppState).config.parallel.concurrency}并发)\n${'='.repeat(50)}\n`,
             );
 
-            const semaphore = new Semaphore(AppState.config.parallel.concurrency);
+            const semaphore = new Semaphore(runConfiguration(AppState).config.parallel.concurrency);
             const abortQueued = () => semaphore.abort();
             guard.signal?.addEventListener('abort', abortQueued, { once: true });
             const processOne = async (index) => {

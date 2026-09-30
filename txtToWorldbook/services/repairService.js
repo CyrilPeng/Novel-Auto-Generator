@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 import { captureRun, guardAwait } from '../core/runContext.js';
 import { createRecoveryBudget } from '../core/recoveryBudget.js';
 import { abortableDelay } from '../core/requestPolicy.js';
@@ -29,7 +30,9 @@ export function createRepairService(deps = {}) {
         const memory = AppState.memory.queue[index];
         const chapterIndex = index + 1;
 
-        const chapterForcePrompt = AppState.settings.forceChapterMarker ? getChapterForcePrompt(chapterIndex) : '';
+        const chapterForcePrompt = runConfiguration(AppState).settings.forceChapterMarker
+            ? getChapterForcePrompt(chapterIndex)
+            : '';
 
         let prompt = chapterForcePrompt;
         prompt += `${getLanguagePrefix()}你是世界书生成专家。请提取关键信息。
@@ -52,7 +55,7 @@ ${generateDynamicJsonTemplate()}
         }
         prompt += `阅读内容（第${chapterIndex}章）：\n---\n${memory.content}\n---\n\n请输出JSON。`;
 
-        if (AppState.settings.forceChapterMarker) {
+        if (runConfiguration(AppState).settings.forceChapterMarker) {
             prompt += chapterForcePrompt;
         }
 
