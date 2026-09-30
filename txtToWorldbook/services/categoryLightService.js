@@ -1,10 +1,11 @@
+import { saveSettingsRecord } from '../../src/storage/settingsStore.js';
 export function createCategoryLightService(deps) {
     const { AppState, storageKey = 'txtToWorldbookSettings' } = deps;
 
     function saveCategoryLightSettings() {
         AppState.settings.categoryLightSettings = { ...AppState.config.categoryLight };
         try {
-            localStorage.setItem(storageKey, JSON.stringify(AppState.settings));
+            saveSettingsRecord(localStorage, AppState.settings, storageKey);
         } catch {}
     }
 

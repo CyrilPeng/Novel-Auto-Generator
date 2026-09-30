@@ -11,6 +11,7 @@ export function createExportFormatService(deps = {}) {
     function convertToSillyTavernFormat(worldbook) {
         const entries = [];
         let entryId = 0;
+        const usedIds = new Set();
         const categoryEntryIndex = {};
 
         for (const [category, categoryData] of Object.entries(worldbook)) {
@@ -45,12 +46,14 @@ export function createExportFormatService(deps = {}) {
                     actualOrder = config.order !== undefined ? config.order : baseOrder;
                 }
 
+                let uid = itemData._st?.uid ?? entryId;
+                while (usedIds.has(uid)) uid = ++entryId;
+                usedIds.add(uid);
+                entryId++;
+                const explicitConfig = AppState.config?.entryPosition?.[`${category}::${itemName}`] || {};
                 entries.push({
-                    uid: entryId++,
-                    key: [...new Set(keywords)],
                     keysecondary: [],
                     comment: `${category} - ${itemName}`,
-                    content: String(itemData.内容).trim(),
                     constant: !isGreenLight,
                     selective: isGreenLight,
                     selectiveLogic: 0,
@@ -76,6 +79,11 @@ export function createExportFormatService(deps = {}) {
                     sticky: null,
                     cooldown: null,
                     delay: null,
+                    ...structuredClone(itemData._st || {}),
+                    ...explicitConfig,
+                    uid,
+                    key: [...new Set(keywords)],
+                    content: String(itemData.内容).trim(),
                 });
             }
         }

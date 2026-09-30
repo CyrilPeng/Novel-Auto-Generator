@@ -1,3 +1,5 @@
+import { stEntryToCard } from '../../src/worldbook/formats/sillyTavern.js';
+import { withoutCredentials } from '../../src/storage/taskSchema.js';
 export function createImportExportService(deps = {}) {
     const {
         AppState,
@@ -35,44 +37,7 @@ export function createImportExportService(deps = {}) {
                 : AppState.worldbook.generated;
             const stWorldbook = convertToSillyTavernFormat(worldbookToExport);
 
-            const v2Entries = stWorldbook.entries.map((entry, index) => ({
-                id: index,
-                keys: Array.isArray(entry.key) ? entry.key : [entry.key],
-                secondary_keys: Array.isArray(entry.keysecondary) ? entry.keysecondary : [],
-                comment: entry.comment || '',
-                content: entry.content || '',
-                constant: !!entry.constant,
-                selective: !!entry.selective,
-                insertion_order: entry.order !== undefined ? entry.order : 100,
-                enabled: !entry.disable,
-                position: entry.position === 1 ? 'after_char' : 'before_char',
-                case_sensitive: !!entry.caseSensitive,
-                name: entry.comment || `条目${index}`,
-                priority: 10,
-                extensions: {
-                    position: entry.position !== undefined ? entry.position : 0,
-                    exclude_recursion: !!entry.excludeRecursion,
-                    prevent_recursion: !!entry.preventRecursion,
-                    delay_until_recursion: !!entry.delayUntilRecursion,
-                    depth: entry.depth !== undefined ? entry.depth : 4,
-                    selectiveLogic: entry.selectiveLogic !== undefined ? entry.selectiveLogic : 0,
-                    group: entry.group || '',
-                    group_override: !!entry.groupOverride,
-                    group_weight: entry.groupWeight !== undefined ? entry.groupWeight : 100,
-                    use_group_scoring: entry.useGroupScoring !== undefined ? entry.useGroupScoring : null,
-                    automation_id: entry.automationId || '',
-                    role: entry.role !== undefined ? entry.role : 0,
-                    vectorized: !!entry.vectorized,
-                    display_index: index,
-                    probability: entry.probability !== undefined ? entry.probability : 100,
-                    sticky: entry.sticky !== undefined ? entry.sticky : null,
-                    cooldown: entry.cooldown !== undefined ? entry.cooldown : null,
-                    delay: entry.delay !== undefined ? entry.delay : null,
-                    addMemo: entry.addMemo !== undefined ? entry.addMemo : true,
-                    scan_depth: entry.scanDepth !== undefined ? entry.scanDepth : null,
-                    match_whole_words: entry.matchWholeWords !== undefined ? entry.matchWholeWords : false,
-                },
-            }));
+            const v2Entries = stWorldbook.entries.map(stEntryToCard);
 
             const characterCard = {
                 spec: 'chara_card_v2',
@@ -196,7 +161,7 @@ export function createImportExportService(deps = {}) {
             version: '2.9.0',
             type: 'AppState.settings',
             timestamp: Date.now(),
-            settings: { ...AppState.settings },
+            settings: withoutCredentials(AppState.settings),
             categoryLightSettings: AppState.config.categoryLight,
             parallelConfig: AppState.config.parallel,
             customWorldbookCategories: AppState.persistent.customCategories,

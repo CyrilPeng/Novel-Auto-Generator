@@ -1,3 +1,4 @@
+import { convertSTFormatToInternal } from '../../src/worldbook/formats/sillyTavern.js';
 export function createImportMergeService(deps = {}) {
     const {
         AppState,
@@ -491,73 +492,6 @@ export function createImportMergeService(deps = {}) {
         Logger.info('ImportMerge', `打开导入合并面板: new=${newEntries.length}, dup=${allDuplicates.length}`);
     }
 
-    function convertSTFormatToInternal(stData, collectDuplicates = false) {
-        const result = {};
-        const internalDuplicates = [];
-
-        if (!stData.entries) {
-            return collectDuplicates ? { worldbook: result, duplicates: internalDuplicates } : result;
-        }
-
-        const entriesArray = Array.isArray(stData.entries) ? stData.entries : Object.values(stData.entries);
-
-        for (const entry of entriesArray) {
-            if (!entry || typeof entry !== 'object') continue;
-
-            let category = '未分类';
-            let name = '';
-
-            if (entry.comment) {
-                const parts = entry.comment.split(' - ');
-                if (parts.length >= 2) {
-                    category = parts[0].trim();
-                    name = parts.slice(1).join(' - ').trim();
-                } else {
-                    name = entry.comment.trim();
-                }
-            }
-
-            if (category === '未分类' && entry.group) {
-                const underscoreIndex = entry.group.indexOf('_');
-                category = underscoreIndex > 0 ? entry.group.substring(0, underscoreIndex) : entry.group;
-            }
-
-            if (!name) {
-                name = `条目_${entry.uid || Math.random().toString(36).slice(2, 11)}`;
-            }
-
-            if (!result[category]) {
-                result[category] = {};
-            }
-
-            const newEntry = {
-                关键词: Array.isArray(entry.key) ? entry.key : entry.key ? [entry.key] : [],
-                内容: entry.content || '',
-            };
-
-            if (result[category][name]) {
-                internalDuplicates.push({
-                    category,
-                    name,
-                    existing: result[category][name],
-                    imported: newEntry,
-                });
-            } else {
-                result[category][name] = newEntry;
-            }
-        }
-
-        Logger.info(
-            'ImportMerge',
-            `ST格式转换完成: ${Object.values(result).reduce((sum, cat) => sum + Object.keys(cat).length, 0)} 个条目, ${internalDuplicates.length} 个内部重复`,
-        );
-
-        if (collectDuplicates) {
-            return { worldbook: result, duplicates: internalDuplicates };
-        }
-        return result;
-    }
-
     async function importAndMergeWorldbook() {
         const input = document.createElement('input');
         input.type = 'file';
@@ -574,7 +508,7 @@ export function createImportMergeService(deps = {}) {
                 let worldbookToMerge = {};
                 let internalDuplicates = [];
 
-                if (importedData.entries) {
+                if (importedData.entries || importedData.data?.character_book || importedData.character_book) {
                     const result = convertSTFormatToInternal(importedData, true);
                     worldbookToMerge = result.worldbook;
                     internalDuplicates = result.duplicates;

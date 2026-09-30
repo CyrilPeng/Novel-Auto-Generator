@@ -36,6 +36,11 @@
     function mergeWorldbookData(target, source) {
         normalizeWorldbookData(source);
         for (const key in source) {
+            if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('世界书包含不安全字段');
+            if (key === '_st') {
+                target[key] = structuredClone(source[key]);
+                continue;
+            }
             if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
                 if (!target[key]) target[key] = {};
                 mergeWorldbookData(target[key], source[key]);

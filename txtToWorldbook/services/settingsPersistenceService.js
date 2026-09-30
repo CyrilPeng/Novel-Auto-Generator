@@ -1,3 +1,4 @@
+import { saveSettingsRecord, loadSettingsRecord } from '../../src/storage/settingsStore.js';
 export function createSettingsPersistenceService(deps) {
     const { AppState, defaultSettings, updateSettingsUI, updateChapterRegexUI, handleProviderChange } = deps;
 
@@ -44,7 +45,7 @@ export function createSettingsPersistenceService(deps) {
         AppState.settings.plotOutlineExportConfig = AppState.config.plotOutline;
 
         try {
-            localStorage.setItem('txtToWorldbookSettings', JSON.stringify(AppState.settings));
+            saveSettingsRecord(localStorage, AppState.settings);
         } catch (e) {
             console.warn('[TTW] 设置保存失败:', e.message);
         }
@@ -54,7 +55,7 @@ export function createSettingsPersistenceService(deps) {
         try {
             const saved = localStorage.getItem('txtToWorldbookSettings');
             if (saved) {
-                const parsed = JSON.parse(saved);
+                const parsed = loadSettingsRecord(localStorage);
                 AppState.settings = { ...defaultSettings, ...parsed };
                 AppState.processing.volumeMode = AppState.settings.useVolumeMode || false;
                 AppState.config.parallel.enabled =
