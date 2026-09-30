@@ -1,3 +1,4 @@
+import { applyEntryOverrides } from '../../src/worldbook/entries/overrides.js';
 function createEmptyWorldbook() {
     return { 地图环境: {}, 剧情节点: {}, 角色: {}, 知识书: {} };
 }
@@ -95,6 +96,10 @@ export function createWorldbookRuntimeService(deps = {}) {
             }
         }
         applyDefaultWorldbookEntries();
+        applyEntryOverrides(
+            AppState.worldbook.generated,
+            AppState.worldbook.overrides?.[AppState.worldbook.currentVolumeIndex],
+        );
         updateStreamContent('\n📚 从已处理记忆重建了世界书\n');
     }
 

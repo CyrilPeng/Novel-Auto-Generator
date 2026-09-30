@@ -122,3 +122,17 @@ it('keeps the legacy checkpoint when the first new write is an atomic result com
     await service.commit(0, result, guard);
     expect(await db.loadLegacyStateBackup()).toEqual(legacy);
 });
+
+it('preserves edited and deleted entries when later chunk results are rebuilt', async () => {
+    const { AppState, service, guard, db } = setup();
+    await service.commit(0, { 角色: { 人: { 内容: 'AI原文' }, 删除项: { 内容: '旧' } } }, guard);
+    await service.commitWorldbook({ 角色: { 人: { 内容: '人工修订' } } }, guard, '手工修改');
+    await service.commit(0, { 角色: { 人: { 内容: '重生成' }, 删除项: { 内容: '重生成' } } }, guard, {
+        operation: 'reroll',
+    });
+    expect(AppState.worldbook.generated.角色.人.内容).toBe('人工修订');
+    expect(AppState.worldbook.generated.角色.删除项).toBeUndefined();
+    const stored = await db.loadState();
+    expect(stored.entryOverrides[0].角色.人.内容).toBe('人工修订');
+    expect(stored.entryOverrides[0].角色.删除项).toBeNull();
+});

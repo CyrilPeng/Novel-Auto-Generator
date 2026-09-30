@@ -692,6 +692,8 @@ export function createMemoryHistoryDB(AppState, _Logger) {
             });
 
             AppState.worldbook.generated = JSON.parse(JSON.stringify(history.previousWorldbook));
+            if (history.previousVolumes) AppState.worldbook.volumes = structuredClone(history.previousVolumes);
+            if (history.previousOverrides) AppState.worldbook.overrides = structuredClone(history.previousOverrides);
             return history;
         },
 

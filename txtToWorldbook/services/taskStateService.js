@@ -140,6 +140,7 @@ export function createTaskStateService(deps = {}) {
                 AppState.task = state.task || null;
                 AppState.worldbook.generated = state.generatedWorldbook || {};
                 AppState.worldbook.volumes = state.worldbookVolumes || [];
+                AppState.worldbook.overrides = state.entryOverrides || {};
                 AppState.worldbook.currentVolumeIndex = state.currentVolumeIndex || 0;
                 AppState.file.hash = state.fileHash || null;
 
@@ -267,6 +268,7 @@ export function createTaskStateService(deps = {}) {
                     restoreConfiguration(savedState);
                     AppState.worldbook.generated = savedState.generatedWorldbook || {};
                     AppState.worldbook.volumes = savedState.worldbookVolumes || [];
+                    AppState.worldbook.overrides = savedState.entryOverrides || {};
                     AppState.worldbook.currentVolumeIndex = savedState.currentVolumeIndex || 0;
                     AppState.file.hash = savedState.fileHash;
 

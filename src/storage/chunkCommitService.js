@@ -1,3 +1,4 @@
+import { applyEntryOverrides } from '../worldbook/entries/overrides.js';
 import { captureTaskState } from './taskSchema.js';
 import { ensureChunkIdentities, newIdentity } from '../../txtToWorldbook/core/chunkIdentity.js';
 import { AbortedError } from '../../txtToWorldbook/core/errors.js';
@@ -34,6 +35,7 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
                 }
             } else if (AppState.processing.incrementalMode) worldbookService.mergeWorldbookDataIncremental(next, patch);
             else worldbookService.mergeWorldbookData(next, patch);
+            applyEntryOverrides(next, AppState.worldbook.overrides?.[AppState.worldbook.currentVolumeIndex]);
             const queue = structuredClone(AppState.memory.queue);
             Object.assign(queue[index], {
                 result: source,
@@ -70,19 +72,30 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
         tail = next.catch(() => {});
         return next;
     }
-    function commitWorldbook(nextWorldbook, guard, title = '世界书编辑') {
+    function commitWorldbook(nextWorldbook, guard, title = '世界书编辑', options = {}) {
         const next = structuredClone(nextWorldbook);
         const execute = async () => {
             guard.assert();
             const previous = structuredClone(AppState.worldbook.generated);
             const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
             state.generatedWorldbook = next;
+            if (options.volumes) state.worldbookVolumes = structuredClone(options.volumes);
+            const changes = worldbookService.findChangedEntries(previous, next);
+            state.entryOverrides ??= {};
+            const overrides = (state.entryOverrides[AppState.worldbook.currentVolumeIndex] ??= {});
+            for (const change of changes) {
+                overrides[change.category] ??= {};
+                overrides[change.category][change.entryName] =
+                    change.type === 'delete' ? null : structuredClone(change.newValue);
+            }
             const saved = await repository.commit({
                 taskId: state.task.id,
                 expectedRevision: state.task.revision,
                 commitId: newIdentity('edit'),
                 worldbookEdit: true,
                 memoryIndex: -1,
+                previousVolumes: structuredClone(AppState.worldbook.volumes),
+                previousOverrides: structuredClone(AppState.worldbook.overrides || {}),
                 memoryTitle: title,
                 chunkId: 'worldbook',
                 previousWorldbook: previous,
@@ -94,6 +107,8 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
             for (const key of Object.keys(AppState.worldbook.generated)) delete AppState.worldbook.generated[key];
             Object.assign(AppState.worldbook.generated, saved.state.generatedWorldbook);
             AppState.task = saved.state.task;
+            AppState.worldbook.volumes = saved.state.worldbookVolumes;
+            AppState.worldbook.overrides = saved.state.entryOverrides;
         };
         const job = tail.then(execute, execute);
         tail = job.catch(() => {});

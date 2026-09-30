@@ -104,6 +104,8 @@ export function createChunkRepository(database) {
                                         chunkId: data.chunkId,
                                         fileHash: state.fileHash,
                                         previousWorldbook: data.previousWorldbook,
+                                        previousVolumes: data.previousVolumes,
+                                        previousOverrides: data.previousOverrides,
                                         newWorldbook: state.generatedWorldbook,
                                         changedEntries: data.changedEntries,
                                         volumeIndex: state.currentVolumeIndex,

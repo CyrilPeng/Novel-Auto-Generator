@@ -52,6 +52,7 @@ export function createFileImportService(deps = {}) {
 
             assertEditable();
             AppState.file.current = file;
+            AppState.worldbook.overrides = {};
             AppState.file.hash = newHash;
             await MemoryHistoryDB.saveFileHash(newHash);
 
@@ -107,6 +108,7 @@ export function createFileImportService(deps = {}) {
 
     async function handleClearFile() {
         assertEditable();
+        AppState.worldbook.overrides = {};
         AppState.file.current = null;
         AppState.file.novelName = '';
         AppState.memory.queue = [];

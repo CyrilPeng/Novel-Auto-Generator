@@ -43,6 +43,7 @@ export function captureTaskState(state, processedIndex) {
         memoryQueue: state.memory.queue,
         generatedWorldbook: state.worldbook.generated,
         worldbookVolumes: state.worldbook.volumes,
+        entryOverrides: state.worldbook.overrides || {},
         currentVolumeIndex: state.worldbook.currentVolumeIndex,
         fileHash: state.file.hash,
         novelName: state.file.novelName || '',

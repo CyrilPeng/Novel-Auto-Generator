@@ -220,6 +220,9 @@
         }
 
         worldbook[targetCategory][mainName] = {
+            ...structuredClone(
+                (uniqueResolvedEntries.find((entry) => entry.name === mainName) || uniqueResolvedEntries[0]).entry,
+            ),
             关键词: mergedKeywords,
             内容: mergedContent,
         };
@@ -548,6 +551,7 @@ ${pairsContent}
             }
 
             entries[mainName] = {
+                ...structuredClone(entries[mainName] || entries[names[0]] || {}),
                 关键词: [...new Set(mergedKeywords)],
                 内容: mergedContent.replace(/\n\n---\n\n$/, ''),
             };

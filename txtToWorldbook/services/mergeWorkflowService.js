@@ -1,3 +1,4 @@
+import { createMergeService as createMergePlanner } from './mergeService.js';
 import { createConsolidationService } from '../../src/worldbook/commands/consolidate.js';
 export { isConsolidateErrorResponse } from '../../src/worldbook/commands/consolidate.js';
 import { executeRun, captureRun, runConfiguration } from '../core/runContext.js';
@@ -55,6 +56,36 @@ export function createMergeWorkflowService(deps = {}) {
 
     if (!mergedService) {
         throw new Error('createMergeWorkflowService requires mergeService or createMergeService deps');
+    }
+
+    async function commitPlannedMerge(action, title) {
+        return executeRun(
+            AppState.processing,
+            'merge',
+            async (guard) => {
+                AppState.processing.isStopped = false;
+                setProcessingStatus('running');
+                const draft = { ...AppState, worldbook: structuredClone(AppState.worldbook) };
+                const planner = createMergePlanner({
+                    ...deps,
+                    AppState: draft,
+                    getAllVolumesWorldbook: () => structuredClone(getAllVolumesWorldbook()),
+                });
+                const result = await action(planner);
+                guard.assert();
+                if (result?.success === false) throw new Error(result.error);
+                if (!deps.commitWorldbook) throw new Error('缺少世界书提交仓储');
+                await deps.commitWorldbook(draft.worldbook.generated, guard, title, {
+                    volumes: draft.worldbook.volumes,
+                });
+                return result;
+            },
+            {
+                finish: () => {
+                    if (getProcessingStatus() !== 'stopped') setProcessingStatus('idle');
+                },
+            },
+        );
     }
 
     let lastConsolidateFailedEntries = [];
@@ -927,13 +958,11 @@ export function createMergeWorkflowService(deps = {}) {
             if (typeof saveWorldbookSnapshot === 'function') {
                 await saveWorldbookSnapshot('快照-手动合并前');
             }
-            const mergeResult = mergedService.executeManualMerge(
-                selectedEntries,
-                mainName,
-                targetCategory,
-                dedupKeywords,
-                addSeparator,
-            );
+            const mergeResult = await commitPlannedMerge(
+                (planner) =>
+                    planner.executeManualMerge(selectedEntries, mainName, targetCategory, dedupKeywords, addSeparator),
+                '手工合并',
+            ).catch((error) => ({ success: false, error: error.message }));
             if (!mergeResult.success) {
                 ErrorHandler.showUserError(mergeResult.error || '手动合并失败，未匹配到可合并的条目');
                 return;
@@ -982,7 +1011,14 @@ export function createMergeWorkflowService(deps = {}) {
         if (typeof saveWorldbookSnapshot === 'function') {
             await saveWorldbookSnapshot('快照-别名合并前');
         }
-        const totalMerged = await mergedService.executeAliasMergeByCategory(mergeByCategory, aiResultByCategory);
+        const totalMerged = await commitPlannedMerge(
+            (planner) => planner.executeAliasMergeByCategory(mergeByCategory, aiResultByCategory),
+            '别名合并',
+        ).catch((error) => {
+            ErrorHandler.showUserError(error.message);
+            return null;
+        });
+        if (totalMerged === null) return;
 
         updateWorldbookPreview();
         modal.remove();
