@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { createMemoryHistoryDB } from '../../txtToWorldbook/infra/memoryHistoryDB.js';
 
@@ -55,6 +55,41 @@ describe('MemoryHistoryDB', () => {
             testDB.db.db.close();
             testDB.db.db = null;
         }
+    });
+
+    it('rejects state saving if the transaction aborts after a successful put and keeps the old checkpoint', async () => {
+        await testDB.db.saveState(1);
+        const original = IDBObjectStore.prototype.put;
+        const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (...args) {
+            const request = original.apply(this, args);
+            request.addEventListener('success', () => this.transaction.abort());
+            return request;
+        });
+        try {
+            await expect(testDB.db.saveState(2)).rejects.toMatchObject({ name: 'AbortError' });
+        } finally {
+            spy.mockRestore();
+        }
+        expect((await testDB.db.loadState()).processedIndex).toBe(1);
+    });
+
+    it('rejects roll and history writes on post-request transaction abort without leaving partial records', async () => {
+        const original = IDBObjectStore.prototype.add;
+        const spy = vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function (...args) {
+            const request = original.apply(this, args);
+            request.addEventListener('success', () => this.transaction.abort());
+            return request;
+        });
+        try {
+            await expect(testDB.db.saveRollResult(0, { result: 'test' })).rejects.toMatchObject({ name: 'AbortError' });
+            await expect(testDB.db.saveHistory(0, '章', {}, { result: 'test' }, [])).rejects.toMatchObject({
+                name: 'AbortError',
+            });
+        } finally {
+            spy.mockRestore();
+        }
+        expect(await testDB.db.getAllHistory()).toEqual([]);
+        expect(await testDB.db.getRollResults(0)).toEqual([]);
     });
 
     describe('openDB', () => {

@@ -8,9 +8,10 @@
         const existing = _writeQueues.get(key) || Promise.resolve();
         const next = existing.then(fn, fn); // 前一个失败也继续执行后续
         // 清理：最后一个完成后移除
-        next.finally(() => {
+        const cleanup = () => {
             if (_writeQueues.get(key) === next) _writeQueues.delete(key);
-        });
+        };
+        next.then(cleanup, cleanup);
         _writeQueues.set(key, next);
         return next;
     }
@@ -95,9 +96,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.categoriesStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.categoriesStoreName);
                 const request = store.put({ key: 'customCategories', value: categories });
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -172,6 +177,10 @@
             const allowedDuplicates = ['记忆-优化', '记忆-演变总结'];
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.storeName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.storeName);
 
                 const record = {
@@ -205,17 +214,17 @@
                             store.delete(dup.id);
                         }
                         const addRequest = store.add(record);
-                        addRequest.onsuccess = () => resolve(addRequest.result);
+                        addRequest.onsuccess = () => (commitResult = addRequest.result);
                         addRequest.onerror = () => reject(addRequest.error);
                     };
                     lookupRequest.onerror = () => {
                         const addRequest = store.add(record);
-                        addRequest.onsuccess = () => resolve(addRequest.result);
+                        addRequest.onsuccess = () => (commitResult = addRequest.result);
                         addRequest.onerror = () => reject(addRequest.error);
                     };
                 } else {
                     const addRequest = store.add(record);
-                    addRequest.onsuccess = () => resolve(addRequest.result);
+                    addRequest.onsuccess = () => (commitResult = addRequest.result);
                     addRequest.onerror = () => reject(addRequest.error);
                 }
 
@@ -265,9 +274,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.storeName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.storeName);
                 const request = store.clear();
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -281,9 +294,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.rollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.rollStoreName);
                 const request = store.clear();
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -298,9 +315,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.metaStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.metaStoreName);
                 const request = store.put({ key: 'AppState.file.hash', value: hash });
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -330,9 +351,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.metaStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.metaStoreName);
                 const request = store.delete('AppState.file.hash');
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -347,6 +372,10 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.stateStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.stateStoreName);
                 const state = {
                     key: 'currentState',
@@ -360,7 +389,7 @@
                     timestamp: Date.now(),
                 };
                 const request = store.put(state);
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -390,9 +419,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.stateStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.stateStoreName);
                 const request = store.delete('currentState');
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -408,6 +441,10 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.rollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.rollStoreName);
                 const record = {
                     memoryIndex,
@@ -415,7 +452,7 @@
                     timestamp: Date.now(),
                 };
                 const request = store.add(record);
-                request.onsuccess = () => resolve(request.result);
+                request.onsuccess = () => (commitResult = request.result);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -449,6 +486,7 @@
             const results = await this.getRollResults(memoryIndex);
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.rollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
                 const store = transaction.objectStore(this.rollStoreName);
                 for (const r of results) {
                     store.delete(r.id);
@@ -463,6 +501,10 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.entryRollStoreName);
                 const entryKey = `${category}:${entryName}`;
                 const record = {
@@ -475,7 +517,7 @@
                     timestamp: Date.now(),
                 };
                 const request = store.add(record);
-                request.onsuccess = () => resolve(request.result);
+                request.onsuccess = () => (commitResult = request.result);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -517,6 +559,7 @@
             const results = await this.getEntryRollResults(category, entryName);
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
                 const store = transaction.objectStore(this.entryRollStoreName);
                 for (const r of results) {
                     store.delete(r.id);
@@ -535,9 +578,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.entryRollStoreName);
                 const request = store.clear();
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -552,9 +599,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.entryRollStoreName);
                 const request = store.delete(rollId);
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
@@ -592,6 +643,7 @@
 
             await new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.storeName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
                 const store = transaction.objectStore(this.storeName);
                 for (const h of toDelete) {
                     store.delete(h.id);
@@ -638,6 +690,8 @@
                 await new Promise((resolve, reject) => {
                     transaction.oncomplete = () => resolve();
                     transaction.onerror = () => reject(transaction.error);
+                    transaction.onabort = () =>
+                        reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
                 });
                 return toDelete.length;
             }
@@ -648,9 +702,13 @@
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.metaStoreName], 'readwrite');
+                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
+                let commitResult;
+                transaction.oncomplete = () => resolve(commitResult);
+                transaction.onerror = () => reject(transaction.error);
                 const store = transaction.objectStore(this.metaStoreName);
                 const request = store.put({ key: 'lastExportTimestamp', value: Date.now() });
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => (commitResult = undefined);
                 request.onerror = () => reject(request.error);
             });
         },
