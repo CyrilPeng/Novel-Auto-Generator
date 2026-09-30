@@ -35,7 +35,7 @@ export function createNovelRunner(deps) {
             const tail = state.messages.slice(attempt.floor);
             if (tail.filter((message) => message.isUser).length > 1)
                 throw new UserError('检测到其他用户消息，已停止自动续写');
-            const reply = tail.find((message) => !message.isUser);
+            const reply = tail.find((message) => !message.isUser && !message.isSystem);
             if (!reply && Date.now() >= startDeadline)
                 throw new UserError('等待 AI 开始回复超时；再次开始将继续等待，不会重复发送');
             const text = reply?.text || '';
@@ -64,7 +64,9 @@ export function createNovelRunner(deps) {
                     const final = snapshot();
                     if (final.messages.slice(attempt.floor).filter((message) => message.isUser).length > 1)
                         throw new UserError('检测到其他用户消息，已停止自动续写');
-                    const current = final.messages.slice(attempt.floor).find((message) => !message.isUser);
+                    const current = final.messages
+                        .slice(attempt.floor)
+                        .find((message) => !message.isUser && !message.isSystem);
                     if (current?.text === text && final.generating !== true) return text.length;
                     stable = 0;
                     readyAt = null;
