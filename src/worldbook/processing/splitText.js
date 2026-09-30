@@ -1,4 +1,6 @@
+// @ts-check
 import { ensureChunkIdentities } from '../../../txtToWorldbook/core/chunkIdentity.js';
+/** @param {string} content @param {{chunkSize?: number, pattern?: string, onWarning?: (message: string) => void}} options */
 export function splitText(content, { chunkSize = 15000, pattern, onWarning = () => {} } = {}) {
     if (!Number.isFinite(chunkSize) || chunkSize < 1) throw new Error('分块长度必须大于零');
     const queue = [];
@@ -121,11 +123,12 @@ export function splitText(content, { chunkSize = 15000, pattern, onWarning = () 
         while (i < content.length) {
             let endIndex = Math.min(i + chunkSize, content.length);
             if (endIndex < content.length) {
-                const paragraphBreak = content.lastIndexOf('\n\n', endIndex);
+                const searchSlice = content.slice(i, endIndex + 2);
+                const paragraphBreak = i + searchSlice.lastIndexOf('\n\n', endIndex - i);
                 if (paragraphBreak > i + chunkSize * 0.5) {
                     endIndex = paragraphBreak + 2;
                 } else {
-                    const sentenceBreak = content.lastIndexOf('。', endIndex);
+                    const sentenceBreak = i + searchSlice.lastIndexOf('。', endIndex - i);
                     if (sentenceBreak > i + chunkSize * 0.5) {
                         endIndex = sentenceBreak + 1;
                     }
@@ -155,6 +158,7 @@ export function splitText(content, { chunkSize = 15000, pattern, onWarning = () 
     return queue;
 }
 
+/** @param {string} content @param {number} chunkIndex */
 function createMemoryChunk(content, chunkIndex) {
     return {
         title: `记忆${chunkIndex}`,

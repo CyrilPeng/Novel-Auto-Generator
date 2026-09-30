@@ -26,7 +26,10 @@ export function beginRun(processing, operation = 'convert') {
             settings: environment.state.settings,
             processing: { volumeMode: processing.volumeMode, incrementalMode: processing.incrementalMode },
             config: environment.state.config,
-            persistent: { customCategories: environment.state.persistent.customCategories },
+            persistent: {
+                customCategories: environment.state.persistent.customCategories,
+                defaultEntries: environment.state.persistent.defaultEntries,
+            },
         });
         run.ready = Promise.resolve()
             .then(() => environment.acquire(run.controller.signal))

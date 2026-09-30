@@ -1,3 +1,4 @@
+import { executeRun } from '../core/runContext.js';
 import { migrateTaskState, captureTaskState, withoutCredentials } from '../../src/storage/taskSchema.js';
 export function createTaskStateService(deps = {}) {
     const {
@@ -136,58 +137,62 @@ export function createTaskStateService(deps = {}) {
                 const state = migrateTaskState(JSON.parse(content), { fork: true });
                 if (!state.memoryQueue || !Array.isArray(state.memoryQueue)) throw new Error('无效的任务状态文件');
                 assertCanRestore();
-                AppState.memory.queue = state.memoryQueue;
-                AppState.task = state.task || null;
-                AppState.worldbook.generated = state.generatedWorldbook || {};
-                AppState.worldbook.volumes = state.worldbookVolumes || [];
-                AppState.worldbook.overrides = state.entryOverrides || {};
-                AppState.worldbook.currentVolumeIndex = state.currentVolumeIndex || 0;
-                AppState.file.hash = state.fileHash || null;
+                await executeRun(AppState.processing, 'import-task', async () => {
+                    AppState.processing.run.configuration = undefined;
+                    const processedCount = state.memoryQueue.filter((m) => m.processed).length;
+                    await MemoryHistoryDB.saveState(processedCount, state);
+                    AppState.memory.queue = state.memoryQueue;
+                    AppState.task = state.task || null;
+                    AppState.worldbook.generated = state.generatedWorldbook || {};
+                    AppState.worldbook.volumes = state.worldbookVolumes || [];
+                    AppState.worldbook.overrides = state.entryOverrides || {};
+                    AppState.worldbook.currentVolumeIndex = state.currentVolumeIndex || 0;
+                    AppState.file.hash = state.fileHash || null;
 
-                restoreConfiguration(state);
+                    restoreConfiguration(state);
 
-                if (state.novelName) {
-                    AppState.file.novelName = state.novelName;
-                } else if (state.originalFileName) {
-                    AppState.file.novelName = state.originalFileName.replace(/\.[^/.]+$/, '');
-                }
+                    if (state.novelName) {
+                        AppState.file.novelName = state.novelName;
+                    } else if (state.originalFileName) {
+                        AppState.file.novelName = state.originalFileName.replace(/\.[^/.]+$/, '');
+                    }
 
-                const fileNameEl = document.getElementById('ttw-file-name');
-                if (fileNameEl && state.originalFileName) {
-                    fileNameEl.textContent = state.originalFileName;
-                }
-                const novelNameInput = document.getElementById('ttw-novel-name-input');
-                if (novelNameInput && AppState.file.novelName) {
-                    novelNameInput.value = AppState.file.novelName;
-                }
-                const novelNameRow = document.getElementById('ttw-novel-name-row');
-                if (novelNameRow) novelNameRow.style.display = 'flex';
+                    const fileNameEl = document.getElementById('ttw-file-name');
+                    if (fileNameEl && state.originalFileName) {
+                        fileNameEl.textContent = state.originalFileName;
+                    }
+                    const novelNameInput = document.getElementById('ttw-novel-name-input');
+                    if (novelNameInput && AppState.file.novelName) {
+                        novelNameInput.value = AppState.file.novelName;
+                    }
+                    const novelNameRow = document.getElementById('ttw-novel-name-row');
+                    if (novelNameRow) novelNameRow.style.display = 'flex';
 
-                if (Object.keys(AppState.worldbook.generated).length === 0) {
-                    rebuildWorldbookFromMemories();
-                }
+                    if (Object.keys(AppState.worldbook.generated).length === 0) {
+                        rebuildWorldbookFromMemories();
+                    }
 
-                const firstUnprocessed = AppState.memory.queue.findIndex((m) => !m.processed || m.failed);
-                AppState.memory.startIndex = firstUnprocessed !== -1 ? firstUnprocessed : 0;
-                AppState.memory.userSelectedIndex = null;
+                    const firstUnprocessed = AppState.memory.queue.findIndex((m) => !m.processed || m.failed);
+                    AppState.memory.startIndex = firstUnprocessed !== -1 ? firstUnprocessed : 0;
+                    AppState.memory.userSelectedIndex = null;
 
-                showQueueSection(true);
-                updateMemoryQueueUI();
-                if (AppState.processing.volumeMode) updateVolumeIndicator();
-                updateStartButtonState(false);
-                updateSettingsUI();
-                renderCategoriesList();
-                renderDefaultWorldbookEntriesUI();
-                updateChapterRegexUI();
+                    showQueueSection(true);
+                    updateMemoryQueueUI();
+                    if (AppState.processing.volumeMode) updateVolumeIndicator();
+                    updateStartButtonState(false);
+                    updateSettingsUI();
+                    renderCategoriesList();
+                    renderDefaultWorldbookEntriesUI();
+                    updateChapterRegexUI();
 
-                if (Object.keys(AppState.worldbook.generated).length > 0) {
-                    showResultSection(true);
-                    updateWorldbookPreview();
-                }
+                    if (Object.keys(AppState.worldbook.generated).length > 0) {
+                        showResultSection(true);
+                        updateWorldbookPreview();
+                    }
 
-                const processedCount = AppState.memory.queue.filter((m) => m.processed).length;
-                ErrorHandler.showUserSuccess(`导入成功！已处理: ${processedCount}/${AppState.memory.queue.length}`);
-                document.getElementById('ttw-start-btn').disabled = false;
+                    ErrorHandler.showUserSuccess(`导入成功！已处理: ${processedCount}/${AppState.memory.queue.length}`);
+                    document.getElementById('ttw-start-btn').disabled = false;
+                });
             } catch (error) {
                 ErrorHandler.showUserError('导入失败: ' + error.message);
             }

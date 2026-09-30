@@ -372,8 +372,10 @@ export function createMemoryHistoryDB(AppState, _Logger) {
          * @param {*} processedIndex
          * @returns {Promise<any>}
          */
-        async saveState(processedIndex) {
-            const state = captureTaskState(AppState, processedIndex);
+        async saveState(processedIndex, importedState = null) {
+            const state = importedState
+                ? { ...structuredClone(importedState), key: 'currentState', processedIndex }
+                : captureTaskState(AppState, processedIndex);
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction([this.stateStoreName, this.metaStoreName], 'readwrite');
@@ -743,6 +745,7 @@ export function createMemoryHistoryDB(AppState, _Logger) {
                 AppState.worldbook.generated = state.generatedWorldbook;
                 AppState.worldbook.volumes = state.worldbookVolumes;
                 AppState.worldbook.overrides = state.entryOverrides;
+                AppState.config.entryPosition = state.entryPositionConfig;
                 AppState.memory.queue = state.memoryQueue;
                 AppState.task = state.task;
                 return history;

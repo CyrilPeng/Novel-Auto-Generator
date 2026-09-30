@@ -105,8 +105,11 @@ export function createWorldbookRuntimeService(deps = {}) {
     }
 
     function applyDefaultWorldbookEntries() {
-        if (AppState.persistent.defaultEntries && AppState.persistent.defaultEntries.length > 0) {
-            for (const entry of AppState.persistent.defaultEntries) {
+        if (
+            runConfiguration(AppState).persistent.defaultEntries &&
+            runConfiguration(AppState).persistent.defaultEntries.length > 0
+        ) {
+            for (const entry of runConfiguration(AppState).persistent.defaultEntries) {
                 if (!entry.category || !entry.name) continue;
                 if (!AppState.worldbook.generated[entry.category]) {
                     AppState.worldbook.generated[entry.category] = {};
@@ -124,14 +127,16 @@ export function createWorldbookRuntimeService(deps = {}) {
                     });
                 }
             }
-            updateStreamContent(`\n📚 已添加 ${AppState.persistent.defaultEntries.length} 个默认世界书条目\n`);
+            updateStreamContent(
+                `\n📚 已添加 ${runConfiguration(AppState).persistent.defaultEntries.length} 个默认世界书条目\n`,
+            );
             return true;
         }
 
-        if (!AppState.settings.defaultWorldbookEntries?.trim()) return false;
+        if (!runConfiguration(AppState).settings.defaultWorldbookEntries?.trim()) return false;
 
         try {
-            const defaultEntries = JSON.parse(AppState.settings.defaultWorldbookEntries);
+            const defaultEntries = JSON.parse(runConfiguration(AppState).settings.defaultWorldbookEntries);
             mergeWorldbookDataIncremental(AppState.worldbook.generated, defaultEntries);
             updateStreamContent('\n📚 已添加默认世界书条目\n');
             return true;

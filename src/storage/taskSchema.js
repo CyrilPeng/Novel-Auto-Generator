@@ -57,7 +57,7 @@ export function captureTaskState(state, processedIndex) {
         categoryLightSettings: configuration.config?.categoryLight,
         customWorldbookCategories: configuration.persistent?.customCategories,
         chapterRegexSettings: configuration.config?.chapterRegex,
-        defaultWorldbookEntriesUI: state.persistent?.defaultEntries,
+        defaultWorldbookEntriesUI: configuration.persistent?.defaultEntries,
         categoryDefaultConfig: configuration.config?.categoryDefault,
         entryPositionConfig: configuration.config?.entryPosition,
     });
