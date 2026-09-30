@@ -68,6 +68,8 @@ export function createApiService(deps = {}) {
         applyMessageChain,
     } = deps;
 
+    // Keep the upstream slot occupied even after local timeout/cancellation.
+    let hostTail = Promise.resolve();
     let tavernGenerateRawMode = null;
     let tavernArrayFallbackNotified = false;
 
@@ -89,6 +91,15 @@ export function createApiService(deps = {}) {
                 }
                 let timeoutId;
                 let onAbort;
+                let waiting = true;
+                const invokeHost = (generate) => {
+                    const request = hostTail.then(() => {
+                        if (!waiting || options.signal?.aborted) throw new AbortedError();
+                        return generate();
+                    });
+                    hostTail = request.catch(() => {});
+                    return request;
+                };
                 try {
                     if (typeof SillyTavern === 'undefined' || !SillyTavern.getContext) {
                         throw new UserError('无法访问SillyTavern上下文');
@@ -118,13 +129,13 @@ export function createApiService(deps = {}) {
                             if (tavernGenerateRawMode === 'string' || messages.length === 1) {
                                 debugLog(`${logPrefix} 使用generateRaw字符串模式`);
                                 result = await Promise.race([
-                                    context.generateRaw(combinedPrompt, '', false),
+                                    invokeHost(() => context.generateRaw(combinedPrompt, '', false)),
                                     timeoutPromise,
                                 ]);
                             } else {
                                 debugLog(`${logPrefix} 尝试generateRaw消息数组格式 (ST 1.13.2+)`);
                                 result = await Promise.race([
-                                    context.generateRaw({ prompt: messages }),
+                                    invokeHost(() => context.generateRaw({ prompt: messages })),
                                     timeoutPromise,
                                 ]);
                                 tavernGenerateRawMode = 'messages';
@@ -153,7 +164,7 @@ export function createApiService(deps = {}) {
                             }
                             budget.consume();
                             result = await Promise.race([
-                                context.generateRaw(combinedPrompt, '', false),
+                                invokeHost(() => context.generateRaw(combinedPrompt, '', false)),
                                 timeoutPromise,
                             ]);
                         }
@@ -163,7 +174,7 @@ export function createApiService(deps = {}) {
                             `ℹ️ ${logPrefix} 酒馆API: 使用generateQuietPrompt（字符串模式，消息角色不生效）\n`,
                         );
                         result = await Promise.race([
-                            context.generateQuietPrompt(combinedPrompt, false, false),
+                            invokeHost(() => context.generateQuietPrompt(combinedPrompt, false, false)),
                             timeoutPromise,
                         ]);
                     } else {
@@ -178,6 +189,7 @@ export function createApiService(deps = {}) {
                     updateStreamContent(`\n❌ ${logPrefix} 错误: ${error.message}\n`);
                     throw error;
                 } finally {
+                    waiting = false;
                     clearTimeout(timeoutId);
                     if (onAbort) options.signal?.removeEventListener('abort', onAbort);
                 }

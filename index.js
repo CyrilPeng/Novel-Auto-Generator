@@ -1,6 +1,8 @@
 import { saveSettingsDebounced } from '/script.js';
 import { extension_settings } from '/scripts/extensions.js';
 import { initTxtToWorldbookBridge } from './txtToWorldbook/main.js';
+import { createNovelRunner } from './src/novel/generation.js';
+import { abortableDelay } from './txtToWorldbook/core/requestPolicy.js';
 
 initTxtToWorldbookBridge().catch((error) => {
     console.error('[NovelGen] TxtToWorldbook bridge init failed:', error);
@@ -54,14 +56,11 @@ const defaultSettings = {
 };
 
 let settings = {};
-let abortGeneration = false;
 let generationStats = { startTime: null, chaptersGenerated: 0, totalCharacters: 0, errors: [] };
 
 // ============================================
 // 工具函数
 // ============================================
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function log(msg, type = 'info') {
     const p = { info: '📘', success: '✅', warning: '⚠️', error: '❌', debug: '🔍' }[type] || 'ℹ️';
@@ -138,13 +137,6 @@ function getRawMessages(startFloor, endFloor, opts = {}) {
         }
     }
     return messages;
-}
-
-function getLastAIMessageLength() {
-    const msgs = document.querySelectorAll('#chat .mes[is_user="false"]');
-    if (!msgs.length) return 0;
-    const last = msgs[msgs.length - 1].querySelector('.mes_text');
-    return last?.innerText?.trim()?.length || 0;
 }
 
 // ============================================
@@ -605,318 +597,67 @@ window.nagDebug = debugRawContent;
 // 弹窗检测
 // ============================================
 
-function hasActiveToast() {
-    const toastContainer = document.querySelector('#toast-container');
-    if (toastContainer) {
-        const toasts = toastContainer.querySelectorAll('.toast');
-        if (toasts.length > 0) return true;
-    }
-    return false;
-}
-
-function getToastText() {
-    const toastContainer = document.querySelector('#toast-container');
-    if (toastContainer) {
-        const toast = toastContainer.querySelector('.toast');
-        if (toast) return toast.textContent?.trim().substring(0, 50) || '';
-    }
-    return '';
-}
-
-/**
- * 等待弹窗消失
- * @param {number} timeout - 超时时间
- * @param {number} postWaitTime - 弹窗消失后额外等待时间
- * @param {string} phase - 阶段名称（用于日志）
- */
-async function waitForToastsClear(timeout, postWaitTime, phase = '') {
-    if (!hasActiveToast()) {
-        log(`${phase}无弹窗，跳过等待`, 'debug');
-        return;
-    }
-
-    log(`${phase}检测到弹窗，等待消失...`, 'info');
-    const startTime = Date.now();
-    let lastLogTime = 0;
-
-    while (hasActiveToast()) {
-        if (abortGeneration) throw new Error('用户中止');
-
-        const elapsed = Date.now() - startTime;
-        if (elapsed > timeout) {
-            log(`${phase}弹窗等待超时，继续执行`, 'warning');
-            return;
-        }
-
-        if (elapsed - lastLogTime >= 5000) {
-            log(`${phase}等待弹窗... (${Math.round(elapsed / 1000)}s) ${getToastText()}`, 'debug');
-            lastLogTime = elapsed;
-        }
-
-        await sleep(500);
-    }
-
-    log(`${phase}弹窗已消失`, 'success');
-
-    if (postWaitTime > 0) {
-        log(`${phase}额外等待 ${postWaitTime}ms`, 'debug');
-        await sleep(postWaitTime);
-    }
-}
-
-// ============================================
-// 核心生成逻辑
-// ============================================
-
-/**
- * 发送消息
- */
-async function sendMessage(text) {
-    const $ta = $('#send_textarea');
-    const $btn = $('#send_but');
-
-    if (!$ta.length || !$btn.length) {
-        throw new Error('找不到输入框或发送按钮');
-    }
-
-    // 清空并填入文本
-    $ta.val(text);
-    $ta[0].value = text;
-    $ta.trigger('input').trigger('change');
-
-    await sleep(100);
-
-    // 点击发送
-    $btn.trigger('click');
-    log('消息已发送', 'success');
-
-    // 发送阶段弹窗检测
-    if (settings.enableSendToastDetection) {
-        await sleep(500); // 短暂等待让弹窗有时间出现
-        await waitForToastsClear(settings.sendToastWaitTimeout, settings.sendPostToastWaitTime, '[发送阶段] ');
-    }
-}
-
-/**
- * 获取AI消息数量（双重检测：DOM + chat数组）
- */
-function getAIMessageCountRobust() {
-    // 方法1: DOM 查询
-    const domCount = document.querySelectorAll('#chat .mes[is_user="false"]').length;
-
-    // 方法2: chat 数组查询
-    let chatCount = 0;
+function novelSnapshot() {
+    const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext?.() : null;
     const stChat = getSTChat();
-    if (stChat) {
-        chatCount = stChat.filter((msg) => msg && !msg.is_user && !msg.is_human).length;
-    }
-
-    // 返回较大的值，确保能检测到新消息
-    return Math.max(domCount, chatCount);
+    const chatId = context?.chatId ?? context?.getCurrentChatId?.();
+    const identity = chatId != null ? String(context?.groupId ?? context?.characterId ?? '') + ':' + chatId : stChat;
+    const stop = document.querySelector('#mes_stop');
+    return {
+        identity,
+        messages: (stChat || []).filter(Boolean).map((message) => ({
+            isUser: Boolean(message.is_user || message.is_human),
+            text: String(message.mes || ''),
+        })),
+        generating: stop ? getComputedStyle(stop).display !== 'none' : null,
+        toast: Boolean(document.querySelector('#toast-container .toast')),
+    };
 }
 
-/**
- * 等待AI回复完成
- */
-async function waitForAIResponse(prevCount) {
-    // 阶段1：等待AI消息数量增加（带超时）
-    log('等待AI开始回复...', 'debug');
-    const waitStartTime = Date.now();
-    const maxWaitForStart = 120000; // 最多等待2分钟让AI开始回复
-
-    while (getAIMessageCountRobust() <= prevCount) {
-        if (abortGeneration) throw new Error('用户中止');
-
-        const elapsed = Date.now() - waitStartTime;
-        if (elapsed > maxWaitForStart) {
-            log(`等待AI开始回复超时 (${Math.round(elapsed / 1000)}s)，可能AI已回复但未检测到`, 'warning');
-            // 尝试用 chat 数组再检查一次
-            const stChat = getSTChat();
-            if (stChat && stChat.length > prevCount) {
-                log('通过 chat 数组检测到新消息，继续处理', 'info');
-                break;
-            }
-            throw new Error('等待AI开始回复超时');
-        }
-
-        // 每10秒输出一次等待日志
-        if (elapsed > 0 && elapsed % 10000 < 500) {
-            log(`仍在等待AI开始回复... (${Math.round(elapsed / 1000)}s)`, 'debug');
-        }
-
-        await sleep(500);
+async function sendNovelMessage(text, { signal, assertCurrent }) {
+    assertCurrent();
+    const input = $('#send_textarea');
+    const button = $('#send_but');
+    if (!input.length || !button.length || button.prop('disabled')) {
+        throw Object.assign(new Error('发送控件尚未就绪，请稍后重试'), { dispatched: false });
     }
-    log('检测到新的AI回复', 'success');
-
-    // 阶段2：等待内容稳定（长度不再变化）
-    log('等待AI回复完成...', 'debug');
-    let lastLength = 0;
-    let stableCount = 0;
-
-    while (stableCount < settings.stabilityRequiredCount) {
-        if (abortGeneration) throw new Error('用户中止');
-
-        await sleep(settings.stabilityCheckInterval);
-
-        const currentLength = getLastAIMessageLength();
-        if (currentLength === lastLength && currentLength > 0) {
-            stableCount++;
-        } else {
-            stableCount = 0;
-            lastLength = currentLength;
-        }
-    }
-    log(`AI回复已稳定 (${lastLength} 字)`, 'success');
-
-    // 阶段3：固定等待时间
-    if (settings.replyWaitTime > 0) {
-        log(`等待 ${settings.replyWaitTime}ms...`, 'debug');
-        await sleep(settings.replyWaitTime);
-    }
-
-    // 阶段4：回复阶段弹窗检测
-    if (settings.enableReplyToastDetection) {
-        await waitForToastsClear(settings.replyToastWaitTimeout, settings.replyPostToastWaitTime, '[回复阶段] ');
-    }
-
-    // 阶段5：再次稳定性检查（确保总结注入完成）
-    log('最终稳定性检查...', 'debug');
-    lastLength = 0;
-    stableCount = 0;
-
-    while (stableCount < settings.stabilityRequiredCount) {
-        if (abortGeneration) throw new Error('用户中止');
-
-        await sleep(settings.stabilityCheckInterval);
-
-        const currentLength = getLastAIMessageLength();
-        if (currentLength === lastLength && currentLength > 0) {
-            stableCount++;
-        } else {
-            stableCount = 0;
-            lastLength = currentLength;
-        }
-    }
-
-    log('回复处理完成', 'success');
-    return lastLength;
+    input.val(text);
+    input[0].value = text;
+    input.trigger('input').trigger('change');
+    await abortableDelay(100, signal);
+    assertCurrent();
+    button.trigger('click');
 }
 
-/**
- * 生成单章
- */
-async function generateSingleChapter(num) {
-    const prevCount = getAIMessageCountRobust();
-
-    // 发送消息
-    await sendMessage(settings.prompt);
-
-    // 等待回复完成
-    const length = await waitForAIResponse(prevCount);
-
-    // 检查长度
-    if (length < settings.minChapterLength) {
-        throw new Error(`响应过短 (${length} 字)`);
-    }
-
-    generationStats.chaptersGenerated++;
-    generationStats.totalCharacters += length;
-    log(`第 ${num} 章完成 (${length} 字)`, 'success');
-
-    return length;
-}
-
-/**
- * 开始生成
- */
-async function startGeneration() {
-    if (settings.isRunning) {
-        toastr.warning('已在运行');
-        return;
-    }
-
-    settings.isRunning = true;
-    settings.isPaused = false;
-    abortGeneration = false;
-    generationStats = { startTime: Date.now(), chaptersGenerated: 0, totalCharacters: 0, errors: [] };
-    saveSettings();
-    updateUI();
-    toastr.info(`开始生成 ${settings.totalChapters - settings.currentChapter} 章`);
-
-    try {
-        for (let i = settings.currentChapter; i < settings.totalChapters; i++) {
-            if (abortGeneration) {
-                log('检测到停止信号', 'info');
-                break;
-            }
-
-            while (settings.isPaused && !abortGeneration) {
-                await sleep(500);
-            }
-
-            if (abortGeneration) break;
-
-            let success = false;
-            let retries = 0;
-
-            while (!success && retries < settings.maxRetries && !abortGeneration) {
-                try {
-                    await generateSingleChapter(i + 1);
-                    success = true;
-                    settings.currentChapter = i + 1;
-                    saveSettings();
-                    updateUI();
-                } catch (e) {
-                    if (abortGeneration || e.message === '用户中止') break;
-
-                    retries++;
-                    log(`第 ${i + 1} 章失败: ${e.message}`, 'error');
-                    generationStats.errors.push({ chapter: i + 1, error: e.message });
-
-                    if (retries < settings.maxRetries) {
-                        log(`等待5秒后重试...`, 'info');
-                        await sleep(5000);
-                    }
-                }
-            }
-
-            if (abortGeneration) break;
-            if (!success) settings.currentChapter = i + 1;
-
-            if (settings.currentChapter % settings.autoSaveInterval === 0) {
-                await exportNovel(true);
-            }
-        }
-
-        if (!abortGeneration) {
-            toastr.success('生成完成!');
-            await exportNovel(false);
-        }
-    } finally {
-        settings.isRunning = false;
-        settings.isPaused = false;
+const novelRunner = createNovelRunner({
+    getSettings: () => settings,
+    snapshot: novelSnapshot,
+    send: sendNovelMessage,
+    onChange: () => {
         saveSettings();
         updateUI();
-    }
-}
+    },
+    notify: (type, message) => toastr[type](message),
+    exportNovel: (...args) => exportNovel(...args),
+    onStats: (stats) => {
+        generationStats = stats;
+    },
+});
 
+function startGeneration() {
+    return novelRunner.start();
+}
 function pauseGeneration() {
-    settings.isPaused = true;
-    updateUI();
-    toastr.info('已暂停');
+    novelRunner.pause();
+    toastr.info('当前章节结束后暂停');
 }
-
 function resumeGeneration() {
-    settings.isPaused = false;
-    updateUI();
+    novelRunner.resume();
     toastr.info('已恢复');
 }
-
 function stopGeneration() {
-    abortGeneration = true;
-    settings.isRunning = false;
-    updateUI();
-    toastr.warning('已停止');
+    novelRunner.stop();
+    toastr.warning('已停止自动续写；酒馆正在生成的回复可能仍会完成');
 }
 
 function resetProgress() {
@@ -924,6 +665,7 @@ function resetProgress() {
         toastr.warning('请先停止');
         return;
     }
+    novelRunner.resetPending();
     settings.currentChapter = 0;
     generationStats = { startTime: null, chaptersGenerated: 0, totalCharacters: 0, errors: [] };
     saveSettings();

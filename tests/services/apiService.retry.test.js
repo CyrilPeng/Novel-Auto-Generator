@@ -98,6 +98,7 @@ describe('real API and chapter retry integration', () => {
         const result = api
             .callSillyTavernAPI([{ role: 'user', content: 'fixture' }], null, { signal: controller.signal })
             .catch((error) => error);
+        await vi.advanceTimersByTimeAsync(0);
         controller.abort();
         expect(await result).toMatchObject({ code: 'ABORTED' });
         expect(generateRaw).toHaveBeenCalledTimes(1);
@@ -154,4 +155,54 @@ describe('real API and chapter retry integration', () => {
         expect(generateRaw).toHaveBeenCalledTimes(1);
         expect(vi.getTimerCount()).toBe(0);
     });
+});
+
+it('keeps an uncancellable upstream slot until it settles', async () => {
+    vi.useFakeTimers();
+    let finish;
+    const generateRaw = vi
+        .fn()
+        .mockImplementationOnce(
+            () =>
+                new Promise((r) => {
+                    finish = r;
+                }),
+        )
+        .mockResolvedValue('new');
+    vi.stubGlobal('SillyTavern', { getContext: () => ({ generateRaw }) });
+    const { api } = setup();
+    const controller = new AbortController();
+    const first = api
+        .callSillyTavernAPI([{ role: 'user', content: 'old' }], null, { signal: controller.signal })
+        .catch((e) => e);
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    expect((await first).code).toBe('ABORTED');
+    const next = api.callSillyTavernAPI([{ role: 'user', content: 'next' }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(generateRaw).toHaveBeenCalledTimes(1);
+    finish('old');
+    await expect(next).resolves.toBe('new');
+    expect(generateRaw).toHaveBeenCalledTimes(2);
+});
+
+it('does not dispatch queued requests that already timed out', async () => {
+    vi.useFakeTimers();
+    let finish;
+    const generateRaw = vi.fn(
+        () =>
+            new Promise((r) => {
+                finish = r;
+            }),
+    );
+    vi.stubGlobal('SillyTavern', { getContext: () => ({ generateRaw }) });
+    const { api } = setup();
+    const first = api.callSillyTavernAPI([{ role: 'user', content: 'old' }]).catch((e) => e);
+    const next = api.callSillyTavernAPI([{ role: 'user', content: 'queued' }]).catch((e) => e);
+    await vi.runAllTimersAsync();
+    expect((await first).code).toBe('HOST_TIMEOUT');
+    expect((await next).code).toBe('HOST_TIMEOUT');
+    finish('late');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(generateRaw).toHaveBeenCalledTimes(1);
 });

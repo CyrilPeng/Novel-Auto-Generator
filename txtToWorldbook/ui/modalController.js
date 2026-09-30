@@ -1,3 +1,5 @@
+import { stopRun } from '../core/runContext.js';
+
 export function createModalController(deps) {
     const {
         AppState,
@@ -43,6 +45,7 @@ export function createModalController(deps) {
     }
 
     function closeModal() {
+        stopRun(AppState.processing);
         setProcessingStatus('stopped');
 
         const globalSemaphore = getGlobalSemaphore();

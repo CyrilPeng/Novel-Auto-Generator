@@ -1,3 +1,5 @@
+import { Semaphore } from '../../txtToWorldbook/core/runtime.js';
+import { beginRun, stopRun, finishRun } from '../../txtToWorldbook/core/runContext.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     createProcessingService,
@@ -69,7 +71,7 @@ function createTestService(overrides = {}) {
         showResultSection: vi.fn(),
         updateWorldbookPreview: vi.fn(),
         applyDefaultWorldbookEntries: vi.fn(),
-        ErrorHandler: { showError: vi.fn() },
+        ErrorHandler: { showError: vi.fn(), handle: vi.fn() },
         handleRepairMemoryWithSplit: vi.fn(),
         setProcessingStatus:
             overrides.setProcessingStatus ||
@@ -87,6 +89,7 @@ function createTestService(overrides = {}) {
         MemoryHistoryDB: overrides.MemoryHistoryDB || {
             saveRollResult: vi.fn().mockResolvedValue(0),
             saveState: vi.fn().mockResolvedValue(),
+            clearState: vi.fn().mockResolvedValue(),
         },
         Semaphore: overrides.Semaphore,
     };
@@ -410,5 +413,81 @@ describe('handleStopProcessing', () => {
         service.handleStopProcessing();
 
         expect(mockSemaphore.abort).toHaveBeenCalled();
+    });
+});
+
+describe('run isolation', () => {
+    it('blocks restarting during finalization and releases controls after late response', async () => {
+        let resolve;
+        const callAPI = vi.fn(
+            () =>
+                new Promise((r) => {
+                    resolve = r;
+                }),
+        );
+        const { service, AppState, mocks } = createTestService({ queue: [makeMemory('章', '正文')], callAPI });
+        AppState.memory.startIndex = 0;
+        AppState.memory.userSelectedIndex = null;
+        const old = service.handleStartProcessing();
+        service.handleStopProcessing();
+        await service.handleStartProcessing();
+        expect(callAPI).toHaveBeenCalledTimes(1);
+        resolve('{}');
+        await old;
+        expect(mocks.mergeWorldbookDataWithHistory).not.toHaveBeenCalled();
+        expect(mocks.MemoryHistoryDB.saveRollResult).not.toHaveBeenCalled();
+        expect(AppState.processing.run.pending).toBe(false);
+        expect(mocks.updateStartButtonState).toHaveBeenLastCalledWith(false);
+        expect(AppState.memory.queue[0].processing).toBe(false);
+    });
+
+    it('old rejection cannot mutate a replacement run', async () => {
+        let reject;
+        const { service, AppState, mocks } = createTestService({
+            queue: [makeMemory('章', '正文')],
+            callAPI: () =>
+                new Promise((_, r) => {
+                    reject = r;
+                }),
+        });
+        const oldRun = beginRun(AppState.processing);
+        const old = service.processMemoryChunk(0).catch((error) => error);
+        stopRun(AppState.processing);
+        finishRun(AppState.processing, oldRun);
+        beginRun(AppState.processing);
+        AppState.memory.queue[0].processing = true;
+        reject(new Error('old failure'));
+        expect((await old).code).toBe('ABORTED');
+        expect(AppState.memory.queue[0].processing).toBe(true);
+        expect(AppState.memory.failedQueue).toEqual([]);
+        expect(mocks.MemoryHistoryDB.saveRollResult).not.toHaveBeenCalled();
+    });
+
+    it('releases an acquired permit if stopped before its continuation', async () => {
+        const { service, AppState, mocks } = createTestService({ queue: [makeMemory('章', '正文')], Semaphore });
+        beginRun(AppState.processing);
+        const task = service.processMemoryChunksParallel(0, 1).catch((error) => error);
+        const semaphore = AppState.globalSemaphore;
+        const release = vi.spyOn(semaphore, 'release');
+        service.handleStopProcessing();
+        expect((await task).code).toBe('ABORTED');
+        expect(release).toHaveBeenCalledTimes(1);
+        expect(AppState.globalSemaphore).toBe(null);
+        expect(mocks.callAPI).not.toHaveBeenCalled();
+    });
+
+    it('preserves a fatal error and aborts queued tasks', async () => {
+        const fatal = Object.assign(new Error('unauthorized'), { retryable: false });
+        const { service, AppState, mocks } = createTestService({
+            queue: [makeMemory('1', 'a'), makeMemory('2', 'b')],
+            Semaphore,
+            concurrency: 1,
+            callAPI: vi.fn().mockRejectedValue(fatal),
+        });
+        beginRun(AppState.processing);
+        await expect(service.processMemoryChunksParallel(0, 2)).rejects.toBe(fatal);
+        expect(mocks.callAPI).toHaveBeenCalledTimes(1);
+        expect(AppState.processing.activeTasks.size).toBe(0);
+        expect(AppState.globalSemaphore).toBe(null);
     });
 });
