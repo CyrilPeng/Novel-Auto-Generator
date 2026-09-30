@@ -1,46 +1,6 @@
-const CONSOLIDATE_ERROR_RESPONSE_PATTERNS = [
-    /proxy queue error/i,
-    /too many concurrent requests/i,
-    /another request in the queue/i,
-    /your ip or user token/i,
-    /resource[_\s-]?exhausted/i,
-    /rate limit(?:ed)?/i,
-    /\b429\b/,
-    /overloaded/i,
-    /temporarily unavailable/i,
-    /service unavailable/i,
-    /server error/i,
-    /bad gateway/i,
-    /internal server error/i,
-    /请求过于频繁/,
-    /请求太频繁/,
-    /限流/,
-];
-
-const STRICT_CONSOLIDATE_ERROR_RESPONSE_PATTERNS = [
-    /proxy queue error/i,
-    /too many concurrent requests/i,
-    /another request in the queue/i,
-    /resource[_\s-]?exhausted/i,
-];
-
-export function isConsolidateErrorResponse(responseText) {
-    const text = String(responseText || '').trim();
-    if (!text) return false;
-
-    const compactText = text.replace(/\s+/g, ' ');
-    const patterns =
-        compactText.length > 2000 ? STRICT_CONSOLIDATE_ERROR_RESPONSE_PATTERNS : CONSOLIDATE_ERROR_RESPONSE_PATTERNS;
-    return patterns.some((pattern) => pattern.test(compactText));
-}
-
-function createConsolidateRetryableError() {
-    const error = new Error('AI/API 返回排队或限流错误，已保留原条目内容。请稍后重试，或降低并发数后再整理');
-    error.retryable = true;
-    error.code = 'CONSOLIDATE_RETRYABLE_RESPONSE';
-    return error;
-}
-
+import { createConsolidationService } from '../../src/worldbook/commands/consolidate.js';
+export { isConsolidateErrorResponse } from '../../src/worldbook/commands/consolidate.js';
+import { executeRun, captureRun, runConfiguration } from '../core/runContext.js';
 export function createMergeWorkflowService(deps = {}) {
     const {
         AppState,
@@ -99,51 +59,22 @@ export function createMergeWorkflowService(deps = {}) {
 
     let lastConsolidateFailedEntries = [];
 
-    function cleanConsolidateResponse(response) {
-        let text = filterResponseContent(response || '').trim();
-        const fenced = text.match(/```(?:markdown|md|text|txt)?\s*([\s\S]*?)```/i);
-        if (fenced) text = fenced[1].trim();
-
-        try {
-            const parsed = parseAIResponse(text, { strict: false });
-            if (typeof parsed === 'string') return parsed.trim();
-            if (parsed && typeof parsed === 'object') {
-                const content = parsed['内容'] || parsed.content || parsed.text || parsed.result;
-                if (typeof content === 'string') return content.trim();
-            }
-        } catch {
-            // 整理条目允许纯文本输出，JSON解析失败时保留清洗后的文本。
-        }
-
-        return text.replace(/^整理后的内容[:：]\s*/i, '').trim();
-    }
-
+    const consolidation = createConsolidationService({
+        callAPI,
+        getLanguagePrefix,
+        parseAIResponse,
+        filterResponseContent,
+        defaultConsolidatePrompt,
+    });
     async function consolidateEntry(category, entryName, promptTemplate) {
-        const entry = AppState.worldbook.generated[category]?.[entryName];
-        if (!entry || !entry['内容']) return;
-
-        const template = promptTemplate && promptTemplate.trim() ? promptTemplate.trim() : defaultConsolidatePrompt;
-        const originalContent = entry['内容'];
-        const prompt = template.replace('{CONTENT}', originalContent);
-
-        try {
-            const response = await callAPI(getLanguagePrefix() + prompt);
-            const finalContent = cleanConsolidateResponse(response);
-            if (!finalContent) {
-                throw new Error('AI 返回了空内容，保留原条目内容');
-            }
-            if (isConsolidateErrorResponse(finalContent)) {
-                throw createConsolidateRetryableError();
-            }
-
-            entry['内容'] = finalContent;
-            if (Array.isArray(entry['关键词'])) {
-                entry['关键词'] = [...new Set(entry['关键词'])];
-            }
-        } catch (error) {
-            entry['内容'] = originalContent;
-            throw error;
-        }
+        const guard = captureRun(AppState.processing);
+        const result = await consolidation.transformEntry(
+            AppState.worldbook.generated[category]?.[entryName],
+            promptTemplate,
+            guard.signal,
+        );
+        guard.assert();
+        if (result) AppState.worldbook.generated[category][entryName] = result;
     }
 
     function showConsolidateCategorySelector() {
@@ -589,83 +520,67 @@ export function createMergeWorkflowService(deps = {}) {
     }
 
     async function consolidateSelectedEntries(entries) {
-        if (typeof saveWorldbookSnapshot === 'function') {
-            await saveWorldbookSnapshot('快照-条目整理前');
+        try {
+            await executeRun(
+                AppState.processing,
+                'consolidate',
+                async (guard) => {
+                    setProcessingStatus('running');
+                    AppState.processing.isStopped = false;
+                    showProgressSection(true);
+                    const next = structuredClone(AppState.worldbook.generated);
+                    const failedEntries = [];
+                    const config = runConfiguration(AppState).config.parallel;
+                    const limit = config.enabled === false ? 1 : Math.max(1, Math.min(16, config.concurrency || 1));
+                    let cursor = 0,
+                        completed = 0;
+                    const worker = async () => {
+                        while (cursor < entries.length) {
+                            guard.assert();
+                            const entry = entries[cursor++];
+                            try {
+                                const result = await consolidation.transformEntry(
+                                    next[entry.category]?.[entry.name],
+                                    entry.promptTemplate,
+                                    guard.signal,
+                                );
+                                guard.assert();
+                                if (result) next[entry.category][entry.name] = result;
+                                completed++;
+                            } catch (error) {
+                                guard.assert();
+                                failedEntries.push({
+                                    category: entry.category,
+                                    name: entry.name,
+                                    error: error.message,
+                                });
+                            }
+                            updateProgress(
+                                ((completed + failedEntries.length) / entries.length) * 100,
+                                `整理中：${completed} 成功，${failedEntries.length} 失败`,
+                            );
+                        }
+                    };
+                    await Promise.allSettled(Array.from({ length: Math.min(limit, entries.length) }, worker));
+                    guard.assert();
+                    if (!deps.commitWorldbook) throw new Error('缺少世界书提交仓储');
+                    await deps.commitWorldbook(next, guard, '整理世界书');
+                    lastConsolidateFailedEntries = failedEntries;
+                    updateWorldbookPreview();
+                    const message = `整理完成：${completed} 成功，${failedEntries.length} 失败`;
+                    updateStreamContent(message);
+                    if (failedEntries.length) ErrorHandler.showUserError(message);
+                    else ErrorHandler.showUserSuccess(message);
+                },
+                {
+                    finish: () => {
+                        if (getProcessingStatus() !== 'stopped') setProcessingStatus('idle');
+                    },
+                },
+            );
+        } catch (error) {
+            ErrorHandler.showUserError(error.message);
         }
-        showProgressSection(true);
-        setProcessingStatus('running');
-        AppState.processing.isStopped = false;
-        updateProgress(0, '开始整理条目...');
-        updateStreamContent('', true);
-        updateStreamContent(`🧹 开始整理 ${entries.length} 个条目\n${'='.repeat(50)}\n`);
-
-        const consolidateConcurrency =
-            AppState.config.parallel.enabled === false ? 1 : AppState.config.parallel.concurrency || 1;
-        const semaphore = new Semaphore(consolidateConcurrency);
-        let completed = 0;
-        let failed = 0;
-        const failedEntries = [];
-
-        const processOne = async (entry, index) => {
-            if (AppState.processing.isStopped) return;
-
-            try {
-                await semaphore.acquire();
-            } catch (e) {
-                if (e.message === 'ABORTED') return;
-                throw e;
-            }
-
-            if (AppState.processing.isStopped) {
-                semaphore.release();
-                return;
-            }
-
-            try {
-                updateStreamContent(`📝 [${index + 1}/${entries.length}] ${entry.category} - ${entry.name}\n`);
-                await consolidateEntry(entry.category, entry.name, entry.promptTemplate);
-                completed++;
-                updateProgress(
-                    ((completed + failed) / entries.length) * 100,
-                    `整理中 (${completed}✅ ${failed}❌ / ${entries.length})`,
-                );
-                updateStreamContent('   ✅ 完成\n');
-            } catch (error) {
-                failed++;
-                failedEntries.push({ category: entry.category, name: entry.name, error: error.message });
-                updateProgress(
-                    ((completed + failed) / entries.length) * 100,
-                    `整理中 (${completed}✅ ${failed}❌ / ${entries.length})`,
-                );
-                updateStreamContent(`   ❌ 失败: ${error.message}\n`);
-            } finally {
-                semaphore.release();
-            }
-        };
-
-        await Promise.allSettled(entries.map((entry, i) => processOne(entry, i)));
-
-        lastConsolidateFailedEntries = failedEntries;
-
-        updateProgress(100, `整理完成: 成功 ${completed}, 失败 ${failed}`);
-        updateStreamContent(`\n${'='.repeat(50)}\n✅ 整理完成！成功 ${completed}, 失败 ${failed}\n`);
-
-        if (failedEntries.length > 0) {
-            updateStreamContent('\n❗ 失败条目:\n');
-            failedEntries.forEach((f) => {
-                updateStreamContent(`   • [${f.category}] ${f.name}: ${f.error}\n`);
-            });
-            updateStreamContent('\n💡 再次打开"整理条目"可以只选失败项重试\n');
-        }
-        if (getProcessingStatus() !== 'stopped') setProcessingStatus('idle');
-
-        updateWorldbookPreview();
-
-        let msg = `条目整理完成！\n成功: ${completed}\n失败: ${failed}`;
-        if (failed > 0) {
-            msg += '\n\n再次点击"整理条目"可以只选失败项重试';
-        }
-        ErrorHandler.showUserSuccess(msg);
     }
 
     function showManualMergeUI(onMergeComplete) {

@@ -190,6 +190,7 @@ export function createFeatureServices(deps = {}) {
     });
 
     const mergeWorkflowService = createMergeWorkflowService({
+        commitWorldbook: deps.commitWorldbook,
         AppState,
         ErrorHandler,
         ModalFactory,
