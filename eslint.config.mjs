@@ -5,12 +5,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 export default [
     // ========== 全局忽略 ==========
     {
-        ignores: [
-            'node_modules/**',
-            'dist/**',
-            '*.min.js',
-            '.claude/**',
-        ],
+        ignores: ['node_modules/**', 'dist/**', '*.min.js', '.claude/**'],
     },
 
     // ========== 基础推荐规则 ==========
@@ -66,7 +61,7 @@ export default [
 
     // ========== 测试文件 ==========
     {
-        files: ['tests/**/*.js', 'vitest.config.js'],
+        files: ['tests/**/*.js', 'vitest.config.js', 'scripts/**/*.mjs', 'eslint.config.mjs'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',

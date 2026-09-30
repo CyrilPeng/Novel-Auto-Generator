@@ -8,18 +8,22 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint \"**/*.js\"",
-    "lint:fix": "eslint \"**/*.js\" --fix",
-    "format": "prettier --write \"**/*.{js,json,md,css,yml,yaml}\"",
-    "format:check": "prettier --check \"**/*.{js,json,md,css,yml,yaml}\""
+    "lint": "eslint \"**/*.{js,mjs}\"",
+    "lint:fix": "eslint \"**/*.{js,mjs}\" --fix",
+    "format": "prettier --write \"**/*.{js,mjs,json,md,css,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,json,md,css,yml,yaml}\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run check:boundaries && npm test"
   },
   "devDependencies": {
-    "vitest": "^3.2.1",
-    "fake-indexeddb": "^6.0.1",
-    "eslint": "^9.23.0",
     "@eslint/js": "^9.23.0",
+    "eslint": "^9.23.0",
+    "eslint-config-prettier": "^10.1.1",
+    "fake-indexeddb": "^6.0.1",
     "globals": "^16.0.0",
     "prettier": "^3.5.3",
-    "eslint-config-prettier": "^10.1.1"
+    "typescript": "5.9.3",
+    "vitest": "^3.2.1"
   }
 }

@@ -33,6 +33,9 @@ jobs:
             - name: Check Prettier formatting
               run: npm run format:check
 
+            - name: Check types and module boundaries
+              run: npm run typecheck && npm run check:boundaries
+
             - name: Run tests
               run: npm test
 

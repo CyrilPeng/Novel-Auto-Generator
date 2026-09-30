@@ -3,7 +3,7 @@
 <div align="center">
 
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/CyrilPeng/Novel-Auto-Generator?sort=semver&label=version&color=blue)](https://github.com/CyrilPeng/Novel-Auto-Generator/tags)
-[![SillyTavern](https://img.shields.io/badge/SillyTavern-1.10%2B-green.svg)](https://github.com/SillyTavern/SillyTavern)
+[![SillyTavern](https://img.shields.io/badge/SillyTavern-1.13.2%20%7C%201.19.0-green.svg)](https://github.com/SillyTavern/SillyTavern)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](https://github.com/CyrilPeng/Novel-Auto-Generator/blob/main/LICENSE)
 
 **SillyTavern 扩展插件 — AI 自动续写小说 + TXT 转世界书**
@@ -179,30 +179,34 @@ nagDebug(5); // 查看第 5 楼的原始内容
 
 ## 项目结构
 
-```
+```text
 novel-auto-generator/
-├── manifest.json          # 扩展配置
-├── index.js               # 主程序（自动生成模块）
-├── style.css              # 样式表
-├── txtToWorldbook/        # TXT转世界书模块
-│   ├── main.js            # 模块入口
-│   ├── core/              # 核心：状态、常量、工具
-│   ├── infra/             # 基础设施：API、数据库、事件
-│   ├── services/          # 业务逻辑服务层
-│   ├── ui/                # UI 组件与视图
-│   ├── app/               # 依赖注入与应用组装
-│   └── adapters/          # 外部 API 适配器
-├── tests/                 # 自动化测试（Vitest）
-│   ├── core/              # 工具函数测试
-│   ├── services/          # 服务层测试
-│   ├── infra/             # 基础设施测试
-│   └── REGRESSION.md      # 手动回归测试清单
-├── README.md              # 本文档
-├── CHANGELOG.md           # 更新日志
-└── txtToWorldbook.md      # TXT转世界书详细文档
+├── index.js / manifest.json   # 稳定安装入口
+├── src/
+│   ├── bootstrap.js           # 宿主启动
+│   ├── host/                  # SillyTavern 能力与生成接口
+│   ├── novel/                 # 自动续写、恢复、标签过滤
+│   ├── storage/               # 检查点、事务、迁移与写入锁
+│   └── worldbook/             # commands / entries / processing / formats
+├── txtToWorldbook/
+│   ├── app/ / main.js         # 应用装配与兼容 API
+│   ├── core/ / infra/         # 状态、请求基础设施与数据库
+│   ├── services/              # UI 适配与兼容服务
+│   └── ui/ / styles/          # 视图与独立弹窗样式
+├── scripts/                   # 边界检查、真实宿主验收、压力测试
+├── tests/                     # Vitest 单元与集成回归
+└── docs/                      # 方案、验收、发布与回退
 ```
 
 ---
+
+## 1.9.0 升级说明
+
+已验收 SillyTavern 1.13.2、1.19.0，Edge 和 Firefox；请通过 localhost 或 HTTPS 使用任务功能（需要 Web Locks）。更新前先导出任务和世界书。新版本保留完成成果、迁移前备份和待确认续写状态；设置/任务导出不含 API 密钥，导入后按需重新填写。凭据仍存放于本地浏览器明文存储。
+
+人工修改在章节重生成后保留；单独重 Roll 某条目会明确替换该条目的人工覆盖。停止续写后，酒馆已发出的生成可能继续完成；原聊天存在待确认发送时，不会向新聊天自动重发。
+
+升级、备份及回退步骤见 [发布与回退](docs/release.md)。
 
 ## 开发与测试
 
@@ -214,10 +218,10 @@ novel-auto-generator/
 
 ```bash
 # 安装依赖
-npm install
+npm ci
 
-# 运行全部测试
-npm test
+# 执行完整检查（lint、格式、类型、边界、314 项测试）
+npm run verify
 
 # 监听模式（开发时使用）
 npm run test:watch
@@ -231,7 +235,7 @@ npm run test:watch
 
 ### 手动回归测试
 
-涉及核心逻辑变更的发布前，请按照 [tests/REGRESSION.md](tests/REGRESSION.md) 完成 17 项手动测试场景验证。
+发布前检查清单见 [tests/REGRESSION.md](tests/REGRESSION.md)，已执行的浏览器与集成验收范围见 [验收记录](docs/host-smoke.md)。
 
 ---
 

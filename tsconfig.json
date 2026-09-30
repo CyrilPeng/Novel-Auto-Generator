@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "strict": true
+  },
+  "files": [
+    "src/novel/recoveryStore.js",
+    "src/storage/writerLock.js",
+    "src/worldbook/entries/overrides.js",
+    "src/worldbook/processing/splitText.js"
+  ]
+}

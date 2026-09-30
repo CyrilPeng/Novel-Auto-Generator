@@ -1,4 +1,6 @@
+// @ts-check
 /** Synchronous journal: storage must acknowledge uncertainty before the host dispatches. */
+/** @param {() => Storage} getStorage @param {string} key */
 export function createNovelRecoveryStore(getStorage, key = 'novel-auto-generator:recovery:v1') {
     return {
         read() {
@@ -16,6 +18,7 @@ export function createNovelRecoveryStore(getStorage, key = 'novel-auto-generator
                 throw new Error('Invalid pending continuation');
             return value;
         },
+        /** @param {{identity: string, chapter: number, pending: {identity: string, floor: number} | null}} record */
         write({ identity, chapter, pending }) {
             // Do not retain prompts or chat text in the journal.
             getStorage().setItem(
