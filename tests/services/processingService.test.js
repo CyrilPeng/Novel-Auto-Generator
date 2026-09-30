@@ -160,7 +160,7 @@ describe('processMemoryChunkIndependent', () => {
             await vi.runAllTimersAsync();
             await expectation;
 
-            expect(callAPI).toHaveBeenCalledTimes(4);
+            expect(callAPI).toHaveBeenCalledTimes(2);
         } finally {
             vi.useRealTimers();
         }

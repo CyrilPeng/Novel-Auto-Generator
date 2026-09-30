@@ -1,4 +1,7 @@
-﻿export function createProcessingService(deps = {}) {
+import { isRetryable, isAborted, RetryableError } from '../core/errors.js';
+import { createRequestBudget, abortableDelay, throwIfAborted } from '../core/requestPolicy.js';
+
+export function createProcessingService(deps = {}) {
     const {
         AppState,
         MemoryHistoryDB,
@@ -73,8 +76,27 @@
         return formatETA(avg * remainingChapters);
     }
 
+    function parseMemoryUpdate(response, chapterIndex) {
+        try {
+            const update = postProcessResultWithChapterIndex(parseAIResponse(response), chapterIndex);
+            const entryCount = ensureMeaningfulWorldbookUpdate(update, chapterIndex);
+            return { update, entryCount };
+        } catch (error) {
+            throw new RetryableError(error.message, { code: 'INVALID_RESPONSE', cause: error });
+        }
+    }
+
     async function processMemoryChunkIndependent(options) {
-        const { index, retryCount = 0, customPromptSuffix = '', worldbookSummaryContext = '' } = options;
+        const {
+            index,
+            retryCount = 0,
+            customPromptSuffix = '',
+            worldbookSummaryContext = '',
+            contentRetries = 0,
+            signal,
+        } = options;
+        const budget = options.budget || createRequestBudget();
+        throwIfAborted(signal);
         const memory = AppState.memory.queue[index];
         const maxRetries = 3;
         const taskId = index + 1;
@@ -132,7 +154,7 @@
 
         try {
             debugLog(`[第${chapterIndex}章] 调用API...`);
-            const response = await callAPI(prompt, taskId);
+            const response = await callAPI(prompt, taskId, { budget, signal });
 
             if (!AppState.processing.isRerolling && AppState.processing.isStopped) {
                 memory.processing = false;
@@ -143,32 +165,37 @@
             if (isTokenLimitError(response)) throw new Error('Token limit exceeded');
 
             debugLog(`[第${chapterIndex}章] 解析AI响应...`);
-            let memoryUpdate = parseAIResponse(response);
-
-            debugLog(`[第${chapterIndex}章] 后处理章节索引...`);
-            memoryUpdate = postProcessResultWithChapterIndex(memoryUpdate, chapterIndex);
-            const entryCount = ensureMeaningfulWorldbookUpdate(memoryUpdate, chapterIndex);
+            const { update: memoryUpdate, entryCount } = parseMemoryUpdate(response, chapterIndex);
 
             debugLog(`[第${chapterIndex}章] 处理完成, 有效条目=${entryCount}`);
             updateStreamContent(`✅ [第${chapterIndex}章] 处理完成（有效条目 ${entryCount} 个）\n`);
             return memoryUpdate;
         } catch (error) {
             memory.processing = false;
-            if (error.message === 'ABORTED') throw error;
+            if (isAborted(error)) throw error;
 
             updateStreamContent(`❌ [第${chapterIndex}章] 错误: ${error.message}\n`);
 
             if (isTokenLimitError(error.message)) throw new Error(`TOKEN_LIMIT:${index}`);
 
-            if (retryCount < maxRetries && !AppState.processing.isStopped) {
+            if (
+                retryCount < maxRetries &&
+                budget.remaining > 0 &&
+                isRetryable(error) &&
+                (error.code !== 'INVALID_RESPONSE' || contentRetries < 1) &&
+                !AppState.processing.isStopped
+            ) {
                 const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
                 updateStreamContent(`🔄 [第${chapterIndex}章] ${delay / 1000}秒后重试...\n`);
-                await new Promise((resolve) => setTimeout(resolve, delay));
+                await abortableDelay(delay, signal);
                 return processMemoryChunkIndependent({
                     index,
                     retryCount: retryCount + 1,
                     customPromptSuffix,
                     worldbookSummaryContext,
+                    budget,
+                    signal,
+                    contentRetries: contentRetries + (error.code === 'INVALID_RESPONSE' ? 1 : 0),
                 });
             }
             throw error;
@@ -196,6 +223,7 @@ ${'='.repeat(50)}
         );
 
         let completed = 0;
+        let fatalError = null;
         const batchStartTime = Date.now();
         AppState.globalSemaphore = new Semaphore(AppState.config.parallel.concurrency);
 
@@ -240,6 +268,11 @@ ${'='.repeat(50)}
                 if (error.message === 'ABORTED') {
                     updateMemoryQueueUI();
                     return null;
+                }
+                if (error.retryable === false) {
+                    fatalError = error;
+                    transitionTo('stopped');
+                    AppState.globalSemaphore.abort();
                 }
                 if (error.message.startsWith('TOKEN_LIMIT:')) {
                     tokenLimitIndices.push(parseInt(error.message.split(':')[1], 10));
@@ -288,6 +321,7 @@ ${'='.repeat(50)}
             await MemoryHistoryDB.saveRollResult(task.index, result);
         }
 
+        if (fatalError) throw fatalError;
         updateMemoryQueueUI();
         updateStreamContent(`
 ${'='.repeat(50)}
@@ -296,7 +330,10 @@ ${'='.repeat(50)}
         return { tokenLimitIndices };
     }
 
-    async function processMemoryChunk(index, retryCount = 0) {
+    async function processMemoryChunk(index, retryCount = 0, options = {}) {
+        const budget = options.budget || createRequestBudget();
+        const { signal, contentRetries = 0 } = options;
+        throwIfAborted(signal);
         if (AppState.processing.isStopped) return;
 
         const memory = AppState.memory.queue[index];
@@ -360,7 +397,7 @@ ${'='.repeat(50)}
             if (estimatedTokens > 100000) {
                 updateStreamContent(`⚠️ [第${chapterIndex}章] 提示词预估 ${estimatedTokens} tokens，较大\n`);
             }
-            const response = await callAPI(prompt);
+            const response = await callAPI(prompt, null, { budget, signal });
             memory.processing = false;
 
             if (AppState.processing.isStopped) {
@@ -387,9 +424,7 @@ ${'='.repeat(50)}
             }
 
             debugLog(`[串行][第${chapterIndex}章] 解析AI响应...`);
-            let memoryUpdate = parseAIResponse(response);
-            memoryUpdate = postProcessResultWithChapterIndex(memoryUpdate, chapterIndex);
-            const entryCount = ensureMeaningfulWorldbookUpdate(memoryUpdate, chapterIndex);
+            const { update: memoryUpdate, entryCount } = parseMemoryUpdate(response, chapterIndex);
 
             debugLog(`[串行][第${chapterIndex}章] 合并世界书...`);
             await mergeWorldbookDataWithHistory({
@@ -408,6 +443,7 @@ ${'='.repeat(50)}
             updateMemoryQueueUI();
         } catch (error) {
             memory.processing = false;
+            if (isAborted(error) || error.retryable === false) throw error;
 
             if (isTokenLimitError(error.message || '')) {
                 if (AppState.processing.volumeMode) {
@@ -428,11 +464,20 @@ ${'='.repeat(50)}
                 }
             }
 
-            if (retryCount < maxRetries) {
+            if (
+                retryCount < maxRetries &&
+                budget.remaining > 0 &&
+                isRetryable(error) &&
+                (error.code !== 'INVALID_RESPONSE' || contentRetries < 1)
+            ) {
                 const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 10000);
                 updateProgress(progress, `处理失败，${retryDelay / 1000}秒后重试`);
-                await new Promise((r) => setTimeout(r, retryDelay));
-                return processMemoryChunk(index, retryCount + 1);
+                await abortableDelay(retryDelay, signal);
+                return processMemoryChunk(index, retryCount + 1, {
+                    budget,
+                    signal,
+                    contentRetries: contentRetries + (error.code === 'INVALID_RESPONSE' ? 1 : 0),
+                });
             }
 
             memory.processed = true;

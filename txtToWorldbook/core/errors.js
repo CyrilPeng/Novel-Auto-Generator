@@ -34,6 +34,9 @@ export class RetryableError extends Error {
         this.code = options.code || 'RETRYABLE_ERROR';
         this.retryCount = options.retryCount || 0;
         this.httpStatus = options.httpStatus;
+        this.retryAfterMs = options.retryAfterMs;
+        this.provider = options.provider;
+        this.cause = options.cause;
     }
 }
 
@@ -48,6 +51,8 @@ export class FatalError extends Error {
         this.retryable = false;
         this.code = options.code || 'FATAL_ERROR';
         this.cause = options.cause;
+        this.httpStatus = options.httpStatus;
+        this.provider = options.provider;
     }
 }
 
@@ -83,18 +88,27 @@ export class TokenLimitError extends RetryableError {
  * @param {Error} error
  * @returns {boolean}
  */
+export const HTTP_RETRYABLE = new Set([408, 429, 500, 502, 503, 504, 529]);
+
+export function isAborted(error) {
+    return (
+        error?.code === 'ABORTED' ||
+        error?.name === 'AbortError' ||
+        error?.name === 'AbortedError' ||
+        error?.message === 'ABORTED'
+    );
+}
+
 export function isRetryable(error) {
-    if (!error) return false;
+    if (!error || isAborted(error) || error.retryable === false) return false;
+    const status = Number(error.httpStatus ?? error.status);
+    if (status >= 400) return HTTP_RETRYABLE.has(status);
     if (error.retryable === true) return true;
-    // 兼容旧式字符串约定
-    if (typeof error.message === 'string') {
-        if (error.message.startsWith('TOKEN_LIMIT:')) return true;
-        if (error.message === 'ABORTED') return false;
-    }
-    // 兼容旧的 isTokenLimitError 检测
-    const httpRetryable = [408, 429, 500, 502, 503, 504, 529];
-    if (error.httpStatus && httpRetryable.includes(error.httpStatus)) return true;
-    return false;
+    const message = String(error.responseText || error.message || '').toLowerCase();
+    if (message.startsWith('token_limit:')) return true;
+    return /rate limit|resource_exhausted|overloaded|server error|temporarily unavailable|econnreset|network error|failed to fetch|fetch failed|bad gateway|service unavailable|timeout|timed out|超时|网络错误/.test(
+        message,
+    );
 }
 
 /**

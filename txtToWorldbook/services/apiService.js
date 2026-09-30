@@ -1,3 +1,6 @@
+import { FatalError, UserError } from '../core/errors.js';
+import { createRequestBudget } from '../core/requestPolicy.js';
+
 /**
  * 构造 OpenAI 兼容 API 的 chat/completions 完整 URL
  *
@@ -68,7 +71,8 @@ export function createApiService(deps = {}) {
     let tavernGenerateRawMode = null;
     let tavernArrayFallbackNotified = false;
 
-    async function callSillyTavernAPI(messages, taskId = null) {
+    async function callSillyTavernAPI(messages, taskId = null, options = {}) {
+        const budget = options.budget || createRequestBudget();
         const timeout = AppState.settings.apiTimeout || 120000;
         const logPrefix = taskId !== null ? `[任务${taskId}]` : '';
         const combinedPrompt = messagesToString(messages);
@@ -83,15 +87,24 @@ export function createApiService(deps = {}) {
                     updateStreamContent(`🔄 ${logPrefix} 酒馆API 重试 #${attempt}...\n`);
                     debugLog(`${logPrefix} 酒馆API重试 #${attempt}`);
                 }
+                let timeoutId;
                 try {
                     if (typeof SillyTavern === 'undefined' || !SillyTavern.getContext) {
-                        throw new Error('无法访问SillyTavern上下文');
+                        throw new UserError('无法访问SillyTavern上下文');
                     }
 
                     const context = SillyTavern.getContext();
                     debugLog(`${logPrefix} 获取到SillyTavern上下文`);
                     const timeoutPromise = new Promise((_, reject) => {
-                        setTimeout(() => reject(new Error(`API请求超时 (${timeout / 1000}秒)`)), timeout);
+                        timeoutId = setTimeout(
+                            () =>
+                                reject(
+                                    new FatalError(`酒馆请求超时 (${timeout / 1000}秒)，请确认宿主生成已结束后再继续`, {
+                                        code: 'HOST_TIMEOUT',
+                                    }),
+                                ),
+                            timeout,
+                        );
                     });
 
                     let result;
@@ -115,6 +128,10 @@ export function createApiService(deps = {}) {
                             }
                         } catch (rawError) {
                             if (
+                                rawError.retryable === false ||
+                                rawError.httpStatus ||
+                                rawError.status ||
+                                APICaller.isRetryableError(rawError) ||
                                 rawError.message?.includes('超时') ||
                                 rawError.message?.includes('timeout') ||
                                 rawError.message?.includes('API') ||
@@ -130,6 +147,7 @@ export function createApiService(deps = {}) {
                                 );
                                 tavernArrayFallbackNotified = true;
                             }
+                            budget.consume();
                             result = await Promise.race([
                                 context.generateRaw(combinedPrompt, '', false),
                                 timeoutPromise,
@@ -145,7 +163,7 @@ export function createApiService(deps = {}) {
                             timeoutPromise,
                         ]);
                     } else {
-                        throw new Error('无法找到可用的生成函数');
+                        throw new UserError('无法找到可用的生成函数');
                     }
 
                     debugLog(`${logPrefix} 收到响应, 长度=${result.length}字符`);
@@ -155,10 +173,14 @@ export function createApiService(deps = {}) {
                     debugLog(`${logPrefix} 酒馆API出错: ${error.message}`);
                     updateStreamContent(`\n❌ ${logPrefix} 错误: ${error.message}\n`);
                     throw error;
+                } finally {
+                    clearTimeout(timeoutId);
                 }
             },
             {
-                retries: 2,
+                budget,
+                signal: options.signal,
+                retries: 3,
                 shouldRetry: (error) => APICaller.isRetryableError(error),
                 onRetry: async (error, nextAttempt, delay) => {
                     Logger.warn('API', `${logPrefix} 酒馆API重试 #${nextAttempt}: ${error.message}`);
@@ -274,7 +296,8 @@ export function createApiService(deps = {}) {
         return data.choices?.[0]?.message?.content || '';
     }
 
-    async function callCustomAPI(messages) {
+    async function callCustomAPI(messages, options = {}) {
+        const budget = options.budget || createRequestBudget();
         const maxRetries = 3;
         const timeout = AppState.settings.apiTimeout || 120000;
         const requestConfig = buildCustomApiRequest(messages);
@@ -294,6 +317,7 @@ export function createApiService(deps = {}) {
                         const result = await APICaller.requestStream(requestConfig.requestUrl, {
                             ...requestConfig.requestOptions,
                             timeout,
+                            signal: options.signal,
                             inactivityTimeout: Math.min(timeout, 120000),
                         });
                         debugLog(`自定义API流式读取完成, 结果长度=${result.length}字符`);
@@ -304,6 +328,7 @@ export function createApiService(deps = {}) {
                     const data = await APICaller.requestJSON(requestConfig.requestUrl, {
                         ...requestConfig.requestOptions,
                         timeout,
+                        signal: options.signal,
                     });
                     debugLog('自定义API JSON解析完成, 开始提取内容');
                     const result = extractCustomApiText(requestConfig.provider, data);
@@ -312,6 +337,8 @@ export function createApiService(deps = {}) {
                     return result;
                 },
                 {
+                    budget,
+                    signal: options.signal,
                     retries: maxRetries,
                     shouldRetry: (error) => APICaller.isRetryableError(error),
                     onRetry: async (error, nextAttempt, delay) => {
@@ -321,11 +348,8 @@ export function createApiService(deps = {}) {
                 },
             );
         } catch (error) {
-            const normalized = APICaller.handleError(error, '自定义API');
+            APICaller.handleError(error, '自定义API');
             debugLog(`自定义API出错: ${error.name || 'Error'} - ${error.message}`);
-            if (normalized.type === 'timeout') {
-                throw new Error(`API请求超时 (${timeout / 1000}秒)`);
-            }
             throw error;
         }
     }
@@ -446,13 +470,13 @@ export function createApiService(deps = {}) {
         };
     }
 
-    async function callAPI(prompt, taskId = null) {
+    async function callAPI(prompt, taskId = null, options = {}) {
         const messages = applyMessageChain(prompt);
         debugLog(`callAPI: 消息链转换完成, ${messages.length}条消息, roles=[${messages.map((m) => m.role).join(',')}]`);
         if (AppState.settings.useTavernApi) {
-            return callSillyTavernAPI(messages, taskId);
+            return callSillyTavernAPI(messages, taskId, options);
         }
-        return callCustomAPI(messages);
+        return callCustomAPI(messages, options);
     }
 
     return {

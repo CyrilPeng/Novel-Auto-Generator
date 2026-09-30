@@ -1,7 +1,6 @@
 ﻿import { Logger } from '../core/logger.js';
-import { RetryableError, FatalError } from '../core/errors.js';
-
-const HTTP_RETRYABLE = new Set([408, 429, 500, 502, 503, 504, 529]);
+import { RetryableError, FatalError, isRetryable, isAborted, HTTP_RETRYABLE } from '../core/errors.js';
+import { abortableDelay, throwIfAborted, parseRetryAfter } from '../core/requestPolicy.js';
 
 const APICaller = {
     /**
@@ -45,6 +44,7 @@ const APICaller = {
             throw new ErrorClass(message, {
                 httpStatus: response.status,
                 code: `HTTP_${response.status}`,
+                retryAfterMs: parseRetryAfter(response.headers.get('Retry-After')),
             });
         }
         return response;
@@ -166,47 +166,47 @@ const APICaller = {
     },
 
     isRateLimitError(error) {
+        if (isAborted(error) || error?.retryable === false) return false;
+        const status = Number(error?.httpStatus ?? error?.status);
+        if (status >= 400) return status === 429;
         const message = String(error?.responseText || error?.message || '').toLowerCase();
-        return error?.status === 429 || message.includes('resource_exhausted') || message.includes('rate limit');
+        return /resource_exhausted|rate limit/.test(message);
     },
 
     isRetryableError(error) {
-        const status = error?.status;
-        if (status === 429 || status === 500 || status === 502 || status === 503 || status === 529) return true;
-        const message = String(error?.responseText || error?.message || '').toLowerCase();
-        const patterns = [
-            'rate limit',
-            'resource_exhausted',
-            'overloaded',
-            'server error',
-            'temporarily unavailable',
-            'econnreset',
-            'network error',
-            'fetch failed',
-            'internal server error',
-            'bad gateway',
-            'service unavailable',
-        ];
-        return patterns.some((p) => message.includes(p));
+        return (
+            error?.code !== 'TOKEN_LIMIT' &&
+            !String(error?.message || '').startsWith('TOKEN_LIMIT:') &&
+            isRetryable(error)
+        );
     },
 
     async withRetry(task, config = {}) {
-        const { retries = 0, onRetry = null, shouldRetry = null } = config;
+        const { retries = 0, onRetry = null, shouldRetry = null, signal, budget } = config;
         let attempt = 0;
         while (true) {
+            throwIfAborted(signal);
+            budget?.consume();
             try {
-                return await task(attempt);
+                const result = await task(attempt);
+                throwIfAborted(signal);
+                return result;
             } catch (error) {
+                throwIfAborted(signal);
                 const canRetry =
+                    !isAborted(error) &&
+                    error?.retryable !== false &&
                     attempt < retries &&
-                    (typeof shouldRetry === 'function' ? shouldRetry(error, attempt) : this.isRateLimitError(error));
+                    (!budget || budget.remaining > 0) &&
+                    (typeof shouldRetry === 'function' ? shouldRetry(error, attempt) : this.isRetryableError(error));
                 if (!canRetry) throw error;
-                const delay = Math.pow(2, attempt) * 1000;
-                if (typeof onRetry === 'function') {
-                    await onRetry(error, attempt + 1, delay);
-                }
-                await new Promise((resolve) => setTimeout(resolve, delay));
-                attempt += 1;
+                const delay = Math.min(
+                    30000,
+                    Math.max(error.retryAfterMs || 0, 2 ** attempt * 1000 * (0.8 + Math.random() * 0.4)),
+                );
+                if (typeof onRetry === 'function') await onRetry(error, attempt + 1, delay);
+                await abortableDelay(delay, signal);
+                attempt++;
             }
         }
     },

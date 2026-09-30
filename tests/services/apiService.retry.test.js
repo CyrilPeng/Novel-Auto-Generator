@@ -1,0 +1,104 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApiService } from '../../txtToWorldbook/services/apiService.js';
+import { createProcessingService } from '../../txtToWorldbook/services/processingService.js';
+import { createParserService } from '../../txtToWorldbook/services/parserService.js';
+import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
+import { APICaller } from '../../txtToWorldbook/infra/apiCaller.js';
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+});
+
+function setup() {
+    const AppState = createInitialAppState();
+    AppState.settings = {
+        useTavernApi: false,
+        customApiProvider: 'gemini',
+        customApiKey: 'synthetic-test-key',
+        apiTimeout: 20,
+    };
+    AppState.memory.queue = [{ title: '第一章', content: '合成正文' }];
+    const noop = () => {};
+    const api = createApiService({
+        AppState,
+        APICaller,
+        Logger: { warn: noop },
+        debugLog: noop,
+        updateStreamContent: noop,
+        messagesToString: (messages) => messages.map((m) => m.content).join('\n'),
+        convertToGeminiContents: (messages) => ({ contents: messages }),
+        applyMessageChain: (content) => [{ role: 'user', content }],
+    });
+    const parser = createParserService({ AppState, debugLog: noop, getEnabledCategoryNames: () => ['角色'] });
+    const processing = createProcessingService({
+        AppState,
+        callAPI: api.callAPI,
+        updateMemoryQueueUI: noop,
+        updateStreamContent: noop,
+        debugLog: noop,
+        getLanguagePrefix: () => '',
+        buildSystemPrompt: () => '',
+        getPreviousMemoryContext: () => '',
+        getEnabledCategories: () => [{ name: '角色' }],
+        isTokenLimitError: () => false,
+        parseAIResponse: parser.parseAIResponse,
+        postProcessResultWithChapterIndex: (value) => value,
+    });
+    return { AppState, api, processing };
+}
+
+const response = (text) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }));
+
+describe('real API and chapter retry integration', () => {
+    it('caps nested transport/processing retry at four physical calls', async () => {
+        vi.useFakeTimers();
+        const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response('unavailable', { status: 503 })));
+        vi.stubGlobal('fetch', fetch);
+        const { processing } = setup();
+        const result = processing.processMemoryChunkIndependent({ index: 0 }).catch((error) => error);
+        await vi.runAllTimersAsync();
+        expect(await result).toMatchObject({ httpStatus: 503 });
+        expect(fetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('shares remaining budget with one invalid-content retry', async () => {
+        vi.useFakeTimers();
+        const update = { 角色: { 林舟: { 关键词: ['林舟'], 内容: '旅人' } } };
+        const fetch = vi
+            .fn()
+            .mockResolvedValueOnce(new Response('busy', { status: 503 }))
+            .mockResolvedValueOnce(new Response('busy', { status: 503 }))
+            .mockResolvedValueOnce(response('{}'))
+            .mockResolvedValueOnce(response(JSON.stringify(update)));
+        vi.stubGlobal('fetch', fetch);
+        const { processing } = setup();
+        const result = processing.processMemoryChunkIndependent({ index: 0 });
+        await vi.runAllTimersAsync();
+        expect(await result).toEqual(update);
+        expect(fetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('does not retry authorization failures at either layer', async () => {
+        const fetch = vi.fn().mockResolvedValue(new Response('network error', { status: 401 }));
+        vi.stubGlobal('fetch', fetch);
+        const { processing } = setup();
+        await expect(processing.processMemoryChunkIndependent({ index: 0 })).rejects.toMatchObject({
+            httpStatus: 401,
+            retryable: false,
+        });
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry a host timeout whose upstream request may still be active', async () => {
+        vi.useFakeTimers();
+        const generateRaw = vi.fn().mockReturnValue(new Promise(() => {}));
+        vi.stubGlobal('SillyTavern', { getContext: () => ({ generateRaw }) });
+        const { api } = setup();
+        const result = api.callSillyTavernAPI([{ role: 'user', content: 'fixture' }]).catch((error) => error);
+        await vi.runAllTimersAsync();
+        expect(await result).toMatchObject({ code: 'HOST_TIMEOUT', retryable: false });
+        expect(generateRaw).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+});
