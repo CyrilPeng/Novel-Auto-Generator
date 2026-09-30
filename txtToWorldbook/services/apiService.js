@@ -1,60 +1,7 @@
-import { FatalError, UserError, RetryableError, TokenLimitError, AbortedError } from '../core/errors.js';
+import { buildCustomApiRequest, extractCustomApiText, buildModelsRequest } from '../infra/providers/customProviders.js';
+export { buildChatUrl, buildModelsUrl } from '../infra/providers/endpoints.js';
+import { FatalError, UserError, AbortedError } from '../core/errors.js';
 import { createRequestBudget } from '../core/requestPolicy.js';
-
-/**
- * 构造 OpenAI 兼容 API 的 chat/completions 完整 URL
- *
- * 遵循 OpenAI SDK 标准行为：仅追加 /chat/completions 后缀。
- * 版本号路径由用户自行输入，不再做任何智能识别。
- *
- * 规则：
- *   - endpoint 为空时使用默认值 http://127.0.0.1:5000/v1
- *   - 去除末尾斜杠
- *   - 如 URL 已包含 /chat/completions，则不再追加（信任用户输入的完整 URL）
- *   - 否则追加 /chat/completions
- *   - 缺失协议前缀时补 http://
- *
- * @param {string} [endpoint] 用户输入的 endpoint
- * @returns {string}
- */
-export function buildChatUrl(endpoint) {
-    const suffix = '/chat/completions';
-    let url = endpoint || 'http://127.0.0.1:5000/v1';
-    url = url.replace(/\/+$/, '');
-    if (!url.includes(suffix)) {
-        url += suffix;
-    }
-    if (!/^https?:\/\//i.test(url)) {
-        url = 'http://' + url;
-    }
-    return url;
-}
-
-/**
- * 构造 OpenAI 兼容 API 的 /models 完整 URL
- *
- * 遵循 OpenAI SDK 标准行为：
- *   - 若 URL 以 /chat/completions 结尾，替换为 /models
- *   - 若 URL 已以 /models 结尾，不修改
- *   - 否则追加 /models
- *
- * @param {string} endpoint 用户输入的 endpoint（可能带或不带 /chat/completions）
- * @returns {string}
- */
-export function buildModelsUrl(endpoint) {
-    const chatSuffix = '/chat/completions';
-    const modelsSuffix = '/models';
-    let url = endpoint.replace(/\/+$/, '');
-    if (url.endsWith(chatSuffix)) {
-        url = url.slice(0, -chatSuffix.length) + modelsSuffix;
-    } else if (!url.endsWith(modelsSuffix)) {
-        url += modelsSuffix;
-    }
-    if (!/^https?:\/\//i.test(url)) {
-        url = 'http://' + url;
-    }
-    return url;
-}
 
 export function createApiService(deps = {}) {
     const {
@@ -125,8 +72,9 @@ export function createApiService(deps = {}) {
                     let result;
 
                     if (typeof context.generateRaw === 'function') {
+                        const usesMessageArray = tavernGenerateRawMode !== 'string' && messages.length > 1;
                         try {
-                            if (tavernGenerateRawMode === 'string' || messages.length === 1) {
+                            if (!usesMessageArray) {
                                 debugLog(`${logPrefix} 使用generateRaw字符串模式`);
                                 result = await Promise.race([
                                     invokeHost(() => context.generateRaw(combinedPrompt, '', false)),
@@ -142,7 +90,12 @@ export function createApiService(deps = {}) {
                                 debugLog(`${logPrefix} generateRaw消息数组格式成功`);
                             }
                         } catch (rawError) {
+                            const signatureMismatch =
+                                rawError instanceof TypeError &&
+                                /(?:prompt|messages|trim|replace|string)/i.test(rawError.message);
                             if (
+                                !usesMessageArray ||
+                                !signatureMismatch ||
                                 rawError.retryable === false ||
                                 rawError.httpStatus ||
                                 rawError.status ||
@@ -207,137 +160,11 @@ export function createApiService(deps = {}) {
         );
     }
 
-    function buildCustomApiRequest(messages) {
-        const provider = AppState.settings.customApiProvider;
-        const apiKey = AppState.settings.customApiKey;
-        const endpoint = AppState.settings.customApiEndpoint;
-        const model = AppState.settings.customApiModel;
-        const openaiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
-        let requestUrl = '';
-        let requestOptions = {};
-        let isStreamRequest = false;
-
-        switch (provider) {
-            case 'anthropic': {
-                if (!apiKey) throw new Error('Anthropic API Key 未设置');
-                requestUrl = 'https://api.anthropic.com/v1/messages';
-                requestOptions = {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': apiKey,
-                        'anthropic-version': '2023-06-01',
-                    },
-                    body: JSON.stringify({
-                        model: model || 'claude-sonnet-4-20250514',
-                        messages: openaiMessages,
-                        temperature: 0.3,
-                        max_tokens: 8192,
-                    }),
-                };
-                break;
-            }
-
-            case 'gemini': {
-                if (!apiKey) throw new Error('Gemini API Key 未设置');
-                const geminiModel = model || 'gemini-2.5-flash';
-                let geminiBaseUrl = endpoint ? endpoint.trim() : '';
-                if (geminiBaseUrl) {
-                    if (!geminiBaseUrl.startsWith('http')) geminiBaseUrl = 'https://' + geminiBaseUrl;
-                    if (geminiBaseUrl.endsWith('/')) geminiBaseUrl = geminiBaseUrl.slice(0, -1);
-                    if (geminiBaseUrl.includes('?')) {
-                        requestUrl = `${geminiBaseUrl}/${geminiModel}:generateContent&key=${apiKey}`;
-                    } else {
-                        requestUrl = `${geminiBaseUrl}/${geminiModel}:generateContent?key=${apiKey}`;
-                    }
-                } else {
-                    requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
-                }
-                const geminiData = convertToGeminiContents(messages);
-                requestOptions = {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ...geminiData,
-                        generationConfig: { maxOutputTokens: 65536, temperature: 0.3 },
-                        safetySettings: [
-                            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'OFF' },
-                            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'OFF' },
-                            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'OFF' },
-                            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
-                        ],
-                    }),
-                };
-                break;
-            }
-
-            case 'openai-compatible': {
-                const openaiEndpoint = buildChatUrl(endpoint);
-                const openaiModel = model || 'local-model';
-
-                const headers = { 'Content-Type': 'application/json' };
-                if (apiKey) {
-                    headers.Authorization = `Bearer ${apiKey}`;
-                }
-
-                requestUrl = openaiEndpoint;
-                requestOptions = {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({
-                        model: openaiModel,
-                        messages: openaiMessages,
-                        temperature: 0.3,
-                        max_tokens: 64000,
-                        stream: true,
-                    }),
-                };
-                isStreamRequest = true;
-                break;
-            }
-
-            default:
-                throw new Error(`不支持的API提供商: ${provider}`);
-        }
-
-        return { provider, requestUrl, requestOptions, isStreamRequest, model };
-    }
-
-    function extractCustomApiText(provider, data) {
-        if (data.error)
-            throw new RetryableError('API错误: ' + (data.error.message || '未知错误'), { code: 'API_ERROR' });
-        const finish =
-            provider === 'gemini'
-                ? data.candidates?.[0]?.finishReason
-                : provider === 'anthropic'
-                  ? data.stop_reason
-                  : data.choices?.[0]?.finish_reason;
-        if (['MAX_TOKENS', 'max_tokens', 'length'].includes(finish)) {
-            throw new TokenLimitError('Token limit exceeded: 模型输出被截断');
-        }
-        if (finish && !['STOP', 'end_turn', 'stop_sequence', 'stop'].includes(finish)) {
-            throw new FatalError('模型未正常完成: ' + finish, { code: 'INVALID_FINISH_REASON' });
-        }
-        if (provider === 'gemini') {
-            return (data.candidates?.[0]?.content?.parts || [])
-                .filter((part) => !part.thought && typeof part.text === 'string')
-                .map((part) => part.text)
-                .join('');
-        }
-        if (provider === 'anthropic') {
-            return (data.content || [])
-                .filter((part) => (!part.type || part.type === 'text') && typeof part.text === 'string')
-                .map((part) => part.text)
-                .join('');
-        }
-        return data.choices?.[0]?.message?.content || '';
-    }
-
     async function callCustomAPI(messages, options = {}) {
         const budget = options.budget || createRequestBudget();
         const maxRetries = 3;
         const timeout = AppState.settings.apiTimeout || 120000;
-        const requestConfig = buildCustomApiRequest(messages);
+        const requestConfig = buildCustomApiRequest(AppState.settings, messages, convertToGeminiContents, options);
         const combinedPrompt = messagesToString(messages);
 
         updateStreamContent(`\n📤 发送请求到自定义API (${requestConfig.provider}, ${messages.length}条消息)...\n`);
@@ -348,7 +175,7 @@ export function createApiService(deps = {}) {
         try {
             return await APICaller.withRetry(
                 async () => {
-                    debugLog(`自定义API请求目标: ${requestConfig.requestUrl.substring(0, 80)}...`);
+                    debugLog(`自定义API请求目标: ${new URL(requestConfig.requestUrl).origin}`);
 
                     if (requestConfig.isStreamRequest) {
                         const result = await APICaller.requestStream(requestConfig.requestUrl, {
@@ -391,120 +218,55 @@ export function createApiService(deps = {}) {
         }
     }
 
-    async function handleFetchModelList() {
-        const endpoint = AppState.settings.customApiEndpoint || '';
-        if (!endpoint) {
-            throw new Error('请先设置 API Endpoint');
+    async function handleFetchModelList(options = {}) {
+        const settings = { ...AppState.settings };
+        const request = buildModelsRequest(settings);
+        const url = new URL(request.url);
+        const models = [];
+        const seen = new Set();
+        for (let page = 0; page < 100; page++) {
+            const data = await APICaller.requestJSON(url.toString(), {
+                method: 'GET',
+                headers: request.headers,
+                timeout: settings.apiTimeout || 120000,
+                signal: options.signal,
+            });
+            const batch = Array.isArray(data) ? data : data?.data || data?.models;
+            if (!Array.isArray(batch)) throw new UserError('模型列表响应格式不正确');
+            models.push(
+                ...batch
+                    .filter(
+                        (model) =>
+                            !model.supportedGenerationMethods ||
+                            model.supportedGenerationMethods.includes('generateContent'),
+                    )
+                    .map((model) => (typeof model === 'string' ? model : model.id || model.name))
+                    .filter((model) => typeof model === 'string')
+                    .map((model) => (settings.customApiProvider === 'gemini' ? model.replace(/^models\//, '') : model)),
+            );
+            const next =
+                settings.customApiProvider === 'gemini'
+                    ? data.nextPageToken
+                    : settings.customApiProvider === 'anthropic' && data.has_more
+                      ? data.last_id
+                      : null;
+            if (!next) return [...new Set(models)];
+            if (seen.has(next)) throw new UserError('模型列表分页重复，已停止读取');
+            seen.add(next);
+            url.searchParams.set(settings.customApiProvider === 'gemini' ? 'pageToken' : 'after_id', next);
         }
-
-        const modelsUrl = buildModelsUrl(endpoint);
-
-        const headers = { 'Content-Type': 'application/json' };
-        if (AppState.settings.customApiKey) {
-            headers.Authorization = `Bearer ${AppState.settings.customApiKey}`;
-        }
-
-        Logger.info('API', '拉取模型列表: ' + modelsUrl);
-
-        const data = await APICaller.getJSON(modelsUrl, { method: 'GET', headers });
-        Logger.info('API', '模型列表响应: ' + JSON.stringify(data).substring(0, 200));
-
-        let models = [];
-        if (data.data && Array.isArray(data.data)) {
-            models = data.data.map((m) => m.id || m.name || m);
-        } else if (Array.isArray(data)) {
-            models = data.map((m) => (typeof m === 'string' ? m : m.id || m.name || m));
-        } else if (data.models && Array.isArray(data.models)) {
-            models = data.models.map((m) => (typeof m === 'string' ? m : m.id || m.name || m));
-        }
-
-        return models;
+        throw new UserError('模型列表超过分页上限，请缩小查询范围');
     }
 
-    async function handleQuickTestModel() {
-        const endpoint = AppState.settings.customApiEndpoint || '';
-        const model = AppState.settings.customApiModel || '';
-
-        if (!endpoint) {
-            throw new Error('请先设置 API Endpoint');
-        }
-        if (!model) {
-            throw new Error('请先设置模型名称');
-        }
-
-        const requestUrl = buildChatUrl(endpoint);
-
-        const headers = { 'Content-Type': 'application/json' };
-        if (AppState.settings.customApiKey) {
-            headers.Authorization = `Bearer ${AppState.settings.customApiKey}`;
-        }
-
-        Logger.info('API', `快速测试: ${requestUrl} 模型: ${model}`);
-
+    async function handleQuickTestModel(options = {}) {
         const startTime = Date.now();
-        const data = await APICaller.getJSON(requestUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                model,
-                messages: [{ role: 'user', content: 'Say "OK" if you can hear me.' }],
-                max_tokens: 100,
-                temperature: 0.1,
-            }),
+        const response = await callCustomAPI(applyMessageChain('Say "OK" if you can hear me.'), {
+            ...options,
+            maxOutputTokens: 100,
+            temperature: 0.1,
         });
-
-        const elapsed = Date.now() - startTime;
-        Logger.info('API', '测试响应: ' + JSON.stringify(data).substring(0, 200));
-
-        let responseText = '';
-
-        if (data.choices && Array.isArray(data.choices) && data.choices.length > 0) {
-            const choice = data.choices[0];
-            if (choice.message && choice.message.content) {
-                responseText = choice.message.content;
-            } else if (choice.text) {
-                responseText = choice.text;
-            } else if (typeof choice.content === 'string') {
-                responseText = choice.content;
-            }
-        } else if (data.response) {
-            responseText = data.response;
-        } else if (data.content) {
-            responseText = data.content;
-        } else if (data.text) {
-            responseText = data.text;
-        } else if (data.output) {
-            responseText = data.output;
-        } else if (data.generated_text) {
-            responseText = data.generated_text;
-        }
-
-        if (!responseText || responseText.trim() === '') {
-            Logger.warn('API', '无法解析响应，完整数据: ' + JSON.stringify(data, null, 2));
-
-            const possibleFields = ['result', 'message', 'data', 'completion'];
-            for (const field of possibleFields) {
-                if (data[field]) {
-                    if (typeof data[field] === 'string') {
-                        responseText = data[field];
-                        break;
-                    } else if (typeof data[field] === 'object' && data[field].content) {
-                        responseText = data[field].content;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (!responseText || responseText.trim() === '') {
-            throw new Error(`API返回了无法解析的响应格式。\n响应数据: ${JSON.stringify(data).substring(0, 200)}`);
-        }
-
-        return {
-            success: true,
-            elapsed,
-            response: responseText.substring(0, 100),
-        };
+        if (typeof response !== 'string' || !response.trim()) throw new UserError('API 返回了空测试响应');
+        return { success: true, elapsed: Date.now() - startTime, response: response.substring(0, 100) };
     }
 
     async function callAPI(prompt, taskId = null, options = {}) {

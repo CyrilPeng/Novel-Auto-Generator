@@ -431,3 +431,12 @@
 - 批量重 Roll 致命错误不继续发送排队任务；旧运行不隐藏新运行的操作按钮。
 
 对应自动化：runContext、processingService、repairService、rerollService、modalController 测试。真实宿主 UI 仍需补验。
+
+## B05 供应商适配
+
+- Gemini、Anthropic、OpenAI 兼容模式分别执行模型测试与实际转换；核对消息链、认证、端点与流模式一致。
+- Anthropic 系统消息使用顶层 system；Gemini 带查询参数的代理地址路径正确、密钥不出现在请求 URL 日志中。
+- 模型列表使用原生接口和分页；认证错误、分页循环、截断/阻断响应应明确失败。
+- 酒馆普通内部异常不触发格式回退；仅明确参数签名不兼容可回退。
+
+自动化对应 providers.test.js 与 apiService.retry.test.js；实际 CORS/供应商能力尚未验证。

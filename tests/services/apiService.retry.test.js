@@ -5,6 +5,36 @@ import { createParserService } from '../../txtToWorldbook/services/parserService
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
 import { APICaller } from '../../txtToWorldbook/infra/apiCaller.js';
 
+it('does not replay an unknown host failure as a format fallback', async () => {
+    const generateRaw = vi.fn().mockRejectedValue(new Error('internal parser failed'));
+    vi.stubGlobal('SillyTavern', { getContext: () => ({ generateRaw }) });
+    const { api } = setup();
+    await expect(
+        api.callSillyTavernAPI([
+            { role: 'system', content: 's' },
+            { role: 'user', content: 'u' },
+        ]),
+    ).rejects.toThrow('internal parser failed');
+    expect(generateRaw).toHaveBeenCalledTimes(1);
+});
+
+it('falls back only for a recognized host argument signature mismatch', async () => {
+    const generateRaw = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('prompt.trim is not a function'))
+        .mockResolvedValue('OK');
+    vi.stubGlobal('SillyTavern', { getContext: () => ({ generateRaw }) });
+    const { api } = setup();
+    await expect(
+        api.callSillyTavernAPI([
+            { role: 'system', content: 's' },
+            { role: 'user', content: 'u' },
+        ]),
+    ).resolves.toBe('OK');
+    expect(generateRaw).toHaveBeenCalledTimes(2);
+    expect(typeof generateRaw.mock.calls[1][0]).toBe('string');
+});
+
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
