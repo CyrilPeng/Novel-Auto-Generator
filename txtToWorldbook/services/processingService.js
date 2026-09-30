@@ -1,3 +1,4 @@
+import { createRecoveryBudget } from '../core/recoveryBudget.js';
 import { beginRun, captureRun, stopRun, finishRun, guardAwait } from '../core/runContext.js';
 import { isRetryable, isAborted, RetryableError } from '../core/errors.js';
 import { createRequestBudget, abortableDelay, throwIfAborted } from '../core/requestPolicy.js';
@@ -355,6 +356,8 @@ ${'='.repeat(50)}
         const guard = options.guard || captureRun(AppState.processing);
         const signal = options.signal || guard.signal;
         const { contentRetries = 0 } = options;
+        const recovery = options.recovery || createRecoveryBudget();
+        const continuation = { budget, guard, signal, recovery, contentRetries };
         if (AppState.processing.isStopped) return;
         throwIfAborted(signal);
 
@@ -430,17 +433,19 @@ ${'='.repeat(50)}
             debugLog(`[串行][第${chapterIndex}章] 检查TokenLimit...`);
             if (isTokenLimitError(response)) {
                 if (AppState.processing.volumeMode) {
+                    recovery.consume();
                     handleStartNewVolume();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
-                    await guardAwait(guard, processMemoryChunk(index, 0));
+                    await guardAwait(guard, processMemoryChunk(index, 0, continuation));
                     return;
                 }
+                recovery.consume();
                 const splitResult = splitMemoryIntoTwo(index);
                 if (splitResult) {
                     updateMemoryQueueUI();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
-                    await guardAwait(guard, processMemoryChunk(index, 0));
-                    await guardAwait(guard, processMemoryChunk(index + 1, 0));
+                    await guardAwait(guard, processMemoryChunk(index, 0, continuation));
+                    await guardAwait(guard, processMemoryChunk(index + 1, 0, continuation));
                     return;
                 }
             }
@@ -473,19 +478,21 @@ ${'='.repeat(50)}
 
             if (isTokenLimitError(error.message || '')) {
                 if (AppState.processing.volumeMode) {
+                    recovery.consume();
                     handleStartNewVolume();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
                     await guardAwait(guard, new Promise((r) => setTimeout(r, 500)));
-                    await guardAwait(guard, processMemoryChunk(index, 0));
+                    await guardAwait(guard, processMemoryChunk(index, 0, continuation));
                     return;
                 }
+                recovery.consume();
                 const splitResult = splitMemoryIntoTwo(index);
                 if (splitResult) {
                     updateMemoryQueueUI();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
                     await guardAwait(guard, new Promise((r) => setTimeout(r, 500)));
-                    await guardAwait(guard, processMemoryChunk(index, 0));
-                    await guardAwait(guard, processMemoryChunk(index + 1, 0));
+                    await guardAwait(guard, processMemoryChunk(index, 0, continuation));
+                    await guardAwait(guard, processMemoryChunk(index + 1, 0, continuation));
                     return;
                 }
             }
@@ -502,6 +509,8 @@ ${'='.repeat(50)}
                 return processMemoryChunk(index, retryCount + 1, {
                     budget,
                     signal,
+                    guard,
+                    recovery,
                     contentRetries: contentRetries + (error.code === 'INVALID_RESPONSE' ? 1 : 0),
                 });
             }

@@ -1,3 +1,6 @@
+import { captureRun, guardAwait } from '../core/runContext.js';
+import { createRecoveryBudget } from '../core/recoveryBudget.js';
+import { abortableDelay } from '../core/requestPolicy.js';
 export function createRepairService(deps = {}) {
     const {
         AppState,
@@ -20,6 +23,8 @@ export function createRepairService(deps = {}) {
     } = deps;
 
     async function handleRepairSingleMemory(index) {
+        const guard = captureRun(AppState.processing);
+        guard.assert();
         const memory = AppState.memory.queue[index];
         const chapterIndex = index + 1;
 
@@ -57,52 +62,69 @@ ${generateDynamicJsonTemplate()}
             }
         }
 
-        const response = await callAPI(prompt);
+        const response = await guardAwait(guard, callAPI(prompt, null, { signal: guard.signal }));
         let memoryUpdate = parseAIResponse(response);
         memoryUpdate = postProcessResultWithChapterIndex(memoryUpdate, chapterIndex);
-        await mergeWorldbookDataWithHistory({
-            target: AppState.worldbook.generated,
-            source: memoryUpdate,
-            memoryIndex: index,
-            memoryTitle: `修复-${memory.title}`,
-        });
-        await MemoryHistoryDB.saveRollResult(index, memoryUpdate);
+        await guardAwait(
+            guard,
+            mergeWorldbookDataWithHistory({
+                target: AppState.worldbook.generated,
+                source: memoryUpdate,
+                memoryIndex: index,
+                memoryTitle: `修复-${memory.title}`,
+            }),
+        );
+        await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, memoryUpdate));
         memory.result = memoryUpdate;
     }
 
-    async function handleRepairMemoryWithSplit(memoryIndex, stats) {
+    async function handleRepairMemoryWithSplit(memoryIndex, stats, recovery = createRecoveryBudget()) {
+        const guard = captureRun(AppState.processing);
+        guard.assert();
         const memory = AppState.memory.queue[memoryIndex];
         if (!memory) return;
         updateProgress((memoryIndex / AppState.memory.queue.length) * 100, `正在修复: ${memory.title}`);
 
         try {
-            await handleRepairSingleMemory(memoryIndex);
+            await guardAwait(guard, handleRepairSingleMemory(memoryIndex));
             memory.failed = false;
             memory.failedError = null;
             memory.processed = true;
             stats.successCount++;
             updateMemoryQueueUI();
-            await MemoryHistoryDB.saveState(AppState.memory.queue.filter((item) => item.processed).length);
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await guardAwait(
+                guard,
+                MemoryHistoryDB.saveState(AppState.memory.queue.filter((item) => item.processed).length),
+            );
+            await guardAwait(guard, abortableDelay(1000, guard.signal));
         } catch (error) {
+            guard.assert();
+            if (error.retryable === false) throw error;
             if (isTokenLimitError(error.message || '')) {
+                recovery.consume();
                 if (AppState.processing.volumeMode) {
                     handleStartNewVolume();
-                    await MemoryHistoryDB.saveState(AppState.memory.queue.filter((item) => item.processed).length);
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                    await handleRepairMemoryWithSplit(memoryIndex, stats);
+                    await guardAwait(
+                        guard,
+                        MemoryHistoryDB.saveState(AppState.memory.queue.filter((item) => item.processed).length),
+                    );
+                    await guardAwait(guard, abortableDelay(500, guard.signal));
+                    await guardAwait(guard, handleRepairMemoryWithSplit(memoryIndex, stats, recovery));
                     return;
                 }
 
                 const splitResult = splitMemoryIntoTwo(memoryIndex);
                 if (splitResult) {
                     updateMemoryQueueUI();
-                    await MemoryHistoryDB.saveState(AppState.memory.queue.filter((item) => item.processed).length);
-                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    await guardAwait(
+                        guard,
+                        MemoryHistoryDB.saveState(AppState.memory.queue.filter((item) => item.processed).length),
+                    );
+                    await guardAwait(guard, abortableDelay(500, guard.signal));
                     const part1Index = AppState.memory.queue.indexOf(splitResult.part1);
-                    await handleRepairMemoryWithSplit(part1Index, stats);
+                    await guardAwait(guard, handleRepairMemoryWithSplit(part1Index, stats, recovery));
                     const part2Index = AppState.memory.queue.indexOf(splitResult.part2);
-                    await handleRepairMemoryWithSplit(part2Index, stats);
+                    await guardAwait(guard, handleRepairMemoryWithSplit(part2Index, stats, recovery));
                 } else {
                     stats.stillFailedCount++;
                     memory.failedError = error.message;
@@ -111,7 +133,7 @@ ${generateDynamicJsonTemplate()}
                 stats.stillFailedCount++;
                 memory.failedError = error.message;
                 updateMemoryQueueUI();
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+                await guardAwait(guard, abortableDelay(1000, guard.signal));
             }
         }
     }

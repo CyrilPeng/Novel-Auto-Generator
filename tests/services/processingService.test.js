@@ -491,3 +491,23 @@ describe('run isolation', () => {
         expect(AppState.globalSemaphore).toBe(null);
     });
 });
+
+it('bounds repeated serial token recovery across volume changes', async () => {
+    vi.useFakeTimers();
+    try {
+        const { service, AppState, mocks } = createTestService({
+            queue: [makeMemory('章', '正文')],
+            callAPI: vi.fn().mockRejectedValue(new Error('Token limit')),
+            isTokenLimitError: (message) => String(message).includes('Token limit'),
+        });
+        AppState.processing.volumeMode = true;
+        const result = service.processMemoryChunk(0).catch((e) => e);
+        await vi.runAllTimersAsync();
+        expect((await result).code).toBe('RECOVERY_EXHAUSTED');
+        expect(mocks.callAPI).toHaveBeenCalledTimes(9);
+        expect(mocks.handleStartNewVolume).toHaveBeenCalledTimes(8);
+        expect(mocks.MemoryHistoryDB.saveRollResult).not.toHaveBeenCalled();
+    } finally {
+        vi.useRealTimers();
+    }
+});
