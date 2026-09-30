@@ -80,6 +80,8 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
             const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
             state.generatedWorldbook = next;
             if (options.volumes) state.worldbookVolumes = structuredClone(options.volumes);
+            if (options.memoryQueue) state.memoryQueue = structuredClone(options.memoryQueue);
+            if (options.entryPosition) state.entryPositionConfig = structuredClone(options.entryPosition);
             const changes = worldbookService.findChangedEntries(previous, next);
             state.entryOverrides ??= {};
             const overrides = (state.entryOverrides[AppState.worldbook.currentVolumeIndex] ??= {});
@@ -95,6 +97,7 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
                 worldbookEdit: true,
                 memoryIndex: -1,
                 previousVolumes: structuredClone(AppState.worldbook.volumes),
+                previousMemoryQueue: options.memoryQueue ? structuredClone(AppState.memory.queue) : undefined,
                 previousOverrides: structuredClone(AppState.worldbook.overrides || {}),
                 memoryTitle: title,
                 chunkId: 'worldbook',
@@ -109,6 +112,8 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
             AppState.task = saved.state.task;
             AppState.worldbook.volumes = saved.state.worldbookVolumes;
             AppState.worldbook.overrides = saved.state.entryOverrides;
+            if (options.memoryQueue) AppState.memory.queue = saved.state.memoryQueue;
+            if (options.entryPosition) AppState.config.entryPosition = saved.state.entryPositionConfig;
         };
         const job = tail.then(execute, execute);
         tail = job.catch(() => {});

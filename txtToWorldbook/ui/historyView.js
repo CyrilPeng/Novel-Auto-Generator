@@ -2,7 +2,7 @@ import { escapeHtmlForDisplay } from './renderer.js';
 import { diffLines, diffStats, renderDiffHtml } from '../core/diff.js';
 
 export function createHistoryView(deps = {}) {
-    const { AppState, ModalFactory, MemoryHistoryDB, confirmAction, ErrorHandler } = deps;
+    const { ModalFactory, MemoryHistoryDB, confirmAction, ErrorHandler } = deps;
 
     async function showHistoryView() {
         const existingModal = document.getElementById('ttw-history-modal');
@@ -190,16 +190,7 @@ export function createHistoryView(deps = {}) {
         if (!(await confirmAction('确定回退到此版本？页面将刷新。', { title: '回退历史版本', danger: true }))) return;
 
         try {
-            const history = await MemoryHistoryDB.rollbackToHistory(historyId);
-            for (let i = 0; i < AppState.memory.queue.length; i++) {
-                if (i < history.memoryIndex) {
-                    AppState.memory.queue[i].processed = true;
-                } else {
-                    AppState.memory.queue[i].processed = false;
-                    AppState.memory.queue[i].failed = false;
-                }
-            }
-            await MemoryHistoryDB.saveState(history.memoryIndex);
+            await MemoryHistoryDB.rollbackToHistory(historyId);
             ErrorHandler.showUserSuccess('回退成功！页面将刷新。');
             location.reload();
         } catch (error) {

@@ -1,7 +1,7 @@
 import { createMergeService as createMergePlanner } from './mergeService.js';
 import { createConsolidationService } from '../../src/worldbook/commands/consolidate.js';
 export { isConsolidateErrorResponse } from '../../src/worldbook/commands/consolidate.js';
-import { executeRun, captureRun, runConfiguration } from '../core/runContext.js';
+import { executeRun, captureRun, runConfiguration, stopRun } from '../core/runContext.js';
 export function createMergeWorkflowService(deps = {}) {
     const {
         AppState,
@@ -1198,6 +1198,9 @@ export function createMergeWorkflowService(deps = {}) {
 
         const modal = ModalFactory.create({
             id: 'ttw-alias-modal',
+            onClose: () => {
+                if (AppState.processing.run?.operation === 'verify') stopRun(AppState.processing);
+            },
             title: '🔗 别名识别与合并 (两两判断模式)',
             body: bodyHtml,
             footer: footerHtml,
@@ -1246,16 +1249,21 @@ export function createMergeWorkflowService(deps = {}) {
                     `\n🤖 第二阶段：两两配对判断...\n并发: ${useParallel ? '开启' : '关闭'}, 阈值: ${threshold}\n`,
                 );
 
-                aiResultByCategory = {};
-                for (const cat of Object.keys(selectedByCategory)) {
-                    updateStreamContent(`\n📂 处理分类「${cat}」...\n`);
-                    aiResultByCategory[cat] = await mergedService.verifyDuplicatesWithAI(
-                        selectedByCategory[cat],
-                        useParallel,
-                        threshold,
-                        cat,
-                    );
-                }
+                aiResultByCategory = await executeRun(AppState.processing, 'verify', async (guard) => {
+                    const results = {};
+                    for (const cat of Object.keys(selectedByCategory)) {
+                        updateStreamContent(`\n📂 处理分类「${cat}」...\n`);
+                        results[cat] = await mergedService.verifyDuplicatesWithAI(
+                            selectedByCategory[cat],
+                            useParallel,
+                            threshold,
+                            cat,
+                        );
+                    }
+
+                    guard.assert();
+                    return results;
+                });
 
                 const resultDiv = modal.querySelector('#ttw-alias-result');
                 const pairResultsDiv = modal.querySelector('#ttw-pair-results');

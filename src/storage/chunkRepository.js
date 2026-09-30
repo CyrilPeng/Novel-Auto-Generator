@@ -97,7 +97,7 @@ export function createChunkRepository(database) {
                                         timestamp: Date.now(),
                                         commitId: data.commitId,
                                     });
-                                if (data.changedEntries.length)
+                                if (data.changedEntries.length || data.worldbookEdit)
                                     tx.objectStore(database.storeName).add({
                                         memoryIndex: data.memoryIndex,
                                         memoryTitle: data.memoryTitle,
@@ -105,6 +105,7 @@ export function createChunkRepository(database) {
                                         fileHash: state.fileHash,
                                         previousWorldbook: data.previousWorldbook,
                                         previousVolumes: data.previousVolumes,
+                                        previousMemoryQueue: data.previousMemoryQueue,
                                         previousOverrides: data.previousOverrides,
                                         newWorldbook: state.generatedWorldbook,
                                         changedEntries: data.changedEntries,

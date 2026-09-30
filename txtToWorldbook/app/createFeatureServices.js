@@ -81,6 +81,7 @@ export function createFeatureServices(deps = {}) {
     });
 
     const replaceAndCleanService = createReplaceAndCleanService({
+        commitWorldbook: deps.commitWorldbook,
         AppState,
         ModalFactory,
         ErrorHandler,
@@ -140,6 +141,7 @@ export function createFeatureServices(deps = {}) {
     });
 
     const replaceModal = createReplaceModal({
+        commitWorldbook: deps.commitWorldbook,
         AppState,
         ModalFactory,
         ErrorHandler,

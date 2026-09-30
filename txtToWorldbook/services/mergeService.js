@@ -1,4 +1,5 @@
-﻿export function createMergeService(deps = {}) {
+import { captureRun, runConfiguration } from '../core/runContext.js';
+export function createMergeService(deps = {}) {
     const {
         AppState,
         Logger,
@@ -330,6 +331,9 @@
     }
 
     async function verifyDuplicatesWithAI(suspectedGroups, useParallel = true, threshold = 5, categoryName = '角色') {
+        const guard = captureRun(AppState.processing);
+        guard.assert();
+        threshold = Math.max(1, Math.floor(threshold) || 1);
         if (suspectedGroups.length === 0) return { pairResults: [], mergedGroups: [] };
 
         const entries = AppState.worldbook.generated[categoryName];
@@ -446,19 +450,22 @@ ${pairsContent}
 
             updateStreamContent(`📦 分成 ${batches.length} 批，每批约 ${threshold} 对\n`);
 
-            const semaphore = new Semaphore(AppState.config.parallel.concurrency);
+            const semaphore = new Semaphore(runConfiguration(AppState).config.parallel.concurrency);
             let completed = 0;
 
             const processBatch = async (batch, batchIndex) => {
+                guard.assert();
                 await semaphore.acquire();
                 try {
+                    guard.assert();
                     updateStreamContent(
                         `🔄 [批次${batchIndex + 1}/${batches.length}] 处理 ${batch.pairs.length} 对...\n`,
                     );
 
                     const pairsContent = buildPairContent(batch.pairs, batch.startIndex);
                     const prompt = buildPrompt(pairsContent);
-                    const response = await callAPI(prompt);
+                    const response = await callAPI(prompt, null, { signal: guard.signal });
+                    guard.assert();
                     const aiResult = parseAIResponse(response);
                     appendPairResults(aiResult, batch.pairs, batch.startIndex);
 
@@ -478,11 +485,13 @@ ${pairsContent}
 
             const pairsContent = buildPairContent(allPairs, 0);
             const prompt = buildPrompt(pairsContent);
-            const response = await callAPI(prompt);
+            const response = await callAPI(prompt, null, { signal: guard.signal });
+            guard.assert();
             const aiResult = parseAIResponse(response);
             appendPairResults(aiResult, allPairs, 0);
         }
 
+        guard.assert();
         if (pairResults.length === 0 && failedBatches.length > 0) {
             throw new Error(
                 `所有别名判断批次都失败，最后错误: ${failedBatches[failedBatches.length - 1].error.message}`,

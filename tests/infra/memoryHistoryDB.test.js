@@ -406,6 +406,31 @@ describe('MemoryHistoryDB', () => {
     // 回滚
     // ============================================================
     describe('回滚到历史', () => {
+        it('rolls back history deletion and checkpoint replacement together on storage failure', async () => {
+            testDB.AppState.worldbook.generated = { 角色: { 人: { 内容: '新' } } };
+            const id = await testDB.db.saveHistory(
+                0,
+                '章',
+                { 角色: { 人: { 内容: '旧' } } },
+                testDB.AppState.worldbook.generated,
+                [],
+            );
+            await testDB.db.saveState(1);
+            const before = await testDB.db.loadState();
+            const original = IDBObjectStore.prototype.put;
+            const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (...args) {
+                const request = original.apply(this, args);
+                if (this.name === testDB.db.stateStoreName)
+                    request.addEventListener('success', () => this.transaction.abort());
+                return request;
+            });
+            await expect(testDB.db.rollbackToHistory(id)).rejects.toMatchObject({ code: 'STORAGE_ROLLBACK_FAILED' });
+            spy.mockRestore();
+            expect(await testDB.db.loadState()).toEqual(before);
+            expect(await testDB.db.getHistoryById(id)).toBeTruthy();
+            expect(testDB.AppState.worldbook.generated.角色.人.内容).toBe('新');
+        });
+
         it('回滚移除该历史及之后的所有记录', async () => {
             await testDB.db.saveHistory(0, '第1章', {}, { step: 1 }, []);
             const id2 = await testDB.db.saveHistory(1, '第2章', {}, { step: 2 }, []);

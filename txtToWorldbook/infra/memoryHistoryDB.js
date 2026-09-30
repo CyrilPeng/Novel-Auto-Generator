@@ -1,6 +1,7 @@
 import { captureTaskState } from '../../src/storage/taskSchema.js';
 import { FatalError } from '../core/errors.js';
-import { ensureChunkIdentities } from '../core/chunkIdentity.js';
+import { executeRun } from '../core/runContext.js';
+import { newIdentity, ensureChunkIdentities } from '../core/chunkIdentity.js';
 export function createMemoryHistoryDB(AppState, _Logger) {
     // ========== 写操作并发队列 ==========
     // 保护 saveHistory 等复合读-改-写操作的原子性
@@ -673,28 +674,77 @@ export function createMemoryHistoryDB(AppState, _Logger) {
          * @returns {Promise<any>}
          */
         async rollbackToHistory(historyId) {
-            const history = await this.getHistoryById(historyId);
-            if (!history) throw new Error('找不到指定的历史记录');
-
-            const db = await this.openDB();
-            const allHistory = await this.getAllHistory();
-            const toDelete = allHistory.filter((h) => h.id >= historyId);
-
-            await new Promise((resolve, reject) => {
-                const transaction = db.transaction([this.storeName], 'readwrite');
-                transaction.onabort = () => reject(transaction.error || new DOMException('事务已中止', 'AbortError'));
-                const store = transaction.objectStore(this.storeName);
-                for (const h of toDelete) {
-                    store.delete(h.id);
+            return executeRun(AppState.processing, 'rollback', async (guard) => {
+                AppState.processing.isStopped = false;
+                const history = await this.getHistoryById(historyId);
+                if (!history) throw new Error('找不到指定的历史记录');
+                const state = captureTaskState(AppState, Math.max(0, history.memoryIndex));
+                const priorTask = { ...state.task };
+                state.generatedWorldbook = structuredClone(history.previousWorldbook);
+                if (history.previousMemoryQueue) state.memoryQueue = structuredClone(history.previousMemoryQueue);
+                else if (history.memoryIndex >= 0) {
+                    for (let index = history.memoryIndex; index < state.memoryQueue.length; index++) {
+                        Object.assign(state.memoryQueue[index], {
+                            processed: false,
+                            failed: false,
+                            processing: false,
+                            result: null,
+                        });
+                    }
                 }
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
+                if (history.previousVolumes) state.worldbookVolumes = structuredClone(history.previousVolumes);
+                if (history.previousOverrides) state.entryOverrides = structuredClone(history.previousOverrides);
+                state.task = {
+                    ...priorTask,
+                    id: newIdentity('task'),
+                    sourceTaskId: priorTask.id,
+                    revision: 0,
+                    lifecycle: 'paused',
+                };
+                const records = await this.getAllHistory();
+                const db = await this.openDB();
+                guard.assert();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction([this.storeName, this.stateStoreName, this.metaStoreName], 'readwrite');
+                    const abort = () => tx.abort();
+                    guard.signal?.addEventListener('abort', abort, { once: true });
+                    const cleanup = () => guard.signal?.removeEventListener('abort', abort);
+                    let failure;
+                    tx.oncomplete = () => {
+                        cleanup();
+                        resolve();
+                    };
+                    tx.onabort = () => {
+                        cleanup();
+                        reject(
+                            failure ||
+                                new FatalError('回退保存失败，原数据未改变', { code: 'STORAGE_ROLLBACK_FAILED' }),
+                        );
+                    };
+                    tx.onerror = () => {};
+                    const meta = tx.objectStore(this.metaStoreName);
+                    const current = meta.get('task:' + priorTask.id);
+                    current.onsuccess = () => {
+                        if (current.result && current.result.revision !== priorTask.revision) {
+                            failure = new FatalError('任务已被其他页面更新，请重新加载', { code: 'REVISION_CONFLICT' });
+                            tx.abort();
+                            return;
+                        }
+                        for (const record of records)
+                            if (record.id >= historyId) tx.objectStore(this.storeName).delete(record.id);
+                        meta.put({ key: 'task:' + priorTask.id, revision: priorTask.revision + 1 });
+                        meta.put({ key: 'task:' + state.task.id, revision: 0 });
+                        tx.objectStore(this.stateStoreName).put(state);
+                    };
+                });
+                guard.assert();
+                AppState.worldbook.generated = state.generatedWorldbook;
+                AppState.worldbook.volumes = state.worldbookVolumes;
+                AppState.worldbook.overrides = state.entryOverrides;
+                AppState.memory.queue = state.memoryQueue;
+                AppState.task = state.task;
+                return history;
             });
-
-            AppState.worldbook.generated = JSON.parse(JSON.stringify(history.previousWorldbook));
-            if (history.previousVolumes) AppState.worldbook.volumes = structuredClone(history.previousVolumes);
-            if (history.previousOverrides) AppState.worldbook.overrides = structuredClone(history.previousOverrides);
-            return history;
         },
 
         /**
