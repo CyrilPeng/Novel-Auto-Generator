@@ -1,6 +1,10 @@
 export function createFeaturePlaceholders() {
-    const noop = () => {};
-    const noopAsync = async () => {};
+    const noop = () => {
+        throw new Error('模块尚未完成装配');
+    };
+    const noopAsync = async () => {
+        throw new Error('模块尚未完成装配');
+    };
 
     return {
         worldbookView: null,
@@ -31,8 +35,12 @@ export function createFeaturePlaceholders() {
 }
 
 export function createShellPlaceholders() {
-    const noop = () => {};
-    const noopAsync = async () => {};
+    const noop = () => {
+        throw new Error('模块尚未完成装配');
+    };
+    const noopAsync = async () => {
+        throw new Error('模块尚未完成装配');
+    };
 
     return {
         importMergeService: null,

@@ -1,3 +1,4 @@
+import { runConfiguration } from '../core/runContext.js';
 import { applyEntryOverrides } from '../../src/worldbook/entries/overrides.js';
 function createEmptyWorldbook() {
     return { 地图环境: {}, 剧情节点: {}, 角色: {}, 知识书: {} };
@@ -15,7 +16,7 @@ export function createWorldbookRuntimeService(deps = {}) {
 
     function postProcessResultWithChapterIndex(result, chapterIndex) {
         if (!result || typeof result !== 'object') return result;
-        if (!AppState.settings.forceChapterMarker) return result;
+        if (!runConfiguration(AppState).settings.forceChapterMarker) return result;
 
         const processed = {};
         for (const category in result) {

@@ -136,3 +136,15 @@ it('preserves edited and deleted entries when later chunk results are rebuilt', 
     expect(stored.entryOverrides[0].角色.人.内容).toBe('人工修订');
     expect(stored.entryOverrides[0].角色.删除项).toBeNull();
 });
+
+it('explicit entry reroll replaces a manual override and survives later rebuilds', async () => {
+    const { AppState, service, guard, db } = setup();
+    await service.commit(0, result, guard);
+    await service.commitWorldbook({ 角色: { 人: { 内容: '人工修订' } } }, guard);
+    const patch = { 角色: { 人: { 内容: '明确要求重写' } } };
+    await service.commit(0, patch, guard, { operation: 'entry-reroll', replaceEntries: true, patch });
+    expect(AppState.worldbook.generated).toEqual(patch);
+    expect((await db.loadState()).entryOverrides[0]).toEqual(patch);
+    await service.commit(0, result, guard, { operation: 'reroll' });
+    expect(AppState.worldbook.generated).toEqual(patch);
+});

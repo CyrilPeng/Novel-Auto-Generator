@@ -693,6 +693,8 @@ export function createMemoryHistoryDB(AppState, _Logger) {
                     }
                 }
                 if (history.previousVolumes) state.worldbookVolumes = structuredClone(history.previousVolumes);
+                if (history.previousEntryPosition)
+                    state.entryPositionConfig = structuredClone(history.previousEntryPosition);
                 if (history.previousOverrides) state.entryOverrides = structuredClone(history.previousOverrides);
                 state.task = {
                     ...priorTask,

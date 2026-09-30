@@ -1,3 +1,4 @@
+import { executeRun } from '../core/runContext.js';
 import { splitText } from '../../src/worldbook/processing/splitText.js';
 export function createFileImportService(deps = {}) {
     const {
@@ -30,7 +31,6 @@ export function createFileImportService(deps = {}) {
         }
 
         try {
-            assertEditable();
             const { encoding, content } = await fileUtils.detectBestEncoding(file);
 
             const newHash = await fileUtils.calculateFileHash(content);
@@ -50,7 +50,6 @@ export function createFileImportService(deps = {}) {
                 }
             }
 
-            assertEditable();
             AppState.file.current = file;
             AppState.worldbook.overrides = {};
             AppState.file.hash = newHash;
@@ -96,7 +95,6 @@ export function createFileImportService(deps = {}) {
     }
 
     function splitContentIntoMemory(content) {
-        assertEditable();
         const queue = splitText(content, {
             chunkSize: AppState.settings.chunkSize,
             pattern: AppState.config.chapterRegex.pattern,
@@ -107,7 +105,6 @@ export function createFileImportService(deps = {}) {
     }
 
     async function handleClearFile() {
-        assertEditable();
         AppState.worldbook.overrides = {};
         AppState.file.current = null;
         AppState.file.novelName = '';
@@ -149,7 +146,6 @@ export function createFileImportService(deps = {}) {
     }
 
     async function rechunkMemories() {
-        assertEditable();
         if (AppState.memory.queue.length === 0) {
             ErrorHandler.showUserError('没有可重新分块的内容');
             return;
@@ -179,10 +175,17 @@ export function createFileImportService(deps = {}) {
         ErrorHandler.showUserSuccess(`重新分块完成！\n当前共 ${AppState.memory.queue.length} 个章节`);
     }
 
+    function fileCommand(callback, ...args) {
+        assertEditable();
+        return executeRun(AppState.processing, 'file', () => callback(...args));
+    }
     return {
-        handleFileSelect,
-        splitContentIntoMemory,
-        handleClearFile,
-        rechunkMemories,
+        handleFileSelect: (...args) => fileCommand(handleFileSelect, ...args),
+        splitContentIntoMemory: (content) => {
+            assertEditable();
+            return splitContentIntoMemory(content);
+        },
+        handleClearFile: () => fileCommand(handleClearFile),
+        rechunkMemories: () => fileCommand(rechunkMemories),
     };
 }

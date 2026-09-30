@@ -107,6 +107,7 @@ export function createChunkRepository(database) {
                                         previousVolumes: data.previousVolumes,
                                         previousMemoryQueue: data.previousMemoryQueue,
                                         previousOverrides: data.previousOverrides,
+                                        previousEntryPosition: data.previousEntryPosition,
                                         newWorldbook: state.generatedWorldbook,
                                         changedEntries: data.changedEntries,
                                         volumeIndex: state.currentVolumeIndex,
