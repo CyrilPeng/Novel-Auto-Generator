@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { createNovelRecoveryStore } from '../../src/novel/recoveryStore.js';
 import { createNovelRunner } from '../../src/novel/generation.js';
 
 afterEach(() => vi.useRealTimers());
-function setup() {
+function setup(recovery) {
     const state = { identity: 'chat-a', messages: [], generating: false, toast: false };
     const settings = {
         currentChapter: 0,
@@ -21,6 +22,7 @@ function setup() {
     const notify = vi.fn();
     const exportNovel = vi.fn();
     const runner = createNovelRunner({
+        recovery,
         getSettings: () => settings,
         snapshot: () => state,
         send,
@@ -136,4 +138,59 @@ it('bounds post-toast waiting by the full reply deadline', async () => {
     await task;
     expect(Date.now() - start).toBe(100);
     expect(settings.currentChapter).toBe(0);
+});
+
+function journal() {
+    const values = new Map();
+    const storage = {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+        removeItem: (key) => values.delete(key),
+    };
+    return { storage, recovery: createNovelRecoveryStore(() => storage) };
+}
+
+it('restores uncertainty in a new runner without sending the same prompt again', async () => {
+    vi.useFakeTimers();
+    const { recovery } = journal();
+    const original = setup(recovery);
+    const first = original.runner.start();
+    await vi.runAllTimersAsync();
+    await first;
+    expect(recovery.read().pending.floor).toBe(0);
+    const reloaded = setup(recovery);
+    reloaded.state.messages.push(...original.state.messages, { isUser: false, text: '迟来的正文' });
+    const second = reloaded.runner.start();
+    await vi.runAllTimersAsync();
+    await second;
+    expect(reloaded.send).not.toHaveBeenCalled();
+    expect(reloaded.settings.currentChapter).toBe(1);
+    expect(recovery.read()).toMatchObject({ chapter: 1, pending: null });
+    const again = setup(recovery);
+    await again.runner.start();
+    expect(again.send).not.toHaveBeenCalled();
+    expect(again.settings.currentChapter).toBe(1);
+});
+
+it('does not send when recording uncertainty fails', async () => {
+    const { storage, recovery } = journal();
+    storage.setItem = () => {
+        throw new Error('Quota exceeded');
+    };
+    const { runner, send, notify } = setup(recovery);
+    await runner.start();
+    expect(send).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('warning', 'Quota exceeded');
+});
+
+it('requires the original chat after a reload and lets an explicit reset clear the journal', async () => {
+    const { recovery } = journal();
+    recovery.write({ identity: 'chat-b', chapter: 0, pending: { identity: 'chat-b', floor: 2, prompt: 'private' } });
+    expect(JSON.stringify(recovery.read())).not.toContain('private');
+    const { runner, send, notify } = setup(recovery);
+    await runner.start();
+    expect(send).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('warning', expect.stringContaining('原聊天'));
+    runner.resetPending();
+    expect(recovery.read()).toBeNull();
 });

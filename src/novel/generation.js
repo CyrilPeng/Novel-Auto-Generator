@@ -7,6 +7,22 @@ export function createNovelRunner(deps) {
     let active = null;
     let pending = null;
     let nextId = 0;
+    let restored = false;
+    const recovery = deps.recovery;
+    function persist(identity, chapter) {
+        recovery?.write({ identity, chapter, pending });
+    }
+
+    function completePending(identity, chapter) {
+        const previous = pending;
+        pending = null;
+        try {
+            persist(identity, chapter);
+        } catch (error) {
+            pending = previous;
+            throw error;
+        }
+    }
 
     function assertRun(run) {
         throwIfAborted(run.controller.signal);
@@ -88,6 +104,18 @@ export function createNovelRunner(deps) {
             notify('warning', '请先打开一个聊天');
             return;
         }
+        try {
+            if (!restored && recovery) {
+                const saved = recovery.read();
+                if (saved?.pending) pending = saved.pending;
+                if (saved?.identity === initial.identity)
+                    settings.currentChapter = Math.max(settings.currentChapter, saved.chapter);
+                restored = true;
+            }
+        } catch {
+            notify('warning', '无法读取续写恢复记录，请检查浏览器存储后重试');
+            return;
+        }
         if (pending && pending.identity !== initial.identity) {
             notify('warning', '原聊天还有待确认的回复，请回到原聊天或检查后重置进度');
             return;
@@ -113,6 +141,9 @@ export function createNovelRunner(deps) {
                     const before = snapshot();
                     if (before.generating === true) throw new UserError('酒馆仍在生成，请等待完成后再开始');
                     pending = { identity: run.identity, floor: before.messages.length, prompt: run.config.prompt };
+                    if (recovery && typeof run.identity !== 'string')
+                        throw new UserError('无法可靠识别当前聊天，暂不能安全保存续写进度');
+                    persist(run.identity, chapter);
                     // Record uncertainty before sending: a thrown error may occur after dispatch.
                     for (let retry = 0; ; retry++) {
                         try {
@@ -126,6 +157,7 @@ export function createNovelRunner(deps) {
                             if (error.dispatched !== false) throw error;
                             if (retry + 1 >= Math.max(1, run.config.maxRetries || 3)) {
                                 pending = null;
+                                persist(run.identity, chapter);
                                 throw error;
                             }
                             await wait(run, 1000);
@@ -141,9 +173,11 @@ export function createNovelRunner(deps) {
                 }
                 const length = await waitForReply(run, pending);
                 assertRun(run);
-                pending = null;
-                if (length < run.config.minChapterLength)
+                if (length < run.config.minChapterLength) {
+                    completePending(run.identity, chapter);
                     throw new UserError(`响应过短 (${length} 字)，本章未计为成功，请检查后重新开始`);
+                }
+                completePending(run.identity, chapter + 1);
                 settings.currentChapter = chapter + 1;
                 stats.chaptersGenerated++;
                 stats.totalCharacters += length;
@@ -195,7 +229,11 @@ export function createNovelRunner(deps) {
             onChange();
         },
         resetPending() {
-            if (!active) pending = null;
+            if (!active) {
+                recovery?.clear();
+                pending = null;
+                restored = true;
+            }
         },
     };
 }

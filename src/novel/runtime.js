@@ -1,3 +1,4 @@
+import { createNovelRecoveryStore } from './recoveryStore.js';
 import { createNovelRunner } from './generation.js';
 import { parseTagInput, extractTagContents, removeTagContents, applyTagFilters } from './tagFilters.js';
 
@@ -520,6 +521,7 @@ export function initNovelUI(host) {
     // ============================================
 
     const novelRunner = createNovelRunner({
+        recovery: createNovelRecoveryStore(() => localStorage),
         getSettings: () => settings,
         snapshot: host.snapshot,
         send: host.send,
