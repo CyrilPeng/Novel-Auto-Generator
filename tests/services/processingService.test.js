@@ -71,7 +71,7 @@ function createTestService(overrides = {}) {
         showResultSection: vi.fn(),
         updateWorldbookPreview: vi.fn(),
         applyDefaultWorldbookEntries: vi.fn(),
-        ErrorHandler: { showError: vi.fn(), handle: vi.fn() },
+        ErrorHandler: { showError: vi.fn(), handle: vi.fn(), showUserSuccess: vi.fn(), showUserError: vi.fn() },
         handleRepairMemoryWithSplit: vi.fn(),
         setProcessingStatus:
             overrides.setProcessingStatus ||
@@ -571,4 +571,26 @@ it('serial pause saves the current chunk and does not dispatch the next', async 
     } finally {
         vi.useRealTimers();
     }
+});
+
+it('repair owns a run through cancellation cleanup and does not report success', async () => {
+    const { service, AppState, mocks } = createTestService({ queue: [makeMemory('章', '正文', { failed: true })] });
+    let finish;
+    mocks.handleRepairMemoryWithSplit.mockImplementation(
+        () =>
+            new Promise((r) => {
+                finish = r;
+            }),
+    );
+    const task = service.handleRepairFailedMemories().catch((e) => e);
+    expect(AppState.processing.run.operation).toBe('repair');
+    service.handleStopProcessing();
+    await service.handleStartProcessing();
+    expect(mocks.callAPI).not.toHaveBeenCalled();
+    finish();
+    expect((await task).code).toBe('ABORTED');
+    expect(AppState.processing.run.pending).toBe(false);
+    expect(mocks.ErrorHandler.showUserSuccess).not.toHaveBeenCalled();
+    expect(mocks.clearAutoSave).toHaveBeenCalled();
+    expect(mocks.updateStopButtonVisibility).toHaveBeenLastCalledWith(false);
 });

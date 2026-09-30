@@ -1,4 +1,5 @@
-﻿export function createRerollService(deps = {}) {
+import { captureRun, guardAwait, executeRun } from '../core/runContext.js';
+export function createRerollService(deps = {}) {
     const {
         AppState,
         MemoryHistoryDB,
@@ -55,7 +56,9 @@
     }
 
     async function runRerollMemory(index, customPrompt = '', options = {}) {
-        const { manageStatus = true } = options;
+        const { manageStatus = false } = options;
+        const guard = options.guard || captureRun(AppState.processing);
+        guard.assert();
         const memory = AppState.memory.queue[index];
         if (!memory) return;
 
@@ -70,31 +73,39 @@
             memory.processing = true;
             updateMemoryQueueUI();
 
-            const result = await processMemoryChunkIndependent({
-                index,
-                retryCount: 0,
-                customPromptSuffix: customPrompt,
-            });
+            const result = await guardAwait(
+                guard,
+                processMemoryChunkIndependent({
+                    index,
+                    retryCount: 0,
+                    customPromptSuffix: customPrompt,
+                    guard,
+                }),
+            );
 
             memory.processing = false;
 
             if (result) {
-                await MemoryHistoryDB.saveRollResult(index, result);
+                await guardAwait(guard, MemoryHistoryDB.saveRollResult(index, result));
                 memory.result = result;
                 memory.processed = true;
                 memory.failed = false;
-                await mergeWorldbookDataWithHistory({
-                    target: AppState.worldbook.generated,
-                    source: result,
-                    memoryIndex: index,
-                    memoryTitle: `${memory.title}-重Roll`,
-                });
+                await guardAwait(
+                    guard,
+                    mergeWorldbookDataWithHistory({
+                        target: AppState.worldbook.generated,
+                        source: result,
+                        memoryIndex: index,
+                        memoryTitle: `${memory.title}-重Roll`,
+                    }),
+                );
                 updateStreamContent(`✅ 重Roll完成: ${memory.title}\n`);
                 updateMemoryQueueUI();
                 updateWorldbookPreview();
                 return result;
             }
         } catch (error) {
+            guard.assert();
             memory.processing = false;
             if (error.message !== 'ABORTED') {
                 updateStreamContent(`❌ 重Roll失败: ${error.message}\n`);
@@ -107,10 +118,12 @@
     }
 
     async function handleRerollMemory(index, customPrompt = '') {
-        return runRerollMemory(index, customPrompt, { manageStatus: true });
+        return managedReroll((guard) => runRerollMemory(index, customPrompt, { guard }));
     }
 
-    async function handleRerollSingleEntry(options) {
+    async function rerollSingleEntry(options) {
+        const guard = options.guard || captureRun(AppState.processing);
+        guard.assert();
         const { memoryIndex, category, entryName, customPrompt = '' } = options;
         const memory = AppState.memory.queue[memoryIndex];
         if (!memory) {
@@ -181,7 +194,7 @@
             memory.processing = true;
             updateMemoryQueueUI();
 
-            const response = await callAPI(prompt, memoryIndex + 1);
+            const response = await guardAwait(guard, callAPI(prompt, memoryIndex + 1, { signal: guard.signal }));
 
             memory.processing = false;
 
@@ -211,13 +224,16 @@
                 }
                 memory.result[category][entryName] = entryUpdate[category][entryName];
 
-                await MemoryHistoryDB.saveRollResult(memoryIndex, memory.result);
-                await MemoryHistoryDB.saveEntryRollResult(
-                    category,
-                    entryName,
-                    memoryIndex,
-                    entryUpdate[category][entryName],
-                    customPrompt,
+                await guardAwait(guard, MemoryHistoryDB.saveRollResult(memoryIndex, memory.result));
+                await guardAwait(
+                    guard,
+                    MemoryHistoryDB.saveEntryRollResult(
+                        category,
+                        entryName,
+                        memoryIndex,
+                        entryUpdate[category][entryName],
+                        customPrompt,
+                    ),
                 );
 
                 if (!AppState.worldbook.generated[category]) {
@@ -234,18 +250,17 @@
 
             throw new Error('AI返回的结果格式不正确，请重试');
         } catch (error) {
+            guard.assert();
             memory.processing = false;
             if (error.message !== 'ABORTED') {
                 updateStreamContent(`❌ 条目重Roll失败: ${error.message}\n`);
             }
             updateMemoryQueueUI();
             throw error;
-        } finally {
-            if (currentStatus() !== 'stopped') transitionTo('idle');
         }
     }
 
-    async function batchRerollMemories(options = {}) {
+    async function runBatchReroll(options = {}, guard) {
         const {
             memoryIndices = [],
             customPrompt = '',
@@ -263,6 +278,7 @@
         let successCount = 0;
         let failCount = 0;
         let completed = 0;
+        let fatalError = null;
 
         if (useParallel) {
             updateStreamContent(
@@ -270,32 +286,40 @@
             );
 
             const semaphore = new Semaphore(AppState.config.parallel.concurrency);
+            const abortQueued = () => semaphore.abort();
+            guard.signal?.addEventListener('abort', abortQueued, { once: true });
             const processOne = async (index) => {
-                if (AppState.processing.isStopped) return null;
+                if (!guard.canDispatch()) return null;
                 try {
                     await semaphore.acquire();
                 } catch (e) {
                     if (e.message === 'ABORTED') return null;
                     throw e;
                 }
-                if (AppState.processing.isStopped) {
+                if (!guard.canDispatch()) {
                     semaphore.release();
                     return null;
                 }
 
                 try {
                     updateStreamContent(`🎲 [并行] 第${index + 1}章 开始重Roll...\n`);
-                    const result = await runRerollMemory(index, customPrompt, { manageStatus: false });
+                    const result = await guardAwait(guard, runRerollMemory(index, customPrompt, { guard }));
                     if (result) {
                         successCount++;
                         updateStreamContent(`✅ [并行] 第${index + 1}章 完成\n`);
                     }
                     return result;
                 } catch (error) {
+                    guard.assert();
+                    if (error.retryable === false) {
+                        fatalError = error;
+                        semaphore.abort();
+                    }
                     failCount++;
                     updateStreamContent(`❌ [并行] 第${index + 1}章 失败: ${error.message}\n`);
                     return null;
                 } finally {
+                    semaphore.release();
                     completed++;
                     updateProgress(
                         (completed / memoryIndices.length) * 100,
@@ -304,11 +328,16 @@
                     if (typeof onStep === 'function') {
                         onStep({ completed, total: memoryIndices.length, successCount, failCount });
                     }
-                    semaphore.release();
                 }
             };
 
-            await Promise.allSettled(memoryIndices.map((index) => processOne(index)));
+            try {
+                await Promise.allSettled(memoryIndices.map((index) => processOne(index)));
+            } finally {
+                guard.signal?.removeEventListener('abort', abortQueued);
+            }
+            guard.assert();
+            if (fatalError) throw fatalError;
         } else {
             updateStreamContent(`\n🔄 批量重Roll开始 (串行模式)\n${'='.repeat(50)}\n`);
             for (let i = 0; i < memoryIndices.length; i++) {
@@ -316,9 +345,11 @@
                 const index = memoryIndices[i];
                 try {
                     updateStreamContent(`\n🎲 [${i + 1}/${memoryIndices.length}] 第${index + 1}章...\n`);
-                    await runRerollMemory(index, customPrompt, { manageStatus: false });
+                    await guardAwait(guard, runRerollMemory(index, customPrompt, { guard }));
                     successCount++;
                 } catch (error) {
+                    guard.assert();
+                    if (error.retryable === false) throw error;
                     failCount++;
                     updateStreamContent(`❌ 第${index + 1}章重Roll失败: ${error.message}\n`);
                 } finally {
@@ -344,6 +375,35 @@
         }
 
         return { success: successCount, fail: failCount, stopped };
+    }
+
+    function managedReroll(callback) {
+        return executeRun(AppState.processing, 'reroll', callback, {
+            start() {
+                transitionTo('rerolling');
+                updateStopButtonVisibility(true);
+            },
+            finish() {
+                AppState.memory.queue.forEach((memory) => {
+                    memory.processing = false;
+                });
+                if (currentStatus() !== 'stopped') transitionTo('idle');
+                updateStopButtonVisibility(false);
+                updateMemoryQueueUI();
+            },
+        });
+    }
+
+    function handleRerollSingleEntry(options) {
+        if (options.guard) {
+            options.guard.assert();
+            return rerollSingleEntry(options);
+        }
+        return managedReroll((guard) => rerollSingleEntry({ ...options, guard }));
+    }
+
+    function batchRerollMemories(options = {}) {
+        return managedReroll((guard) => runBatchReroll(options, guard));
     }
 
     return {

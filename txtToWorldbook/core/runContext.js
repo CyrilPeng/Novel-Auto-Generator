@@ -3,7 +3,7 @@ import { AbortedError, UserError } from './errors.js';
 let nextId = 0;
 
 export function beginRun(processing, operation = 'convert') {
-    if (processing.run?.pending) throw new UserError('上一任务正在结束，请稍后再开始');
+    if (processing.run?.pending || processing.isRunning) throw new UserError('上一任务正在结束，请稍后再开始');
     processing.run?.controller.abort();
     const run = {
         id: ++nextId,
@@ -64,4 +64,22 @@ export function captureRun(processing) {
                 throw new AbortedError('ABORTED');
         },
     };
+}
+
+/** Owns the complete async command, including cleanup, across all entry points. */
+export async function executeRun(processing, operation, callback, hooks = {}) {
+    const run = beginRun(processing, operation);
+    const guard = captureRun(processing);
+    let failure = null;
+    try {
+        hooks.start?.(run);
+        const result = await callback(guard);
+        guard.assert();
+        return result;
+    } catch (error) {
+        failure = error;
+        throw error;
+    } finally {
+        if (finishRun(processing, run, failure)) hooks.finish?.(run);
+    }
 }

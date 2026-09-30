@@ -422,3 +422,12 @@
 - 宿主生成无法取消时本地退出等待，后续请求等上游结束；排队期间超时的请求不补发。
 
 对应自动化：tests/novel/generation.test.js、tests/services/processingService.test.js、tests/services/apiService.retry.test.js。宿主界面操作需在真实酒馆补验。
+
+## B04 任务控制与恢复预算
+
+- 转换暂停后只保存已发任务，乱序响应按章节顺序提交；恢复跳过成功块。关闭主面板触发保存后暂停。
+- 修复、章节重 Roll、条目重 Roll 期间启动其他任务应被拒绝；取消后的结果不保存，按钮与运行锁在收尾后释放。
+- 自动分卷连续超限、拆分子块再次超限时，恢复预算耗尽后明确失败，不无限递归。
+- 批量重 Roll 致命错误不继续发送排队任务；旧运行不隐藏新运行的操作按钮。
+
+对应自动化：runContext、processingService、repairService、rerollService、modalController 测试。真实宿主 UI 仍需补验。

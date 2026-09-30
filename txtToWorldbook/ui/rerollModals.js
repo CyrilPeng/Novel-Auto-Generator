@@ -1,4 +1,5 @@
-﻿export function createRerollModals(deps = {}) {
+import { beginRun, captureRun, finishRun, stopRun } from '../core/runContext.js';
+export function createRerollModals(deps = {}) {
     const {
         AppState,
         ModalFactory,
@@ -128,6 +129,14 @@
         const customPrompt = modal.querySelector('#ttw-reroll-entry-prompt').value.trim();
         const concurrency = parseInt(modal.querySelector('#ttw-reroll-concurrency').value, 10) || 3;
 
+        let run;
+        try {
+            run = beginRun(AppState.processing, 'reroll');
+        } catch (error) {
+            ErrorHandler.showUserError(error.message);
+            return;
+        }
+        const guard = captureRun(AppState.processing);
         confirmBtn.disabled = true;
         confirmBtn.style.display = 'none';
         stopBtn.style.display = 'inline-block';
@@ -147,11 +156,12 @@
         const processBatch = async () => {
             let index = 0;
             const worker = async () => {
-                while (index < selectedIndices.length && !AppState.processing.isStopped) {
+                while (index < selectedIndices.length && guard.canDispatch()) {
                     const currentIndex = index++;
                     const memoryIndex = selectedIndices[currentIndex];
                     try {
                         const result = await handleRerollSingleEntry({
+                            guard,
                             memoryIndex,
                             category,
                             entryName,
@@ -171,7 +181,7 @@
             for (let i = 0; i < Math.min(concurrency, selectedIndices.length); i++) {
                 workers.push(worker());
             }
-            await Promise.all(workers);
+            await Promise.allSettled(workers);
         };
 
         try {
@@ -218,6 +228,7 @@
                 progressDiv.textContent = `❌ 错误: ${error.message}`;
             }
         } finally {
+            finishRun(AppState.processing, run);
             confirmBtn.disabled = false;
             confirmBtn.style.display = 'inline-block';
             stopBtn.style.display = 'none';
@@ -319,6 +330,7 @@
         const progressDiv = modal.querySelector('#ttw-reroll-progress');
 
         stopBtn.addEventListener('click', () => {
+            stopRun(AppState.processing);
             setProcessingStatus('stopped');
         });
 
@@ -462,6 +474,14 @@
             saveCurrentSettings();
             const concurrency = parseInt(modal.querySelector('#ttw-batch-concurrency').value, 10) || 3;
 
+            let run;
+            try {
+                run = beginRun(AppState.processing, 'reroll');
+            } catch (error) {
+                ErrorHandler.showUserError(error.message);
+                return;
+            }
+            const guard = captureRun(AppState.processing);
             confirmBtn.disabled = true;
             confirmBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
@@ -478,7 +498,7 @@
 
             let index = 0;
             const worker = async () => {
-                while (index < selectedEntries.length && !AppState.processing.isStopped) {
+                while (index < selectedEntries.length && guard.canDispatch()) {
                     const currentIndex = index++;
                     const { category, entryName } = selectedEntries[currentIndex];
                     const sources = findEntrySourceMemories(category, entryName);
@@ -486,6 +506,7 @@
                     if (sources.length > 0) {
                         try {
                             await handleRerollSingleEntry({
+                                guard,
                                 memoryIndex: sources[0].memoryIndex,
                                 category,
                                 entryName,
@@ -506,7 +527,8 @@
             for (let i = 0; i < Math.min(concurrency, selectedEntries.length); i++) {
                 workers.push(worker());
             }
-            await Promise.all(workers);
+            await Promise.allSettled(workers);
+            finishRun(AppState.processing, run);
 
             progressDiv.textContent = AppState.processing.isStopped
                 ? `已停止: ${completed}/${total} 完成`
@@ -521,6 +543,7 @@
         });
 
         stopBtn.addEventListener('click', () => {
+            stopRun(AppState.processing);
             setProcessingStatus('stopped');
         });
     }

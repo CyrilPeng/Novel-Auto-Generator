@@ -1,5 +1,5 @@
 import { createRecoveryBudget } from '../core/recoveryBudget.js';
-import { beginRun, captureRun, stopRun, pauseRun, finishRun, guardAwait } from '../core/runContext.js';
+import { beginRun, captureRun, stopRun, pauseRun, finishRun, guardAwait, executeRun } from '../core/runContext.js';
 import { isRetryable, isAborted, RetryableError } from '../core/errors.js';
 import { createRequestBudget, abortableDelay, throwIfAborted } from '../core/requestPolicy.js';
 
@@ -753,7 +753,7 @@ ${'='.repeat(50)}
         }
     }
 
-    async function handleRepairFailedMemories() {
+    async function repairFailedMemories(guard) {
         const failedMemories = AppState.memory.queue.filter((m) => m.failed);
         if (failedMemories.length === 0) {
             ErrorHandler.showUserError('没有需要修复的记忆');
@@ -775,20 +775,35 @@ ${'='.repeat(50)}
             const memoryIndex = AppState.memory.queue.indexOf(memory);
             if (memoryIndex === -1) continue;
             updateProgress(((i + 1) / failedMemories.length) * 100, `修复: ${memory.title}`);
-            await handleRepairMemoryWithSplit(memoryIndex, stats);
+            await guardAwait(guard, handleRepairMemoryWithSplit(memoryIndex, stats));
         }
 
         AppState.memory.failedQueue = AppState.memory.failedQueue.filter(
             (item) => AppState.memory.queue[item.index]?.failed,
         );
         updateProgress(100, `修复完成: 成功 ${stats.successCount}, 仍失败 ${stats.stillFailedCount}`);
-        await MemoryHistoryDB.saveState(AppState.memory.queue.length);
+        await guardAwait(guard, MemoryHistoryDB.saveState(AppState.memory.queue.length));
         if (currentStatus() !== 'stopped') transitionTo('idle');
 
         ErrorHandler.showUserSuccess(`修复完成！成功: ${stats.successCount}, 仍失败: ${stats.stillFailedCount}`);
         updateMemoryQueueUI();
         updateStopButtonVisibility(false);
         if (typeof clearAutoSave === 'function') clearAutoSave();
+    }
+
+    async function handleRepairFailedMemories() {
+        return executeRun(AppState.processing, 'repair', repairFailedMemories, {
+            finish() {
+                AppState.memory.queue.forEach((memory) => {
+                    memory.processing = false;
+                });
+                if (currentStatus() !== 'stopped') transitionTo('idle');
+                updateStopButtonVisibility(false);
+                updateStartButtonState(false);
+                updateMemoryQueueUI();
+                if (typeof clearAutoSave === 'function') clearAutoSave();
+            },
+        });
     }
 
     return {
