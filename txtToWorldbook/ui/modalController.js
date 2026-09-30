@@ -1,4 +1,4 @@
-import { stopRun } from '../core/runContext.js';
+import { stopRun, pauseRun } from '../core/runContext.js';
 
 export function createModalController(deps) {
     const {
@@ -27,8 +27,10 @@ export function createModalController(deps) {
         setModalContainer(modalContainer);
 
         initializeModalState();
-        restoreModalData();
-        restoreExistingState().catch(onRestoreStateError);
+        if (!AppState.processing.run?.pending) {
+            restoreModalData();
+            restoreExistingState().catch(onRestoreStateError);
+        }
     }
 
     function handleEscKey(e) {
@@ -45,15 +47,18 @@ export function createModalController(deps) {
     }
 
     function closeModal() {
-        stopRun(AppState.processing);
-        setProcessingStatus('stopped');
+        const draining = AppState.processing.run?.operation === 'convert' && pauseRun(AppState.processing);
+        if (!draining) {
+            stopRun(AppState.processing);
+            setProcessingStatus('stopped');
+        }
 
         const globalSemaphore = getGlobalSemaphore();
-        if (globalSemaphore) globalSemaphore.abort();
+        if (globalSemaphore && !draining) globalSemaphore.abort();
 
-        AppState.processing.activeTasks.clear();
+        if (!draining) AppState.processing.activeTasks.clear();
         AppState.memory.queue.forEach((memory) => {
-            if (memory.processing) memory.processing = false;
+            if (!draining && memory.processing) memory.processing = false;
         });
 
         const modalContainer = getModalContainer();

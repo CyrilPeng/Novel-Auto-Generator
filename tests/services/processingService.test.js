@@ -511,3 +511,64 @@ it('bounds repeated serial token recovery across volume changes', async () => {
         vi.useRealTimers();
     }
 });
+
+it('drains dispatched parallel chunks in source order and resumes without duplicate work', async () => {
+    const pending = [];
+    const callAPI = vi.fn(() => new Promise((resolve) => pending.push(resolve)));
+    const { service, AppState, mocks } = createTestService({
+        queue: [makeMemory('1', 'a'), makeMemory('2', 'b'), makeMemory('3', 'c')],
+        Semaphore,
+        callAPI,
+    });
+    AppState.memory.startIndex = 0;
+    AppState.memory.userSelectedIndex = null;
+    AppState.config.parallel.enabled = true;
+    const task = service.handleStartProcessing();
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    service.handlePauseProcessing();
+    expect(AppState.processing.run.lifecycle).toBe('pausing');
+    pending[1]('{}');
+    pending[0]('{}');
+    await task;
+    expect(callAPI).toHaveBeenCalledTimes(2);
+    expect(mocks.MemoryHistoryDB.saveRollResult.mock.calls.map((args) => args[0])).toEqual([0, 1]);
+    expect(mocks.MemoryHistoryDB.clearState).not.toHaveBeenCalled();
+    expect(AppState.processing.run.lifecycle).toBe('paused');
+    expect(AppState.processing.status).toBe('paused');
+    const resumed = service.handleStartProcessing();
+    await vi.waitFor(() => expect(pending).toHaveLength(3));
+    pending[2]('{}');
+    await resumed;
+    expect(mocks.MemoryHistoryDB.saveRollResult.mock.calls.map((args) => args[0])).toEqual([0, 1, 2]);
+    expect(AppState.processing.run.lifecycle).toBe('completed');
+});
+
+it('serial pause saves the current chunk and does not dispatch the next', async () => {
+    vi.useFakeTimers();
+    try {
+        let resolve;
+        const { service, AppState, mocks } = createTestService({
+            queue: [makeMemory('1', 'a'), makeMemory('2', 'b')],
+            callAPI: vi.fn(
+                () =>
+                    new Promise((r) => {
+                        resolve = r;
+                    }),
+            ),
+        });
+        AppState.memory.startIndex = 0;
+        AppState.memory.userSelectedIndex = null;
+        const task = service.handleStartProcessing();
+        service.handlePauseProcessing();
+        resolve('{}');
+        await vi.runAllTimersAsync();
+        await task;
+        expect(mocks.callAPI).toHaveBeenCalledTimes(1);
+        expect(AppState.memory.queue[0].processed).toBe(true);
+        expect(AppState.memory.queue[1].processed).toBe(false);
+        expect(AppState.processing.run.lifecycle).toBe('paused');
+        expect(mocks.MemoryHistoryDB.saveState).toHaveBeenLastCalledWith(1);
+    } finally {
+        vi.useRealTimers();
+    }
+});

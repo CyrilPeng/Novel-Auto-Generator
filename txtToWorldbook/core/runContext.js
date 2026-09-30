@@ -2,20 +2,46 @@ import { AbortedError, UserError } from './errors.js';
 
 let nextId = 0;
 
-export function beginRun(processing) {
+export function beginRun(processing, operation = 'convert') {
     if (processing.run?.pending) throw new UserError('上一任务正在结束，请稍后再开始');
     processing.run?.controller.abort();
-    const run = { id: ++nextId, controller: new AbortController(), pending: true };
+    const run = {
+        id: ++nextId,
+        operation,
+        lifecycle: 'running',
+        controller: new AbortController(),
+        pending: true,
+        pauseRequested: false,
+    };
     processing.run = run;
     return run;
 }
 
-export function stopRun(processing) {
-    processing.run?.controller.abort();
+export function pauseRun(processing) {
+    const run = processing.run;
+    if (!run?.pending || run.controller.signal.aborted) return false;
+    run.pauseRequested = true;
+    run.lifecycle = 'pausing';
+    return true;
 }
 
-export function finishRun(processing, run) {
+export function stopRun(processing) {
+    const run = processing.run;
+    if (!run?.pending) return;
+    run.lifecycle = 'stopping';
+    run.controller.abort();
+}
+
+export function finishRun(processing, run, error = null) {
+    if (!run.pending) return processing.run === run;
     run.pending = false;
+    run.lifecycle = run.controller.signal.aborted
+        ? 'stopped'
+        : error
+          ? 'failed'
+          : run.pauseRequested
+            ? 'paused'
+            : 'completed';
     return processing.run === run;
 }
 
@@ -30,6 +56,8 @@ export function captureRun(processing) {
     const run = processing.run;
     return {
         signal: run?.controller.signal,
+        canDispatch: () =>
+            processing.run === run && !run?.pauseRequested && !run?.controller.signal.aborted && !processing.isStopped,
         owns: () => processing.run === run,
         assert() {
             if (processing.run !== run || run?.controller.signal.aborted || processing.isStopped)

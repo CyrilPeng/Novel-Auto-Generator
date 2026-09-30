@@ -1,5 +1,5 @@
 import { createRecoveryBudget } from '../core/recoveryBudget.js';
-import { beginRun, captureRun, stopRun, finishRun, guardAwait } from '../core/runContext.js';
+import { beginRun, captureRun, stopRun, pauseRun, finishRun, guardAwait } from '../core/runContext.js';
 import { isRetryable, isAborted, RetryableError } from '../core/errors.js';
 import { createRequestBudget, abortableDelay, throwIfAborted } from '../core/requestPolicy.js';
 
@@ -236,14 +236,14 @@ ${'='.repeat(50)}
         AppState.globalSemaphore = semaphore;
 
         const processOne = async (task) => {
-            if (AppState.processing.isStopped) return null;
+            if (!guard.canDispatch()) return null;
             try {
                 await semaphore.acquire();
             } catch (e) {
                 if (e.message === 'ABORTED') return null;
                 throw e;
             }
-            if (!guard.owns() || guard.signal?.aborted || AppState.processing.isStopped) {
+            if (!guard.canDispatch()) {
                 semaphore.release();
                 return null;
             }
@@ -527,6 +527,12 @@ ${'='.repeat(50)}
         if (memory.processed) await guardAwait(guard, new Promise((r) => setTimeout(r, 1000)));
     }
 
+    function handlePauseProcessing() {
+        if (pauseRun(AppState.processing)) {
+            updateStreamContent('\n⏳ 正在保存已发任务，完成后暂停\n');
+        }
+    }
+
     function handleStopProcessing() {
         stopRun(AppState.processing);
         transitionTo('stopped');
@@ -547,6 +553,7 @@ ${'='.repeat(50)}
 
         if (AppState.processing.run?.pending) return;
         const run = beginRun(AppState.processing);
+        let failure = null;
         const guard = captureRun(AppState.processing);
         showProgressSection(true);
         transitionTo('running');
@@ -614,7 +621,7 @@ ${'='.repeat(50)}
                         }
                         updateMemoryQueueUI();
                         for (let i = 0; i < AppState.memory.queue.length; i++) {
-                            if (AppState.processing.isStopped) break;
+                            if (!guard.canDispatch()) break;
                             if (!AppState.memory.queue[i].processed || AppState.memory.queue[i].failed) {
                                 await guardAwait(guard, processMemoryChunk(i));
                             }
@@ -627,7 +634,7 @@ ${'='.repeat(50)}
                     if (Object.keys(AppState.worldbook.generated).length > 0) {
                         batchWorldbookSummary = buildWorldbookSummary(AppState.worldbook.generated);
                     }
-                    while (i < AppState.memory.queue.length && !AppState.processing.isStopped) {
+                    while (i < AppState.memory.queue.length && guard.canDispatch()) {
                         const batchEnd = Math.min(i + batchSize, AppState.memory.queue.length);
                         const { tokenLimitIndices } = await guardAwait(
                             guard,
@@ -636,11 +643,7 @@ ${'='.repeat(50)}
                         if (AppState.processing.isStopped) break;
                         batchWorldbookSummary = buildWorldbookSummary(AppState.worldbook.generated);
                         for (const idx of tokenLimitIndices.sort((a, b) => b - a)) splitMemoryIntoTwo(idx);
-                        for (
-                            let j = i;
-                            j < batchEnd && j < AppState.memory.queue.length && !AppState.processing.isStopped;
-                            j++
-                        ) {
+                        for (let j = i; j < batchEnd && j < AppState.memory.queue.length && guard.canDispatch(); j++) {
                             if (!AppState.memory.queue[j].processed || AppState.memory.queue[j].failed)
                                 await guardAwait(guard, processMemoryChunk(j));
                         }
@@ -651,6 +654,7 @@ ${'='.repeat(50)}
             } else {
                 let i = effectiveStartIndex;
                 while (i < AppState.memory.queue.length) {
+                    if (!guard.canDispatch() && !AppState.processing.isStopped) break;
                     if (AppState.processing.isStopped) {
                         updateProgress((i / AppState.memory.queue.length) * 100, '⏸️ 已暂停');
                         await guardAwait(guard, MemoryHistoryDB.saveState(i));
@@ -674,6 +678,14 @@ ${'='.repeat(50)}
                 updateProgress((processedCount / AppState.memory.queue.length) * 100, '⏸️ 已暂停');
                 await guardAwait(guard, MemoryHistoryDB.saveState(processedCount));
                 updateStartButtonState(false);
+                return;
+            }
+
+            if (run.pauseRequested) {
+                const next = AppState.memory.queue.findIndex((m) => !m.processed || m.failed);
+                await guardAwait(guard, MemoryHistoryDB.saveState(next < 0 ? AppState.memory.queue.length : next));
+                transitionTo('paused');
+                updateStreamContent('\n⏸️ 已保存并暂停\n');
                 return;
             }
 
@@ -718,6 +730,7 @@ ${'='.repeat(50)}
             if (typeof clearAutoSave === 'function') clearAutoSave();
         } catch (error) {
             if (!guard.owns() || isAborted(error)) return;
+            failure = error;
             ErrorHandler.handle(error, 'startAIProcessing');
             updateProgress(0, `❌ 出错: ${error.message}`);
             updateStreamContent(`\n❌ 错误: ${error.message}\n`);
@@ -726,7 +739,7 @@ ${'='.repeat(50)}
             updateStartButtonState(false);
             if (typeof clearAutoSave === 'function') clearAutoSave();
         } finally {
-            if (finishRun(AppState.processing, run)) {
+            if (finishRun(AppState.processing, run, failure)) {
                 AppState.processing.activeTasks.clear();
                 AppState.memory.queue.forEach((memory) => {
                     memory.processing = false;
@@ -783,6 +796,7 @@ ${'='.repeat(50)}
         processMemoryChunksParallel,
         processMemoryChunk,
         handleStopProcessing,
+        handlePauseProcessing,
         handleStartProcessing,
         handleRepairFailedMemories,
     };
