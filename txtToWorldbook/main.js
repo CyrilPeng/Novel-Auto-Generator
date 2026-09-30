@@ -88,7 +88,7 @@ import { createCategoryPersistenceService } from './services/categoryPersistence
 import { createExportNameService } from './services/exportNameService.js';
 import { createMemoryQueueActionsService } from './services/memoryQueueActionsService.js';
 import { createProcessingStateService } from './services/processingStateService.js';
-import { createRepairService } from './services/repairService.js';
+import { createRepairService } from '../src/worldbook/commands/repair.js';
 import { createWorldbookRuntimeService } from './services/worldbookRuntimeService.js';
 import { createAppContext } from './app/createApp.js';
 import { createCoreServices } from './app/createCoreServices.js';

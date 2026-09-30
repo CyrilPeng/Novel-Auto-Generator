@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { createRepairService } from '../../txtToWorldbook/services/repairService.js';
+import { createRepairService } from '../../src/worldbook/commands/repair.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
 import { beginRun, stopRun } from '../../txtToWorldbook/core/runContext.js';
 import { createRecoveryBudget } from '../../txtToWorldbook/core/recoveryBudget.js';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createWorldbookService } from '../../txtToWorldbook/services/worldbookService.js';
+import { createWorldbookService } from '../../src/worldbook/entries/worldbook.js';
 
 // ============================================================
 // 测试辅助

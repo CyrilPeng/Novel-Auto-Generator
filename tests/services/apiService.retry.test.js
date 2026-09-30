@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiService } from '../../txtToWorldbook/services/apiService.js';
-import { createProcessingService } from '../../txtToWorldbook/services/processingService.js';
+import { createProcessingService } from '../../src/worldbook/commands/convert.js';
 import { createParserService } from '../../txtToWorldbook/services/parserService.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
 import { APICaller } from '../../txtToWorldbook/infra/apiCaller.js';

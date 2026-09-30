@@ -1,5 +1,5 @@
-import { runConfiguration } from '../core/runContext.js';
-import { captureRun, guardAwait, executeRun } from '../core/runContext.js';
+import { runConfiguration } from '../../../txtToWorldbook/core/runContext.js';
+import { captureRun, guardAwait, executeRun } from '../../../txtToWorldbook/core/runContext.js';
 export function createRerollService(deps = {}) {
     const {
         AppState,

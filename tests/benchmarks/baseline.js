@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto';
 import { performance } from 'node:perf_hooks';
 import { createParserService } from '../../txtToWorldbook/services/parserService.js';
-import { createWorldbookService } from '../../txtToWorldbook/services/worldbookService.js';
+import { createWorldbookService } from '../../src/worldbook/entries/worldbook.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
 import { createMemoryHistoryDB } from '../../txtToWorldbook/infra/memoryHistoryDB.js';
 

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createRerollService } from '../../txtToWorldbook/services/rerollService.js';
+import { createRerollService } from '../../src/worldbook/commands/reroll.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
 import { stopRun } from '../../txtToWorldbook/core/runContext.js';
 import { Semaphore } from '../../txtToWorldbook/core/runtime.js';

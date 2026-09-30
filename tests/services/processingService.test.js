@@ -1,10 +1,7 @@
 import { Semaphore } from '../../txtToWorldbook/core/runtime.js';
 import { beginRun, stopRun, finishRun } from '../../txtToWorldbook/core/runContext.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-    createProcessingService,
-    countMeaningfulWorldbookEntries,
-} from '../../txtToWorldbook/services/processingService.js';
+import { createProcessingService, countMeaningfulWorldbookEntries } from '../../src/worldbook/commands/convert.js';
 
 // ============================================================
 // 测试辅助 - AppState 与 service 创建

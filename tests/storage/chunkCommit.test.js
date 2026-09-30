@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { createMemoryHistoryDB } from '../../txtToWorldbook/infra/memoryHistoryDB.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
-import { createWorldbookService } from '../../txtToWorldbook/services/worldbookService.js';
+import { createWorldbookService } from '../../src/worldbook/entries/worldbook.js';
 import { createChunkCommitService } from '../../src/storage/chunkCommitService.js';
 import { beginRun, captureRun } from '../../txtToWorldbook/core/runContext.js';
 const databases = [];

@@ -1,11 +1,11 @@
-import { createWorldbookService } from '../services/worldbookService.js';
-import { createProcessingService } from '../services/processingService.js';
-import { createRerollService } from '../services/rerollService.js';
+import { createWorldbookService } from '../../src/worldbook/entries/worldbook.js';
+import { createProcessingService } from '../../src/worldbook/commands/convert.js';
+import { createRerollService } from '../../src/worldbook/commands/reroll.js';
 import { createApiService } from '../services/apiService.js';
 import { createPromptService } from '../services/promptService.js';
 import { createParserService } from '../services/parserService.js';
 import { createTokenMetricsService } from '../services/tokenMetricsService.js';
-import { createExportFormatService } from '../services/exportFormatService.js';
+import { createExportFormatService } from '../../src/worldbook/formats/exportWorldbook.js';
 import { createRerollModals } from '../ui/rerollModals.js';
 
 function resolveDeps(factoryDeps, context) {

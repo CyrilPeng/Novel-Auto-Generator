@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { convertSTFormatToInternal, stEntryToCard, cardEntryToST } from '../../src/worldbook/formats/sillyTavern.js';
-import { createExportFormatService } from '../../txtToWorldbook/services/exportFormatService.js';
+import { createExportFormatService } from '../../src/worldbook/formats/exportWorldbook.js';
 import { loadSettingsRecord } from '../../src/storage/settingsStore.js';
 
 it('preserves ST behavior and unknown extension fields through an internal roundtrip', () => {
