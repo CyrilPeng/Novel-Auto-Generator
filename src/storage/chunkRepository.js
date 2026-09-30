@@ -82,6 +82,11 @@ export function createChunkRepository(database) {
                                         fileHash: data.state.fileHash,
                                     },
                                 };
+                                const previousState = states.get('currentState');
+                                previousState.onsuccess = () => {
+                                    if (previousState.result && previousState.result.schemaVersion !== 1)
+                                        meta.put({ key: 'legacyStateBackup', value: previousState.result });
+                                };
                                 states.put(state);
                                 if (!data.worldbookEdit)
                                     tx.objectStore(database.rollStoreName).add({

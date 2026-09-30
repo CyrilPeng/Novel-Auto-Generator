@@ -108,3 +108,17 @@ it('commits whole-worldbook edits with history and no fictitious chapter roll', 
     expect(await db.getAllHistory()).toHaveLength(1);
     expect(await db.getRollResults(0)).toHaveLength(0);
 });
+
+it('keeps the legacy checkpoint when the first new write is an atomic result commit', async () => {
+    const { db, service, guard } = setup();
+    const connection = await db.openDB();
+    const legacy = { key: 'currentState', memoryQueue: [{ content: '旧正文' }] };
+    await new Promise((resolve, reject) => {
+        const tx = connection.transaction([db.stateStoreName], 'readwrite');
+        tx.objectStore(db.stateStoreName).put(legacy);
+        tx.oncomplete = resolve;
+        tx.onabort = reject;
+    });
+    await service.commit(0, result, guard);
+    expect(await db.loadLegacyStateBackup()).toEqual(legacy);
+});

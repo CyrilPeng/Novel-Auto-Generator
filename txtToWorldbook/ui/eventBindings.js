@@ -70,6 +70,7 @@ export function bindExportEvents(deps = {}) {
     document.getElementById('ttw-import-json').addEventListener('click', importAndMergeWorldbook);
     document.getElementById('ttw-import-task').addEventListener('click', loadTaskState);
     document.getElementById('ttw-export-task').addEventListener('click', saveTaskState);
+    document.getElementById('ttw-export-legacy').addEventListener('click', () => saveTaskState({ legacyBackup: true }));
     document.getElementById('ttw-export-settings').addEventListener('click', exportSettings);
     document.getElementById('ttw-import-settings').addEventListener('click', importSettings);
     document.getElementById('ttw-export-json').addEventListener('click', exportCharacterCard);

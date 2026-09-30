@@ -1,4 +1,4 @@
-import { migrateTaskState, captureTaskState } from '../../src/storage/taskSchema.js';
+import { migrateTaskState, captureTaskState, withoutCredentials } from '../../src/storage/taskSchema.js';
 export function createTaskStateService(deps = {}) {
     const {
         AppState,
@@ -58,9 +58,25 @@ export function createTaskStateService(deps = {}) {
         }
     }
 
-    async function saveTaskState() {
-        const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
-        state.originalFileName = AppState.file.current?.name || null;
+    async function saveTaskState(options = {}) {
+        let state;
+        if (options.legacyBackup === true) {
+            try {
+                state = await MemoryHistoryDB.loadLegacyStateBackup();
+            } catch (error) {
+                ErrorHandler.showUserError('备份读取失败: ' + error.message);
+                return;
+            }
+            if (!state) {
+                ErrorHandler.showUserError('当前没有迁移前备份；可使用“导出任务”保存现有成果。');
+                return;
+            }
+            state = structuredClone(state);
+            state.settings = withoutCredentials(state.settings);
+        } else {
+            state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
+            state.originalFileName = AppState.file.current?.name || null;
+        }
         const timeString = new Date()
             .toLocaleString('zh-CN', {
                 year: 'numeric',
@@ -73,7 +89,7 @@ export function createTaskStateService(deps = {}) {
             .replace(/,/g, '-');
 
         const baseName = getExportBaseName('任务状态');
-        const fileName = `${baseName}-任务状态-${timeString}.json`;
+        const fileName = `${baseName}-${options.legacyBackup === true ? '迁移前备份' : '任务状态'}-${timeString}.json`;
 
         const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -82,8 +98,8 @@ export function createTaskStateService(deps = {}) {
         a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
-        const processedCount = AppState.memory.queue.filter((m) => m.processed).length;
-        ErrorHandler.showUserSuccess(`任务状态已导出！已处理: ${processedCount}/${AppState.memory.queue.length}`);
+        const processedCount = state.memoryQueue.filter((m) => m.processed).length;
+        ErrorHandler.showUserSuccess(`任务状态已导出！已处理: ${processedCount}/${state.memoryQueue.length}`);
     }
 
     function assertCanRestore() {

@@ -345,10 +345,11 @@ function buildFileUploadSectionHtml() {
     <div class="ttw-section">
         <div class="ttw-section-header">
             <span>📄 文件上传</span>
-            <div style="display:flex;gap:8px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button id="ttw-import-json" class="ttw-btn-small" title="导入已有世界书JSON进行合并">📥 合并世界书</button>
                 <button id="ttw-import-task" class="ttw-btn-small">📥 导入任务</button>
                 <button id="ttw-export-task" class="ttw-btn-small">📤 导出任务</button>
+                <button id="ttw-export-legacy" class="ttw-btn-small" title="导出升级前保留的旧检查点">迁移前备份</button>
             </div>
         </div>
         <div class="ttw-section-content">
