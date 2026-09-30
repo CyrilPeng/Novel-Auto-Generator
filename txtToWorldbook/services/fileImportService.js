@@ -1,3 +1,4 @@
+import { ensureChunkIdentities } from '../core/chunkIdentity.js';
 export function createFileImportService(deps = {}) {
     const {
         AppState,
@@ -235,6 +236,7 @@ export function createFileImportService(deps = {}) {
             }
         }
 
+        ensureChunkIdentities(AppState.memory.queue);
         AppState.memory.queue.forEach((memory, index) => {
             memory.title = `记忆${index + 1}`;
         });

@@ -92,6 +92,20 @@ describe('MemoryHistoryDB', () => {
         expect(await testDB.db.getRollResults(0)).toEqual([]);
     });
 
+    it('loads rolls by stable chunk identity after reordering and isolates files', async () => {
+        testDB.AppState.memory.queue = [
+            { title: '同名', content: 'a' },
+            { title: '同名', content: 'b' },
+        ];
+        await testDB.db.saveRollResult(0, { text: 'a' });
+        await testDB.db.saveRollResult(1, { text: 'b' });
+        testDB.AppState.memory.queue.reverse();
+        expect((await testDB.db.getRollResults(0))[0].result).toEqual({ text: 'b' });
+        expect((await testDB.db.getRollResults(1))[0].result).toEqual({ text: 'a' });
+        testDB.AppState.file.hash = 'another-file';
+        expect(await testDB.db.getRollResults(0)).toEqual([]);
+    });
+
     describe('openDB', () => {
         it('首次打开数据库成功', async () => {
             const db2 = createTestDB();
@@ -231,7 +245,8 @@ describe('MemoryHistoryDB', () => {
             const state = await testDB.db.loadState();
             expect(state).toBeTruthy();
             expect(state.processedIndex).toBe(5);
-            expect(state.memoryQueue).toEqual([{ title: '章节A' }]);
+            expect(state.memoryQueue).toEqual(testDB.AppState.memory.queue);
+            expect(state.memoryQueue[0]).toMatchObject({ title: '章节A', id: expect.any(String) });
             expect(state.generatedWorldbook['角色']['张三']).toBeDefined();
         });
 

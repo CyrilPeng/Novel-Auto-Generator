@@ -440,7 +440,7 @@ ${'='.repeat(50)}
                     return;
                 }
                 recovery.consume();
-                const splitResult = splitMemoryIntoTwo(index);
+                const splitResult = splitMemoryIntoTwo(index, { allowDuringRun: true });
                 if (splitResult) {
                     updateMemoryQueueUI();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
@@ -486,7 +486,7 @@ ${'='.repeat(50)}
                     return;
                 }
                 recovery.consume();
-                const splitResult = splitMemoryIntoTwo(index);
+                const splitResult = splitMemoryIntoTwo(index, { allowDuringRun: true });
                 if (splitResult) {
                     updateMemoryQueueUI();
                     await guardAwait(guard, MemoryHistoryDB.saveState(index));
@@ -617,7 +617,7 @@ ${'='.repeat(50)}
                     }
                     if (tokenLimitIndices.length > 0) {
                         for (const idx of tokenLimitIndices.sort((a, b) => b - a)) {
-                            splitMemoryIntoTwo(idx);
+                            splitMemoryIntoTwo(idx, { allowDuringRun: true });
                         }
                         updateMemoryQueueUI();
                         for (let i = 0; i < AppState.memory.queue.length; i++) {
@@ -642,7 +642,8 @@ ${'='.repeat(50)}
                         );
                         if (AppState.processing.isStopped) break;
                         batchWorldbookSummary = buildWorldbookSummary(AppState.worldbook.generated);
-                        for (const idx of tokenLimitIndices.sort((a, b) => b - a)) splitMemoryIntoTwo(idx);
+                        for (const idx of tokenLimitIndices.sort((a, b) => b - a))
+                            splitMemoryIntoTwo(idx, { allowDuringRun: true });
                         for (let j = i; j < batchEnd && j < AppState.memory.queue.length && guard.canDispatch(); j++) {
                             if (!AppState.memory.queue[j].processed || AppState.memory.queue[j].failed)
                                 await guardAwait(guard, processMemoryChunk(j));

@@ -1,4 +1,5 @@
-﻿export function createMemoryHistoryDB(AppState, _Logger) {
+import { ensureChunkIdentities } from '../core/chunkIdentity.js';
+export function createMemoryHistoryDB(AppState, _Logger) {
     // ========== 写操作并发队列 ==========
     // 保护 saveHistory 等复合读-改-写操作的原子性
     // 同一 memoryTitle 的写操作被序列化，避免并行处理时互相覆盖
@@ -369,6 +370,7 @@
          * @returns {Promise<any>}
          */
         async saveState(processedIndex) {
+            ensureChunkIdentities(AppState.memory.queue);
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.stateStoreName], 'readwrite');
@@ -438,6 +440,9 @@
          * @returns {Promise<any>}
          */
         async saveRollResult(memoryIndex, result) {
+            ensureChunkIdentities(AppState.memory.queue);
+            const chunkId = AppState.memory.queue[memoryIndex]?.id;
+            const fileHash = AppState.file.hash;
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.rollStoreName], 'readwrite');
@@ -448,6 +453,8 @@
                 const store = transaction.objectStore(this.rollStoreName);
                 const record = {
                     memoryIndex,
+                    chunkId,
+                    fileHash,
                     result: JSON.parse(JSON.stringify(result)),
                     timestamp: Date.now(),
                 };
@@ -468,9 +475,16 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.rollStoreName], 'readonly');
                 const store = transaction.objectStore(this.rollStoreName);
-                const index = store.index('memoryIndex');
-                const request = index.getAll(memoryIndex);
-                request.onsuccess = () => resolve(request.result || []);
+                const chunkId = AppState.memory.queue[memoryIndex]?.id;
+                const request = store.getAll();
+                request.onsuccess = () =>
+                    resolve(
+                        (request.result || []).filter(
+                            (record) =>
+                                (record.fileHash == null || record.fileHash === AppState.file.hash) &&
+                                (record.chunkId ? record.chunkId === chunkId : record.memoryIndex === memoryIndex),
+                        ),
+                    );
                 request.onerror = () => reject(request.error);
             });
         },
@@ -498,6 +512,9 @@
 
         // ========== 新增：条目级别Roll历史方法 ==========
         async saveEntryRollResult(category, entryName, memoryIndex, result, customPrompt = '') {
+            ensureChunkIdentities(AppState.memory.queue);
+            const chunkId = AppState.memory.queue[memoryIndex]?.id;
+            const fileHash = AppState.file.hash;
             const db = await this.openDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([this.entryRollStoreName], 'readwrite');
@@ -512,6 +529,8 @@
                     category,
                     entryName,
                     memoryIndex,
+                    chunkId,
+                    fileHash,
                     result: JSON.parse(JSON.stringify(result)),
                     customPrompt,
                     timestamp: Date.now(),

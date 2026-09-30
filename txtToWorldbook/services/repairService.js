@@ -113,7 +113,7 @@ ${generateDynamicJsonTemplate()}
                     return;
                 }
 
-                const splitResult = splitMemoryIntoTwo(memoryIndex);
+                const splitResult = splitMemoryIntoTwo(memoryIndex, { allowDuringRun: true });
                 if (splitResult) {
                     updateMemoryQueueUI();
                     await guardAwait(

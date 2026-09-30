@@ -1,3 +1,4 @@
+import { assignSplitIdentities } from '../core/chunkIdentity.js';
 export function createMemoryQueueActionsService(deps = {}) {
     const { AppState, ErrorHandler, confirmAction, updateMemoryQueueUI, updateStartButtonState } = deps;
 
@@ -25,7 +26,11 @@ export function createMemoryQueueActionsService(deps = {}) {
         }
     }
 
-    function splitMemoryIntoTwo(memoryIndex) {
+    function splitMemoryIntoTwo(memoryIndex, options = {}) {
+        if (AppState.processing?.run?.pending && !options.allowDuringRun) {
+            ErrorHandler.showUserError('请先暂停任务并等待保存完成后再拆分章节');
+            return null;
+        }
         const memory = AppState.memory.queue[memoryIndex];
         if (!memory) return null;
 
@@ -43,6 +48,7 @@ export function createMemoryQueueActionsService(deps = {}) {
             }
         }
 
+        if (splitPoint <= 0 || splitPoint >= content.length) return null;
         const content1 = content.substring(0, splitPoint);
         const content2 = content.substring(splitPoint);
         const originalTitle = memory.title;
@@ -75,11 +81,16 @@ export function createMemoryQueueActionsService(deps = {}) {
             failed: false,
             failedError: null,
         };
+        assignSplitIdentities(memory, memory1, memory2);
         AppState.memory.queue.splice(memoryIndex, 1, memory1, memory2);
         return { part1: memory1, part2: memory2 };
     }
 
     async function deleteMemoryAt(index) {
+        if (AppState.processing?.run?.pending) {
+            ErrorHandler.showUserError('请先暂停并等待保存完成');
+            return;
+        }
         if (index < 0 || index >= AppState.memory.queue.length) return;
         const memory = AppState.memory.queue[index];
 
@@ -87,6 +98,7 @@ export function createMemoryQueueActionsService(deps = {}) {
             return;
         }
 
+        if (AppState.processing?.run?.pending) return;
         AppState.memory.queue.splice(index, 1);
         normalizeUntitledMemories();
         syncQueueSelectionAfterDelete(index);
@@ -95,6 +107,10 @@ export function createMemoryQueueActionsService(deps = {}) {
     }
 
     async function deleteSelectedMemories() {
+        if (AppState.processing?.run?.pending) {
+            ErrorHandler.showUserError('请先暂停并等待保存完成');
+            return;
+        }
         if (AppState.ui.selectedIndices.size === 0) {
             ErrorHandler.showUserError('请先选择要删除的章节');
             return;
@@ -112,6 +128,7 @@ export function createMemoryQueueActionsService(deps = {}) {
             return;
         }
 
+        if (AppState.processing?.run?.pending) return;
         const sortedIndices = [...AppState.ui.selectedIndices].sort((a, b) => b - a);
         for (const index of sortedIndices) {
             AppState.memory.queue.splice(index, 1);
