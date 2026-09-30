@@ -70,5 +70,34 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
         tail = next.catch(() => {});
         return next;
     }
-    return { commit };
+    function commitWorldbook(nextWorldbook, guard, title = '世界书编辑') {
+        const next = structuredClone(nextWorldbook);
+        const execute = async () => {
+            guard.assert();
+            const previous = structuredClone(AppState.worldbook.generated);
+            const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
+            state.generatedWorldbook = next;
+            const saved = await repository.commit({
+                taskId: state.task.id,
+                expectedRevision: state.task.revision,
+                commitId: newIdentity('edit'),
+                worldbookEdit: true,
+                memoryIndex: -1,
+                memoryTitle: title,
+                chunkId: 'worldbook',
+                previousWorldbook: previous,
+                changedEntries: worldbookService.findChangedEntries(previous, next),
+                state,
+                signal: guard.signal,
+            });
+            guard.assert();
+            for (const key of Object.keys(AppState.worldbook.generated)) delete AppState.worldbook.generated[key];
+            Object.assign(AppState.worldbook.generated, saved.state.generatedWorldbook);
+            AppState.task = saved.state.task;
+        };
+        const job = tail.then(execute, execute);
+        tail = job.catch(() => {});
+        return job;
+    }
+    return { commit, commitWorldbook };
 }

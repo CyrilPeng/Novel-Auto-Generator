@@ -83,14 +83,15 @@ export function createChunkRepository(database) {
                                     },
                                 };
                                 states.put(state);
-                                tx.objectStore(database.rollStoreName).add({
-                                    memoryIndex: data.memoryIndex,
-                                    chunkId: data.chunkId,
-                                    fileHash: state.fileHash,
-                                    result: data.result,
-                                    timestamp: Date.now(),
-                                    commitId: data.commitId,
-                                });
+                                if (!data.worldbookEdit)
+                                    tx.objectStore(database.rollStoreName).add({
+                                        memoryIndex: data.memoryIndex,
+                                        chunkId: data.chunkId,
+                                        fileHash: state.fileHash,
+                                        result: data.result,
+                                        timestamp: Date.now(),
+                                        commitId: data.commitId,
+                                    });
                                 if (data.changedEntries.length)
                                     tx.objectStore(database.storeName).add({
                                         memoryIndex: data.memoryIndex,

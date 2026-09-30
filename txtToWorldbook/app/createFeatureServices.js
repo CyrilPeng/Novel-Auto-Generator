@@ -98,6 +98,7 @@ export function createFeatureServices(deps = {}) {
     });
 
     const importMergeService = createImportMergeService({
+        commitWorldbook: deps.commitWorldbook,
         AppState,
         Logger,
         ErrorHandler,

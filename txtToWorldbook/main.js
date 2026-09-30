@@ -745,6 +745,7 @@ import { ensureModalStyles } from './ui/modalStyles.js';
         importExportService,
         mergeWorkflowService,
     } = createFeatureServices({
+        commitWorldbook: (...args) => chunkCommitService.commitWorldbook(...args),
         ...createFeatureServicesConfig({
             AppState,
             MemoryHistoryDB,

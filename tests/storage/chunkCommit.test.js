@@ -99,3 +99,12 @@ it('serializes two entry rerolls without losing either patch and saves entry his
     expect(await db.getEntryRollResults('角色', '乙')).toHaveLength(1);
     expect((await db.loadState()).task.revision).toBe(2);
 });
+
+it('commits whole-worldbook edits with history and no fictitious chapter roll', async () => {
+    const { AppState, db, service, guard } = setup();
+    await service.commitWorldbook(result, guard, '导入测试');
+    expect(AppState.worldbook.generated).toEqual(result);
+    expect((await db.loadState()).generatedWorldbook).toEqual(result);
+    expect(await db.getAllHistory()).toHaveLength(1);
+    expect(await db.getRollResults(0)).toHaveLength(0);
+});

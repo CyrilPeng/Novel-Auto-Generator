@@ -1,3 +1,5 @@
+import { mergeImportedWorldbook } from '../../src/worldbook/commands/importWorldbook.js';
+import { executeRun } from '../core/runContext.js';
 import { convertSTFormatToInternal } from '../../src/worldbook/formats/sillyTavern.js';
 export function createImportMergeService(deps = {}) {
     const {
@@ -10,11 +12,9 @@ export function createImportMergeService(deps = {}) {
         showProgressSection,
         setProcessingStatus,
         updateProgress,
-        updateStreamContent,
         getProcessingStatus,
         showResultSection,
         updateWorldbookPreview,
-        Semaphore,
         callAPI,
         getLanguagePrefix,
         parseAIResponse,
@@ -190,145 +190,63 @@ export function createImportMergeService(deps = {}) {
     </div>`;
     }
 
-    async function mergeEntriesWithAI(entryA, entryB, customPrompt) {
+    async function mergeEntriesWithAI(entryA, entryB, customPrompt, signal) {
         const promptTemplate = customPrompt?.trim() || defaultMergePrompt;
         const prompt = promptTemplate
             .replace('{ENTRY_A}', JSON.stringify(entryA, null, 2))
             .replace('{ENTRY_B}', JSON.stringify(entryB, null, 2));
 
-        const response = await callAPI(getLanguagePrefix() + prompt);
+        const response = await callAPI(getLanguagePrefix() + prompt, null, { signal });
 
-        try {
-            const result = parseAIResponse(response);
-            if (result['关键词'] || result['内容']) {
-                return {
-                    关键词: result['关键词'] || [...(entryA['关键词'] || []), ...(entryB['关键词'] || [])],
-                    内容: result['内容'] || entryA['内容'] || entryB['内容'],
-                };
-            }
-            return result;
-        } catch {
-            return {
-                关键词: [...new Set([...(entryA['关键词'] || []), ...(entryB['关键词'] || [])])],
-                内容: `${entryA['内容'] || ''}\n\n---\n\n${entryB['内容'] || ''}`,
-            };
-        }
+        const result = parseAIResponse(response);
+        if (!result || typeof result['内容'] !== 'string' || !result['内容'].trim())
+            throw new Error('AI 合并结果缺少有效正文，保留原条目');
+        return {
+            ...entryA,
+            关键词: result['关键词'] || [...(entryA['关键词'] || []), ...(entryB['关键词'] || [])],
+            内容: result['内容'],
+        };
     }
 
     async function performMergeInternal(
-        importedWorldbook,
+        _importedWorldbook,
         duplicates,
         newEntries,
         mergeMode,
         customPrompt,
         concurrency = 3,
     ) {
-        showProgressSection(true);
-        setProcessingStatus('running');
-        updateProgress(0, '开始处理...');
-        updateStreamContent('', true);
-        updateStreamContent(`🔀 开始处理世界书\n处理模式: ${mergeMode}\n并发数: ${concurrency}\n${'='.repeat(50)}\n`);
-
-        const resultWorldbook = JSON.parse(JSON.stringify(importedWorldbook));
-
-        for (const item of newEntries) {
-            if (!AppState.worldbook.generated[item.category]) AppState.worldbook.generated[item.category] = {};
-            AppState.worldbook.generated[item.category][item.name] = item.entry;
-        }
-        updateStreamContent(`✅ 添加了 ${newEntries.length} 个新条目到现有世界书\n`);
-
-        if (duplicates.length > 0) {
-            updateStreamContent(`\n🔀 处理 ${duplicates.length} 个重复条目...\n`);
-
-            if (mergeMode === 'ai') {
-                const semaphore = new Semaphore(concurrency);
-                let completed = 0;
-                let failed = 0;
-
-                const processOne = async (dup, index) => {
-                    if (AppState.processing.isStopped) return;
-
-                    await semaphore.acquire();
-                    if (AppState.processing.isStopped) {
-                        semaphore.release();
-                        return;
-                    }
-
-                    try {
-                        updateStreamContent(`📝 [${index + 1}/${duplicates.length}] ${dup.category} - ${dup.name}\n`);
-                        const mergedEntry = await mergeEntriesWithAI(dup.existing, dup.imported, customPrompt);
-
-                        if (!resultWorldbook[dup.category]) resultWorldbook[dup.category] = {};
-                        resultWorldbook[dup.category][dup.name] = mergedEntry;
-
-                        completed++;
-                        updateProgress(
-                            (completed / duplicates.length) * 100,
-                            `AI合并中 (${completed}/${duplicates.length})`,
-                        );
-                        updateStreamContent('   ✅ 完成\n');
-                    } catch (error) {
-                        failed++;
-                        updateStreamContent(`   ❌ 失败: ${error.message}\n`);
-                    } finally {
-                        semaphore.release();
-                    }
-                };
-
-                await Promise.allSettled(duplicates.map((dup, i) => processOne(dup, i)));
-                updateStreamContent(`\n📦 AI合并完成: 成功 ${completed}, 失败 ${failed}\n`);
-            } else {
-                for (let i = 0; i < duplicates.length; i++) {
-                    if (AppState.processing.isStopped) break;
-
-                    const dup = duplicates[i];
-                    updateProgress(((i + 1) / duplicates.length) * 100, `处理: [${dup.category}] ${dup.name}`);
-                    updateStreamContent(`\n📝 [${i + 1}/${duplicates.length}] ${dup.category} - ${dup.name}\n`);
-
-                    if (!resultWorldbook[dup.category]) resultWorldbook[dup.category] = {};
-
-                    if (mergeMode === 'replace') {
-                        resultWorldbook[dup.category][dup.name] = dup.imported;
-                        updateStreamContent('   ✅ 使用后者覆盖\n');
-                    } else if (mergeMode === 'keep') {
-                        updateStreamContent('   ⏭️ 保留前者\n');
-                    } else if (mergeMode === 'rename') {
-                        let newName = `${dup.name}_2`;
-                        let counter = 2;
-                        while (resultWorldbook[dup.category][newName]) {
-                            counter++;
-                            newName = `${dup.name}_${counter}`;
-                        }
-                        resultWorldbook[dup.category][newName] = dup.imported;
-                        updateStreamContent(`   ✅ 添加为: ${newName}\n`);
-                    } else if (mergeMode === 'append') {
-                        const existing = resultWorldbook[dup.category][dup.name] || dup.existing;
-                        const keywords = [
-                            ...new Set([...(existing['关键词'] || []), ...(dup.imported['关键词'] || [])]),
-                        ];
-                        const content = (existing['内容'] || '') + '\n\n---\n\n' + (dup.imported['内容'] || '');
-                        resultWorldbook[dup.category][dup.name] = { 关键词: keywords, 内容: content };
-                        updateStreamContent('   ✅ 内容已叠加\n');
-                    }
-                }
-            }
-        }
-
-        for (const category in resultWorldbook) {
-            if (!AppState.worldbook.generated[category]) AppState.worldbook.generated[category] = {};
-            for (const name in resultWorldbook[category]) {
-                AppState.worldbook.generated[category][name] = resultWorldbook[category][name];
-            }
-        }
-
-        AppState.persistent.pendingImport = null;
-        updateProgress(100, '处理完成！');
-        updateStreamContent(`\n${'='.repeat(50)}\n✅ 处理完成！\n`);
-        if (getProcessingStatus() !== 'stopped') setProcessingStatus('idle');
-
-        showResultSection(true);
-        updateWorldbookPreview();
-        ErrorHandler.showUserSuccess('世界书导入完成！');
+        return executeRun(
+            AppState.processing,
+            'import',
+            async (guard) => {
+                showProgressSection(true);
+                setProcessingStatus('running');
+                updateProgress(0, '开始合并...');
+                const next = await mergeImportedWorldbook({
+                    existing: AppState.worldbook.generated,
+                    newEntries,
+                    duplicates,
+                    mode: mergeMode,
+                    concurrency,
+                    signal: guard.signal,
+                    mergeWithAI: (a, b, signal) => mergeEntriesWithAI(a, b, customPrompt, signal),
+                    onProgress: (done, total) => updateProgress((done / total) * 100, '正在合并...'),
+                });
+                guard.assert();
+                if (!deps.commitWorldbook) throw new Error('缺少世界书提交仓储');
+                await deps.commitWorldbook(next, guard, '导入世界书');
+                AppState.persistent.pendingImport = null;
+                showResultSection(true);
+                updateWorldbookPreview();
+                ErrorHandler.showUserSuccess('世界书导入完成！');
+            },
+            {
+                finish: () => {
+                    if (getProcessingStatus() !== 'stopped') setProcessingStatus('idle');
+                },
+            },
+        ).catch((error) => ErrorHandler.showUserError('导入失败: ' + error.message));
     }
 
     function bindMergeModalEvents(modal, newEntries, allDuplicates, importedWorldbook) {
