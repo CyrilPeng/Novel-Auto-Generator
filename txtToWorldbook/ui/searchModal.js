@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 import { escapeHtmlForDisplay, highlightEscapedText } from './renderer.js';
 
 export function createSearchModal(deps = {}) {
@@ -16,12 +17,14 @@ export function createSearchModal(deps = {}) {
 
     async function batchRerollSearchResults(modal, memoryIndices, customPrompt) {
         const useParallel = AppState.config.parallel.enabled && memoryIndices.length > 1;
-        const parallelHint = useParallel ? `\n\n将使用并行处理（${AppState.config.parallel.concurrency}并发）` : '';
+        const parallelHint = useParallel
+            ? t('searchView.parallelHint', { count: AppState.config.parallel.concurrency })
+            : '';
 
         if (
             !(await confirmAction(
-                `确定要重Roll ${memoryIndices.length} 个章节吗？\n\n这将使用当前附加提示词重新生成这些章节的世界书条目。${parallelHint}`,
-                { title: '批量重 Roll 章节' },
+                t('searchView.batchRerollConfirm', { count: memoryIndices.length, parallel: parallelHint }),
+                { title: t('searchView.batchRerollTitle') },
             ))
         ) {
             return { success: 0, fail: 0, stopped: false };
@@ -30,18 +33,18 @@ export function createSearchModal(deps = {}) {
         const btn = modal.querySelector('#ttw-reroll-all-found');
         const stopBtn = document.createElement('button');
         stopBtn.className = 'ttw-btn ttw-btn-secondary';
-        stopBtn.textContent = '⏸️ 停止';
+        stopBtn.textContent = t('common.stop');
         stopBtn.style.marginLeft = '8px';
         btn.parentNode.insertBefore(stopBtn, btn.nextSibling);
 
         btn.disabled = true;
-        btn.textContent = '🔄 重Roll中...';
+        btn.textContent = t('searchView.rerolling');
 
         let stopped = false;
         stopBtn.addEventListener('click', () => {
             stopped = true;
             handleStopProcessing();
-            stopBtn.textContent = '已停止';
+            stopBtn.textContent = t('searchView.stopped');
             stopBtn.disabled = true;
         });
 
@@ -50,12 +53,12 @@ export function createSearchModal(deps = {}) {
             customPrompt,
             useParallel,
             onStep: ({ completed, total }) => {
-                btn.textContent = `🔄 进度: ${completed}/${total}`;
+                btn.textContent = t('searchView.progress', { done: completed, total });
             },
         });
 
         btn.disabled = false;
-        btn.textContent = `🎲 重Roll所有匹配章节 (${memoryIndices.length}章)`;
+        btn.textContent = t('searchView.rerollAllFound', { count: memoryIndices.length });
         stopBtn.remove();
 
         return { success: result.success, fail: result.fail, stopped: stopped || result.stopped };
@@ -78,8 +81,10 @@ export function createSearchModal(deps = {}) {
                     const content = entry['内容'] || '';
                     const matches = [];
 
-                    if (entryName.includes(keyword)) matches.push({ field: '条目名', text: entryName });
-                    if (keywordsStr.includes(keyword)) matches.push({ field: '关键词', text: keywordsStr });
+                    if (entryName.includes(keyword))
+                        matches.push({ field: t('searchView.fieldName'), text: entryName });
+                    if (keywordsStr.includes(keyword))
+                        matches.push({ field: t('searchView.fieldKeywords'), text: keywordsStr });
                     if (content.includes(keyword)) {
                         const idx = content.indexOf(keyword);
                         const start = Math.max(0, idx - 30);
@@ -88,7 +93,7 @@ export function createSearchModal(deps = {}) {
                             (start > 0 ? '...' : '') +
                             content.substring(start, end) +
                             (end < content.length ? '...' : '');
-                        matches.push({ field: '内容', text: context });
+                        matches.push({ field: t('searchView.fieldContent'), text: context });
                     }
 
                     if (matches.length > 0) {
@@ -122,15 +127,16 @@ export function createSearchModal(deps = {}) {
                 const content = entry['内容'] || '';
                 const matches = [];
 
-                if (entryName.includes(keyword)) matches.push({ field: '条目名', text: entryName });
-                if (keywordsStr.includes(keyword)) matches.push({ field: '关键词', text: keywordsStr });
+                if (entryName.includes(keyword)) matches.push({ field: t('searchView.fieldName'), text: entryName });
+                if (keywordsStr.includes(keyword))
+                    matches.push({ field: t('searchView.fieldKeywords'), text: keywordsStr });
                 if (content.includes(keyword)) {
                     const idx = content.indexOf(keyword);
                     const start = Math.max(0, idx - 30);
                     const end = Math.min(content.length, idx + keyword.length + 30);
                     const context =
                         (start > 0 ? '...' : '') + content.substring(start, end) + (end < content.length ? '...' : '');
-                    matches.push({ field: '内容', text: context });
+                    matches.push({ field: t('searchView.fieldContent'), text: context });
                 }
 
                 if (matches.length > 0) {
@@ -148,7 +154,7 @@ export function createSearchModal(deps = {}) {
         resultsContainer.dataset.memoryIndices = JSON.stringify([...memoryIndicesSet]);
 
         if (results.length === 0) {
-            resultsContainer.innerHTML = `<div style="text-align:center;color:#888;padding:20px;">未找到包含"${escapeHtmlForDisplay(keyword)}"的内容</div>`;
+            resultsContainer.innerHTML = `<div style="text-align:center;color:#888;padding:20px;">${t('searchView.notFound', { keyword: escapeHtmlForDisplay(keyword) })}</div>`;
             return { results: [], memoryIndices: memoryIndicesSet };
         }
 
@@ -157,14 +163,17 @@ export function createSearchModal(deps = {}) {
             return highlightEscapedText(text, keyword);
         };
 
-        let html = `<div style="margin-bottom:12px;font-size:13px;color:#27ae60;">找到 ${results.length} 个匹配项，涉及 ${memoryIndicesSet.size} 个章节</div>`;
+        let html = `<div style="margin-bottom:12px;font-size:13px;color:#27ae60;">${t('searchView.foundSummary', { results: results.length, memories: memoryIndicesSet.size })}</div>`;
         for (let idx = 0; idx < results.length; idx++) {
             const result = results[idx];
-            const memoryLabel = result.memoryIndex >= 0 ? `记忆${result.memoryIndex + 1}` : '默认/导入';
+            const memoryLabel =
+                result.memoryIndex >= 0
+                    ? t('searchView.memoryLabel', { index: result.memoryIndex + 1 })
+                    : t('searchView.defaultImported');
             const memoryColor = result.memoryIndex >= 0 ? '#3498db' : '#888';
             const sourceTag = result.fromMemoryResult
-                ? '<span style="font-size:9px;color:#27ae60;margin-left:4px;">✓ 当前结果</span>'
-                : '<span style="font-size:9px;color:#f39c12;margin-left:4px;">⚠ 合并数据</span>';
+                ? `<span style="font-size:9px;color:#27ae60;margin-left:4px;">${t('searchView.currentResult')}</span>`
+                : `<span style="font-size:9px;color:#f39c12;margin-left:4px;">${t('searchView.mergedData')}</span>`;
             const matchTexts = result.matches
                 .slice(0, 2)
                 .map((m) => {
@@ -193,10 +202,7 @@ export function createSearchModal(deps = {}) {
                 '</span>';
             html += sourceTag;
             if (result.memoryIndex >= 0)
-                html +=
-                    '<button class="ttw-btn-tiny ttw-reroll-single" data-memory-idx="' +
-                    result.memoryIndex +
-                    '" title="重Roll此章节">🎲</button>';
+                html += `<button class="ttw-btn-tiny ttw-reroll-single" data-memory-idx="${result.memoryIndex}" title="${t('searchView.rerollThisChapter')}">🎲</button>`;
             html += '</div></div>';
             html += '<div style="font-size:12px;color:#ccc;">' + matchTexts + '</div>';
             html += '</div>';
@@ -208,17 +214,22 @@ export function createSearchModal(deps = {}) {
                 e.stopPropagation();
                 const memoryIndex = parseInt(this.dataset.memoryIdx, 10);
                 const customPrompt = modal.querySelector('#ttw-search-suffix-prompt')?.value || '';
-                if (!(await confirmAction(`确定要重Roll 第${memoryIndex + 1}章吗？`, { title: '单章重 Roll' }))) return;
+                if (
+                    !(await confirmAction(t('searchView.rerollChapterConfirm', { index: memoryIndex + 1 }), {
+                        title: t('searchView.rerollChapterTitle'),
+                    }))
+                )
+                    return;
 
                 this.disabled = true;
                 this.textContent = '🔄';
                 try {
                     await handleRerollMemory(memoryIndex, customPrompt);
-                    ErrorHandler.showUserSuccess(`第${memoryIndex + 1}章 重Roll完成`);
+                    ErrorHandler.showUserSuccess(t('searchView.rerollChapterSuccess', { index: memoryIndex + 1 }));
                     modal.querySelector('#ttw-do-search')?.click();
                     updateWorldbookPreview();
                 } catch (error) {
-                    ErrorHandler.showUserError(`重Roll失败: ${error.message}`);
+                    ErrorHandler.showUserError(t('searchView.rerollFailed', { message: error.message }));
                 } finally {
                     this.disabled = false;
                     this.textContent = '🎲';
@@ -237,7 +248,7 @@ export function createSearchModal(deps = {}) {
                 const result = results[idx];
                 if (!result) {
                     Logger.error('Search', '找不到result! idx=' + idx + ' results长度=' + results.length);
-                    ErrorHandler.showUserError('调试：找不到result，idx=' + idx + '，results长度=' + results.length);
+                    ErrorHandler.showUserError(t('searchView.debugNoResult', { idx, length: results.length }));
                     return;
                 }
 
@@ -255,18 +266,18 @@ export function createSearchModal(deps = {}) {
                     const mem = AppState.memory.queue[result.memoryIndex];
                     if (mem && mem.result && mem.result[result.category]) {
                         entry = mem.result[result.category][result.entryName];
-                        dataSource = `来自: 记忆${result.memoryIndex + 1} 的当前处理结果`;
+                        dataSource = t('searchView.sourceMemory', { index: result.memoryIndex + 1 });
                     }
                 }
                 if (!entry) {
                     entry = AppState.worldbook.generated[result.category]?.[result.entryName];
-                    dataSource = '来自: 合并后的世界书';
+                    dataSource = t('searchView.sourceMerged');
                 }
 
                 const memoryLabel =
                     result.memoryIndex >= 0
-                        ? `记忆${result.memoryIndex + 1} (第${result.memoryIndex + 1}章)`
-                        : '默认/导入条目';
+                        ? t('searchView.memoryWithChapter', { index: result.memoryIndex + 1 })
+                        : t('searchView.defaultImportedEntries');
 
                 let contentHtml = '';
                 if (entry) {
@@ -276,24 +287,24 @@ export function createSearchModal(deps = {}) {
                     contentHtml = `
                         <div style="margin-bottom:8px;font-size:11px;color:#888;padding:6px;background:rgba(0,0,0,0.2);border-radius:4px;">${escapeHtmlForDisplay(dataSource)}</div>
                         <div style="margin-bottom:12px;padding:10px;background:rgba(155,89,182,0.1);border-radius:6px;">
-                            <div style="color:#9b59b6;font-size:11px;margin-bottom:4px;">📝 关键词</div>
+                            <div style="color:#9b59b6;font-size:11px;margin-bottom:4px;">${t('searchView.keywords')}</div>
                             <div style="font-size:12px;">${highlightKw(keywordsStr)}</div>
                         </div>
                         <div style="padding:10px;background:rgba(39,174,96,0.1);border-radius:6px;max-height:250px;overflow-y:auto;">
-                            <div style="color:#27ae60;font-size:11px;margin-bottom:4px;">📄 内容</div>
+                            <div style="color:#27ae60;font-size:11px;margin-bottom:4px;">${t('searchView.content')}</div>
                             <div style="font-size:12px;line-height:1.6;">${escapedContent}</div>
                         </div>
                     `;
                 } else {
-                    contentHtml = '<div style="color:#888;text-align:center;padding:20px;">无法获取条目详情</div>';
+                    contentHtml = `<div style="color:#888;text-align:center;padding:20px;">${t('searchView.detailUnavailable')}</div>`;
                 }
 
                 detailDiv.innerHTML = `
                     <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #444;">
                         <h4 style="color:#e67e22;margin:0 0 8px;font-size:14px;">[${escapeHtmlForDisplay(result.category)}] ${escapeHtmlForDisplay(result.entryName)}</h4>
                         <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <span style="font-size:12px;color:#3498db;">📍 来源: ${memoryLabel}</span>
-                            ${result.memoryIndex >= 0 ? `<button class="ttw-btn ttw-btn-small ttw-btn-warning" id="ttw-detail-reroll-btn" data-mem-idx="${result.memoryIndex}">🎲 重Roll此章节</button>` : ''}
+                            <span style="font-size:12px;color:#3498db;">${t('searchView.sourceLabel', { source: memoryLabel })}</span>
+                            ${result.memoryIndex >= 0 ? `<button class="ttw-btn ttw-btn-small ttw-btn-warning" id="ttw-detail-reroll-btn" data-mem-idx="${result.memoryIndex}">${t('searchView.rerollThisChapter')}</button>` : ''}
                         </div>
                     </div>
                     ${contentHtml}
@@ -304,21 +315,25 @@ export function createSearchModal(deps = {}) {
                     detailRerollBtn.onclick = async function () {
                         const memIdx = parseInt(this.dataset.memIdx, 10);
                         const customPrompt = modal.querySelector('#ttw-search-suffix-prompt')?.value || '';
-                        if (!(await confirmAction(`确定要重Roll 第${memIdx + 1}章吗？`, { title: '单章重 Roll' })))
+                        if (
+                            !(await confirmAction(t('searchView.rerollChapterConfirm', { index: memIdx + 1 }), {
+                                title: t('searchView.rerollChapterTitle'),
+                            }))
+                        )
                             return;
 
                         this.disabled = true;
-                        this.textContent = '🔄 重Roll中...';
+                        this.textContent = t('searchView.rerolling');
                         try {
                             await handleRerollMemory(memIdx, customPrompt);
-                            ErrorHandler.showUserSuccess(`第${memIdx + 1}章 重Roll完成`);
+                            ErrorHandler.showUserSuccess(t('searchView.rerollChapterSuccess', { index: memIdx + 1 }));
                             modal.querySelector('#ttw-do-search')?.click();
                             updateWorldbookPreview();
                         } catch (error) {
-                            ErrorHandler.showUserError(`重Roll失败: ${error.message}`);
+                            ErrorHandler.showUserError(t('searchView.rerollFailed', { message: error.message }));
                         } finally {
                             this.disabled = false;
-                            this.textContent = '🎲 重Roll此章节';
+                            this.textContent = t('searchView.rerollThisChapter');
                         }
                     };
                 }
@@ -334,32 +349,32 @@ export function createSearchModal(deps = {}) {
 
         const bodyHtml = `
 		<div style="margin-bottom:16px;">
-			<label style="display:block;margin-bottom:8px;font-size:13px;">输入要查找的字符（如乱码字符 U+FFFD）</label>
-			<input type="text" id="ttw-search-input" class="ttw-input" placeholder="输入要查找的内容..." value="${AppState.ui.searchKeyword}">
+			<label style="display:block;margin-bottom:8px;font-size:13px;">${t('searchView.inputLabel')}</label>
+			<input type="text" id="ttw-search-input" class="ttw-input" placeholder="${t('searchView.inputPlaceholder')}" value="${AppState.ui.searchKeyword}">
 		</div>
 		<div style="margin-bottom:16px;padding:12px;background:rgba(155,89,182,0.15);border-radius:8px;">
-			<label style="display:block;margin-bottom:8px;font-size:13px;color:#9b59b6;font-weight:bold;">📝 重Roll时附加的提示词（插入到发送给AI的文本最后）</label>
-			<textarea id="ttw-search-suffix-prompt" rows="2" class="ttw-textarea-small" placeholder="例如：请特别注意提取XX信息，修复乱码内容...">${AppState.settings.customSuffixPrompt || ''}</textarea>
+			<label style="display:block;margin-bottom:8px;font-size:13px;color:#9b59b6;font-weight:bold;">${t('searchView.suffixLabel')}</label>
+			<textarea id="ttw-search-suffix-prompt" rows="2" class="ttw-textarea-small" placeholder="${t('searchView.suffixPlaceholder')}">${AppState.settings.customSuffixPrompt || ''}</textarea>
 		</div>
 		<div class="ttw-search-results-container" style="display:flex;gap:12px;height:400px;">
 			<div id="ttw-search-results" style="flex:1;max-height:400px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:6px;padding:12px;">
-				<div style="text-align:center;color:#888;">输入关键词后点击"查找"</div>
+				<div style="text-align:center;color:#888;">${t('searchView.enterKeyword')}</div>
 			</div>
 			<div id="ttw-search-detail" style="flex:1;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:6px;padding:12px;display:none;">
-				<div style="text-align:center;color:#888;padding:20px;">👈 点击左侧条目查看详情</div>
+				<div style="text-align:center;color:#888;padding:20px;">${t('searchView.clickEntry')}</div>
 			</div>
 		</div>
 	`;
         const footerHtml = `
-		<button class="ttw-btn" id="ttw-clear-search">清除高亮</button>
-		<button class="ttw-btn ttw-btn-primary" id="ttw-do-search">🔍 查找</button>
-		<button class="ttw-btn ttw-btn-warning" id="ttw-reroll-all-found" style="display:none;">🎲 重Roll所有匹配章节</button>
-		<button class="ttw-btn" id="ttw-close-search">关闭</button>
+		<button class="ttw-btn" id="ttw-clear-search">${t('searchView.clearHighlight')}</button>
+		<button class="ttw-btn ttw-btn-primary" id="ttw-do-search">${t('searchView.search')}</button>
+		<button class="ttw-btn ttw-btn-warning" id="ttw-reroll-all-found" style="display:none;">${t('searchView.rerollAll')}</button>
+		<button class="ttw-btn" id="ttw-close-search">${t('searchView.close')}</button>
 	`;
 
         const modal = ModalFactory.create({
             id: 'ttw-search-modal',
-            title: '🔍 查找内容',
+            title: t('searchView.title'),
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '900px',
@@ -374,7 +389,7 @@ export function createSearchModal(deps = {}) {
         modal.querySelector('#ttw-do-search').addEventListener('click', () => {
             const keyword = modal.querySelector('#ttw-search-input').value;
             if (!keyword) {
-                ErrorHandler.showUserError('请输入要查找的内容');
+                ErrorHandler.showUserError(t('searchView.enterSearch'));
                 return;
             }
 
@@ -384,7 +399,7 @@ export function createSearchModal(deps = {}) {
 
             if (results && results.memoryIndices && results.memoryIndices.size > 0) {
                 rerollAllBtn.style.display = 'inline-block';
-                rerollAllBtn.textContent = `🎲 重Roll所有匹配章节 (${results.memoryIndices.size}章)`;
+                rerollAllBtn.textContent = t('searchView.rerollAllFound', { count: results.memoryIndices.size });
             } else {
                 rerollAllBtn.style.display = 'none';
             }
@@ -396,20 +411,20 @@ export function createSearchModal(deps = {}) {
             const resultsContainer = modal.querySelector('#ttw-search-results');
             const memoryIndicesAttr = resultsContainer.dataset.memoryIndices;
             if (!memoryIndicesAttr) {
-                ErrorHandler.showUserError('请先进行查找');
+                ErrorHandler.showUserError(t('searchView.searchFirst'));
                 return;
             }
 
             const memoryIndices = JSON.parse(memoryIndicesAttr);
             if (memoryIndices.length === 0) {
-                ErrorHandler.showUserError('没有找到匹配的章节');
+                ErrorHandler.showUserError(t('searchView.noMatchingChapters'));
                 return;
             }
 
             const customPrompt = modal.querySelector('#ttw-search-suffix-prompt').value;
             const { success, fail, stopped } = await batchRerollSearchResults(modal, memoryIndices, customPrompt);
             ErrorHandler.showUserSuccess(
-                `批量重Roll完成！\n成功: ${success}\n失败: ${fail}${stopped ? '\n(已手动停止)' : ''}`,
+                t('searchView.batchComplete', { success, fail, stopped: stopped ? t('searchView.stoppedSuffix') : '' }),
             );
             modal.querySelector('#ttw-do-search').click();
             updateWorldbookPreview();
@@ -419,7 +434,7 @@ export function createSearchModal(deps = {}) {
             AppState.ui.searchKeyword = '';
             modal.querySelector('#ttw-search-input').value = '';
             modal.querySelector('#ttw-search-results').innerHTML =
-                '<div style="text-align:center;color:#888;">已清除高亮</div>';
+                `<div style="text-align:center;color:#888;">${t('searchView.cleared')}</div>`;
             modal.querySelector('#ttw-search-detail').style.display = 'none';
             modal.querySelector('#ttw-reroll-all-found').style.display = 'none';
             updateWorldbookPreview();

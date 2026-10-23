@@ -1,4 +1,6 @@
-﻿export function createWorldbookView(deps = {}) {
+import { t } from '../core/i18n.js';
+
+export function createWorldbookView(deps = {}) {
     const {
         ListRenderer,
         naturalSortEntryNames,
@@ -29,7 +31,7 @@
 
     function formatWorldbookAsCards(worldbook) {
         if (!worldbook || Object.keys(worldbook).length === 0) {
-            return '<div style="text-align:center;color:#888;padding:20px;">暂无世界书数据</div>';
+            return `<div style="text-align:center;color:#888;padding:20px;">${t('worldbookView.empty')}</div>`;
         }
 
         let html = '';
@@ -53,7 +55,7 @@
             const isGreen = getCategoryLightState(category);
             const lightClass = isGreen ? 'green' : 'blue';
             const lightIcon = isGreen ? '🟢' : '🔵';
-            const lightTitle = isGreen ? '绿灯(触发式) - 点击切换为蓝灯' : '蓝灯(常驻) - 点击切换为绿灯';
+            const lightTitle = isGreen ? t('worldbookView.greenLight') : t('worldbookView.blueLight');
 
             let categoryTokens = 0;
             const entriesHtml = entryNames
@@ -152,7 +154,7 @@
 
             btn.className = `ttw-light-toggle ${newState ? 'green' : 'blue'}`;
             btn.textContent = newState ? '🟢' : '🔵';
-            btn.title = newState ? '绿灯(触发式) - 点击切换为蓝灯' : '蓝灯(常驻) - 点击切换为绿灯';
+            btn.title = newState ? t('worldbookView.greenLight') : t('worldbookView.blueLight');
         });
     }
 
@@ -208,27 +210,27 @@
         if (existingModal) existingModal.remove();
 
         const worldbookToShow = getWorldbookToShow();
-        const titleSuffix = isVolumeMode() ? ` (${getVolumeCount()}卷合并)` : '';
+        const titleSuffix = isVolumeMode() ? t('worldbookView.volumeSuffix', { count: getVolumeCount() }) : '';
 
         const bodyHtml = `
             <div style="padding:10px 15px;background:#1a1a1a;border-bottom:1px solid #444;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="font-size:12px;color:#888;">🔍 Token阈值:</span>
+                <span style="font-size:12px;color:#888;">${t('worldbookView.tokenThreshold')}</span>
                 <input type="number" id="ttw-token-threshold-input" value="${getTokenThreshold()}" min="0" step="50" style="width:80px;padding:4px 8px;border-radius:4px;border:1px solid #555;background:#2d2d2d;color:#fff;font-size:12px;" placeholder="0">
-                <button class="ttw-btn ttw-btn-small" id="ttw-apply-threshold">应用</button>
-                <span style="font-size:11px;color:#666;">低于此值的条目将红色高亮（0=关闭）</span>
+                <button class="ttw-btn ttw-btn-small" id="ttw-apply-threshold">${t('worldbookView.apply')}</button>
+                <span style="font-size:11px;color:#666;">${t('worldbookView.belowThreshold')}</span>
             </div>
             <div class="ttw-modal-body" id="ttw-worldbook-view-body">${formatWorldbookAsCards(worldbookToShow)}</div>
         `;
 
         const footerHtml = `
-            <div style="font-size:11px;color:#888;margin-right:auto;">💡 点击⚙️配置，点击🎯单独重Roll条目，点击灯图标切换蓝/绿灯</div>
-            <button class="ttw-btn ttw-btn-secondary" id="ttw-manual-merge-btn" title="手动选择条目进行合并（AI识别不到时使用）" style="white-space:nowrap;flex-shrink:0;">✋ 手动合并</button>
-            <button class="ttw-btn ttw-btn-secondary" id="ttw-batch-reroll-btn" title="批量选择多个条目重Roll" style="white-space:nowrap;flex-shrink:0;">🎲 批量重Roll</button>
+            <div style="font-size:11px;color:#888;margin-right:auto;">${t('worldbookView.hint')}</div>
+            <button class="ttw-btn ttw-btn-secondary" id="ttw-manual-merge-btn" title="手动选择条目进行合并（AI识别不到时使用）" style="white-space:nowrap;flex-shrink:0;">${t('worldbookView.manualMerge')}</button>
+            <button class="ttw-btn ttw-btn-secondary" id="ttw-batch-reroll-btn" title="批量选择多个条目重Roll" style="white-space:nowrap;flex-shrink:0;">${t('worldbookView.batchReroll')}</button>
         `;
 
         const viewModal = ModalFactory.create({
             id: 'ttw-worldbook-view-modal',
-            title: `📖 世界书详细视图${titleSuffix}`,
+            title: `${t('worldbookView.title')}${titleSuffix}`,
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '900px',
@@ -266,7 +268,7 @@
 
     function getWorldbookPreviewHeaderInfo() {
         if (isVolumeMode() && getVolumeCount() > 0) {
-            return `<div style="margin-bottom:12px;padding:10px;background:rgba(155,89,182,0.2);border-radius:6px;font-size:12px;color:#bb86fc;">📦 分卷模式 | 共 ${getVolumeCount()} 卷</div>`;
+            return `<div style="margin-bottom:12px;padding:10px;background:rgba(155,89,182,0.2);border-radius:6px;font-size:12px;color:#bb86fc;">${t('worldbookView.volumeHeader', { count: getVolumeCount() })}</div>`;
         }
         return '';
     }
