@@ -17,6 +17,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     let requests = 0;
+    let lastRequestBody = null;
     let holdResponses = process.env.ST_PAUSE === '1';
     const releases = [];
     page.on('pageerror', (error) => {
@@ -31,6 +32,7 @@ try {
         const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' };
         if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
         requests++;
+        lastRequestBody = route.request().postDataJSON();
         if (requests > 1 && holdResponses) await new Promise((resolve) => releases.push(resolve));
         const content = JSON.stringify({ 角色: { 张三: { 关键词: ['张三'], 内容: '张三是一位旅行者。' } } });
         const chunks = [{ choices: [{ delta: { content } }] }, { choices: [{ delta: {}, finish_reason: 'stop' }] }];
@@ -64,6 +66,11 @@ try {
     await page.locator('#ttw-api-endpoint').fill('http://127.0.0.1:18080/v1');
     await page.locator('#ttw-api-model').fill('fixture-model');
     await page.locator('#ttw-api-model').blur();
+    await page.evaluate(() => {
+        const input = document.getElementById('ttw-extra-system-prompt');
+        input.value = 'QA 附加系统指令';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     const mode = process.env.ST_PROCESS_MODE || 'independent';
     await page.locator('#ttw-parallel-enabled').setChecked(mode !== 'serial');
     if (mode !== 'serial') await page.locator('#ttw-parallel-mode').selectOption(mode);
@@ -133,6 +140,7 @@ try {
     }));
     assert.equal(before.worldbook.角色.张三.内容, '张三是一位旅行者。');
     assert.ok(before.queue.every((chunk) => chunk.processed && chunk.id));
+    assert.ok(JSON.stringify(lastRequestBody).includes('QA 附加系统指令'), 'Extra system prompt reaches the model');
     for (const selector of ['#ttw-export-st', '#ttw-export-json']) {
         const pending = page.waitForEvent('download');
         await page.locator(selector).click();
@@ -253,6 +261,7 @@ try {
                 'nested-modal-escape',
                 'mobile-layout',
                 'export-st-and-card',
+                'extra-system-prompt',
                 ...(process.env.ST_PAUSE === '1' ? ['cross-page-writer-refusal'] : []),
                 ...(process.env.ST_EDIT === '1'
                     ? ['replace-clean-reload', 'history-rollback', 'import-completed-reload']
