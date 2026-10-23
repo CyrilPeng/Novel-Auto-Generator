@@ -396,7 +396,11 @@ txtToWorldbook/
 │   └── runtime.js                   # 运行时信号量等
 ├── infra/                           # 基础设施层
 │   ├── apiCaller.js                 # API 调用封装（重试、限流、超时）
-│   ├── memoryHistoryDB.js           # IndexedDB 仓储 facade
+│   ├── memoryHistoryDB.js           # IndexedDB 连接与仓储 facade
+│   ├── catalogRepository.js         # 分类、文件哈希、导出时间
+│   ├── stateRepository.js           # 当前检查点
+│   ├── historyRepository.js         # 变更历史与回退
+│   ├── rollRepository.js            # 章节/条目 Roll 历史
 │   ├── worldbookDatabase.js         # 数据库版本与建表迁移
 │   ├── modalFactory.js              # 模态框创建/销毁
 │   └── eventDelegate.js             # 事件委托
@@ -424,6 +428,7 @@ txtToWorldbook/
 └── app/                             # 应用组装层
     ├── createApp.js                 # AppState 与存储上下文
     ├── createWorldbookApp.js        # 组合根：核心、功能、Shell 与公开 API
+    ├── createWorldbookHelpers.js    # 流/调试、分类灯与条目配置辅助
     ├── createCoreServices.js        # 核心服务工厂
     ├── createFeatureServices.js     # 功能服务与视图组合
     ├── createShellRuntime.js        # Shell 运行时
