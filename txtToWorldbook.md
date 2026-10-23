@@ -427,7 +427,8 @@ txtToWorldbook/
 │   └── ...                          # 其他 UI 组件
 └── app/                             # 应用组装层
     ├── createApp.js                 # AppState 与存储上下文
-    ├── createWorldbookApp.js        # 组合根：核心、功能、Shell 与公开 API
+    ├── createWorldbookApp.js        # 组合根：功能、Shell 与公开 API
+    ├── createWorldbookCore.js       # 核心服务、处理/重 Roll/修复装配
     ├── createWorldbookHelpers.js    # 流/调试、分类灯与条目配置辅助
     ├── createCoreServices.js        # 核心服务工厂
     ├── createFeatureServices.js     # 功能服务与视图组合
