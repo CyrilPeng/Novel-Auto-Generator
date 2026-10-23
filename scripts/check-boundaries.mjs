@@ -19,6 +19,9 @@ const all = [
     ...files(path.join(root, 'src')),
     ...files(path.join(root, 'txtToWorldbook')),
 ];
+// UI-coupled adapters now live in txtToWorldbook/ui; no service exceptions remain.
+const DOM_SERVICE_ALLOWLIST = new Set();
+const DOM_IDENTIFIERS = new Set(['document', 'window', 'jQuery', 'ModalFactory']);
 const graph = new Map();
 for (const file of all) {
     const relative = path.relative(root, file).replaceAll('\\', '/');
@@ -49,9 +52,11 @@ for (const file of all) {
             }
         }
         if (
-            /^src\/worldbook\/(commands|entries|processing|formats)\//.test(relative) &&
+            (/^src\/worldbook\/(commands|entries|processing|formats)\//.test(relative) ||
+                relative.startsWith('txtToWorldbook/services/')) &&
             ts.isIdentifier(node) &&
-            ['document', 'window', 'jQuery', 'ModalFactory'].includes(node.text)
+            DOM_IDENTIFIERS.has(node.text) &&
+            !DOM_SERVICE_ALLOWLIST.has(relative)
         )
             throw new Error(`${relative}: UI dependency ${node.text}`);
         ts.forEachChild(node, visit);
@@ -70,6 +75,8 @@ function walk(file, chain = []) {
     visited.add(file);
 }
 for (const file of all) walk(file);
+const mainLines = fs.readFileSync(path.join(root, 'txtToWorldbook/main.js'), 'utf8').split('\n').length;
+assert.ok(mainLines <= 200, `txtToWorldbook/main.js: ${mainLines} lines exceeds the 200-line budget`);
 console.log(
-    `Checked ${all.length} runtime modules: imports, host isolation, DOM-free worldbook commands and cycles passed.`,
+    `Checked ${all.length} runtime modules: imports, host isolation, DOM-free worldbook commands and cycles passed; main.js ${mainLines} lines.`,
 );

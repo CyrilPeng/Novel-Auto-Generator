@@ -37,10 +37,14 @@ jobs:
               run: npm run format:check
 
             - name: Check types and module boundaries
-              run: npm run typecheck && npm run check:boundaries
+              run: npm run typecheck && npm run check:boundaries && npm run check:versions
 
             - name: Run tests
               run: npm test
+
+            - name: Check core coverage thresholds
+              if: matrix.node-version == 22
+              run: npm run test:coverage
 
     verify:
         name: Verify
