@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 import { escapeHtmlForDisplay, escapeAttrForDisplay } from './renderer.js';
 
 export function createDefaultEntriesView(deps = {}) {
@@ -13,8 +14,7 @@ export function createDefaultEntriesView(deps = {}) {
         if (!container) return;
 
         if (AppState.persistent.defaultEntries.length === 0) {
-            container.innerHTML =
-                '<div style="text-align:center;color:#888;padding:10px;font-size:11px;">暂无默认条目，点击"添加"按钮创建</div>';
+            container.innerHTML = `<div style="text-align:center;color:#888;padding:10px;font-size:11px;">${t('configView.defaultEntries.empty')}</div>`;
             return;
         }
 
@@ -23,14 +23,14 @@ export function createDefaultEntriesView(deps = {}) {
                 (entry, index) => `
             <div class="ttw-default-entry-item">
                 <div class="ttw-default-entry-header">
-                    <span class="ttw-default-entry-title">[${ListRenderer.escapeHtml(entry.category || '未分类')}] ${ListRenderer.escapeHtml(entry.name || '未命名')}</span>
+                    <span class="ttw-default-entry-title">[${ListRenderer.escapeHtml(entry.category || t('configView.defaultEntries.uncategorized'))}] ${ListRenderer.escapeHtml(entry.name || t('configView.defaultEntries.untitled'))}</span>
                     <div class="ttw-default-entry-actions">
-                        <button class="ttw-btn-tiny ttw-edit-default-entry" data-index="${index}" title="编辑">✏️</button>
-                        <button class="ttw-btn-tiny ttw-delete-default-entry" data-index="${index}" title="删除">🗑️</button>
+                        <button class="ttw-btn-tiny ttw-edit-default-entry" data-index="${index}" title="${t('configView.defaultEntries.edit')}">✏️</button>
+                        <button class="ttw-btn-tiny ttw-delete-default-entry" data-index="${index}" title="${t('configView.defaultEntries.delete')}">🗑️</button>
                     </div>
                 </div>
                 <div class="ttw-default-entry-info">
-                    <span style="color:#9b59b6;">关键词:</span> ${ListRenderer.escapeHtml((entry.keywords || []).join(', ') || '无')}
+                    <span style="color:#9b59b6;">${t('configView.defaultEntries.keywords')}</span> ${ListRenderer.escapeHtml((entry.keywords || []).join(', ') || t('configView.defaultEntries.none'))}
                 </div>
             </div>
         `,
@@ -48,8 +48,8 @@ export function createDefaultEntriesView(deps = {}) {
             EventDelegate.on(container, '.ttw-delete-default-entry', 'click', async (e, btn) => {
                 const index = parseInt(btn.dataset.index, 10);
                 const confirmed = await ModalFactory.confirm({
-                    title: '删除默认条目',
-                    message: '确定删除此默认条目吗？',
+                    title: t('configView.defaultEntries.deleteTitle'),
+                    message: t('configView.defaultEntries.deleteMessage'),
                     danger: true,
                 });
                 if (confirmed) {
@@ -82,49 +82,49 @@ export function createDefaultEntriesView(deps = {}) {
 
         const body = `
                 <div class="ttw-form-group">
-                    <label>分类 *</label>
+                    <label>${t('configView.defaultEntries.categoryLabel')}</label>
                     <input type="text" id="ttw-default-entry-category" value="${escapeAttrForDisplay(entry.category)}" placeholder="如：角色、地点、系统" class="ttw-input">
                 </div>
                 <div class="ttw-form-group">
-                    <label>条目名称 *</label>
+                    <label>${t('configView.defaultEntries.nameLabel')}</label>
                     <input type="text" id="ttw-default-entry-name" value="${escapeAttrForDisplay(entry.name)}" placeholder="条目名称" class="ttw-input">
                 </div>
                 <div class="ttw-form-group">
-                    <label>关键词（逗号分隔）</label>
+                    <label>${t('configView.defaultEntries.keywordsLabel')}</label>
                     <input type="text" id="ttw-default-entry-keywords" value="${escapeAttrForDisplay((entry.keywords || []).join(', '))}" placeholder="关键词1, 关键词2" class="ttw-input">
                 </div>
                 <div class="ttw-form-group">
-                    <label>内容</label>
+                    <label>${t('configView.defaultEntries.contentLabel')}</label>
                     <textarea id="ttw-default-entry-content" rows="6" class="ttw-textarea-small" placeholder="条目内容...">${escapeHtmlForDisplay(entry.content || '')}</textarea>
                 </div>
                 <div class="ttw-form-group">
-                    <label>位置</label>
+                    <label>${t('configView.defaultEntries.positionLabel')}</label>
                     <select id="ttw-default-entry-position" class="ttw-select">
-                        <option value="0" ${(entry.position || 0) === 0 ? 'selected' : ''}>在角色定义之前</option>
-                        <option value="1" ${entry.position === 1 ? 'selected' : ''}>在角色定义之后</option>
-                        <option value="2" ${entry.position === 2 ? 'selected' : ''}>在作者注释之前</option>
-                        <option value="3" ${entry.position === 3 ? 'selected' : ''}>在作者注释之后</option>
-                        <option value="4" ${entry.position === 4 ? 'selected' : ''}>自定义深度</option>
+                        <option value="0" ${(entry.position || 0) === 0 ? 'selected' : ''}>${t('configView.defaultEntries.beforeChar')}</option>
+                        <option value="1" ${entry.position === 1 ? 'selected' : ''}>${t('configView.defaultEntries.afterChar')}</option>
+                        <option value="2" ${entry.position === 2 ? 'selected' : ''}>${t('configView.defaultEntries.beforeAuthor')}</option>
+                        <option value="3" ${entry.position === 3 ? 'selected' : ''}>${t('configView.defaultEntries.afterAuthor')}</option>
+                        <option value="4" ${entry.position === 4 ? 'selected' : ''}>${t('configView.defaultEntries.customDepth')}</option>
                     </select>
                 </div>
                 <div class="ttw-form-group">
-                    <label>深度（仅位置为"自定义深度"时有效）</label>
+                    <label>${t('configView.defaultEntries.depthLabel')}</label>
                     <input type="number" id="ttw-default-entry-depth" class="ttw-input" value="${entry.depth || 4}" min="0" max="999">
                 </div>
                 <div class="ttw-form-group">
-                    <label>顺序（数字越小越靠前）</label>
+                    <label>${t('configView.defaultEntries.orderLabel')}</label>
                     <input type="number" id="ttw-default-entry-order" class="ttw-input" value="${entry.order || 100}" min="0" max="9999">
                 </div>
         `;
 
         const footer = `
-                <button class="ttw-btn" id="ttw-cancel-default-entry">取消</button>
-                <button class="ttw-btn ttw-btn-primary" id="ttw-save-default-entry">💾 保存</button>
+                <button class="ttw-btn" id="ttw-cancel-default-entry">${t('configView.defaultEntries.cancel')}</button>
+                <button class="ttw-btn ttw-btn-primary" id="ttw-save-default-entry">${t('configView.defaultEntries.save')}</button>
         `;
 
         const modal = ModalFactory.create({
             id: 'ttw-default-entry-modal',
-            title: isEdit ? '✏️ 编辑默认条目' : '➕ 添加默认条目',
+            title: isEdit ? t('configView.defaultEntries.editTitle') : t('configView.defaultEntries.addTitle'),
             body,
             footer,
             width: '550px',
@@ -142,11 +142,11 @@ export function createDefaultEntriesView(deps = {}) {
             const order = parseInt(document.getElementById('ttw-default-entry-order').value, 10) || 100;
 
             if (!category) {
-                ErrorHandler.showUserError('请输入分类');
+                ErrorHandler.showUserError(t('configView.defaultEntries.categoryRequired'));
                 return;
             }
             if (!name) {
-                ErrorHandler.showUserError('请输入条目名称');
+                ErrorHandler.showUserError(t('configView.defaultEntries.nameRequired'));
                 return;
             }
 
