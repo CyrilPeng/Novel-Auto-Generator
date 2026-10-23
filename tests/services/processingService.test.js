@@ -167,33 +167,47 @@ describe('processMemoryChunkIndependent', () => {
     });
 
     it('失败后自动重试至 maxRetries', async () => {
-        const callAPI = vi
-            .fn()
-            .mockRejectedValueOnce(new Error('网络错误'))
-            .mockRejectedValueOnce(new Error('网络错误'))
-            .mockResolvedValue('ok');
-        const mockResult = { 角色: { 张三: { 关键词: ['张三'], 内容: '测试' } } };
-        const { service } = createTestService({
-            queue: [makeMemory('第1章', '内容')],
-            callAPI,
-            parseAIResponse: vi.fn().mockReturnValue(mockResult),
-        });
+        vi.useFakeTimers();
+        try {
+            const callAPI = vi
+                .fn()
+                .mockRejectedValueOnce(new Error('网络错误'))
+                .mockRejectedValueOnce(new Error('网络错误'))
+                .mockResolvedValue('ok');
+            const mockResult = { 角色: { 张三: { 关键词: ['张三'], 内容: '测试' } } };
+            const { service } = createTestService({
+                queue: [makeMemory('第1章', '内容')],
+                callAPI,
+                parseAIResponse: vi.fn().mockReturnValue(mockResult),
+            });
 
-        const result = await service.processMemoryChunkIndependent({ index: 0 });
-        expect(result).toBe(mockResult);
-        expect(callAPI).toHaveBeenCalledTimes(3);
+            const promise = service.processMemoryChunkIndependent({ index: 0 });
+            await vi.runAllTimersAsync();
+            await expect(promise).resolves.toBe(mockResult);
+            expect(callAPI).toHaveBeenCalledTimes(3);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
-    it('达到最大重试次数后抛出错误', { timeout: 15000 }, async () => {
-        const callAPI = vi.fn().mockRejectedValue(new Error('持久网络错误'));
-        const { service } = createTestService({
-            queue: [makeMemory('第1章', '内容')],
-            callAPI,
-        });
+    it('达到最大重试次数后抛出错误', async () => {
+        vi.useFakeTimers();
+        try {
+            const callAPI = vi.fn().mockRejectedValue(new Error('持久网络错误'));
+            const { service } = createTestService({
+                queue: [makeMemory('第1章', '内容')],
+                callAPI,
+            });
 
-        await expect(service.processMemoryChunkIndependent({ index: 0 })).rejects.toThrow('持久网络错误');
-        // 1 次初始 + 3 次重试 = 4 次
-        expect(callAPI).toHaveBeenCalledTimes(4);
+            const promise = service.processMemoryChunkIndependent({ index: 0 });
+            const expectation = expect(promise).rejects.toThrow('持久网络错误');
+            await vi.runAllTimersAsync();
+            await expectation;
+            // 1 次初始 + 3 次重试 = 4 次
+            expect(callAPI).toHaveBeenCalledTimes(4);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('Token 超限时抛出带 TOKEN_LIMIT 前缀的错误', async () => {
