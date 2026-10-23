@@ -1,4 +1,3 @@
-import { createChunkCommitService } from '../../src/storage/chunkCommitService.js';
 import {
     DEFAULT_CHAPTER_REGEX,
     DEFAULT_CATEGORY_LIGHT,
@@ -13,22 +12,18 @@ import {
     defaultSettings,
 } from '../core/constants.js';
 import { Logger } from '../core/logger.js';
-import { estimateTokenCount, naturalSortEntryNames, buildWorldbookSummary } from '../core/utils.js';
+import { estimateTokenCount, naturalSortEntryNames } from '../core/utils.js';
 import { createErrorHandler } from '../core/errorHandler.js';
-import { Semaphore, PerfUtils, TokenCache, isTokenLimitError } from '../core/runtime.js';
+import { Semaphore, PerfUtils, TokenCache } from '../core/runtime.js';
 import { ModalFactory } from '../infra/modalFactory.js';
-import { APICaller } from '../infra/apiCaller.js';
 import { EventDelegate } from '../infra/eventDelegate.js';
 import { createMergeService } from '../services/mergeService.js';
 import { createCategoryPersistenceService } from '../services/categoryPersistenceService.js';
 import { createWorldbookHelpers } from './createWorldbookHelpers.js';
 import { createExportNameService } from '../ui/exportNameService.js';
-import { createMemoryQueueActionsService } from '../services/memoryQueueActionsService.js';
 import { createProcessingStateService } from '../services/processingStateService.js';
-import { createRepairService } from '../../src/worldbook/commands/repair.js';
-import { createWorldbookRuntimeService } from '../services/worldbookRuntimeService.js';
 import { createAppContext } from './createApp.js';
-import { createCoreServices } from './createCoreServices.js';
+import { createWorldbookCore } from './createWorldbookCore.js';
 import { createPublicApi } from './publicApi.js';
 import { createShellRuntimeConfig } from './createShellRuntimeConfig.js';
 import { createFeatureServices } from './createFeatureServices.js';
@@ -197,236 +192,73 @@ export function createWorldbookApp() {
         saveSettings: (...args) => saveCurrentSettings(...args),
     });
 
-    const coreServices = createCoreServices({
-        promptDeps: {
-            AppState,
-            getEnabledCategories,
-            generateDynamicJsonTemplate,
-            defaultWorldbookPrompt,
-            defaultPlotPrompt,
-            defaultStylePrompt,
-        },
-        parserDeps: {
-            AppState,
-            debugLog,
-            getEnabledCategoryNames,
-        },
-        apiDeps: {
-            AppState,
-            Logger,
-            APICaller,
-            updateStreamContent,
-            debugLog,
-            messagesToString: (...args) => coreServices.promptService.messagesToString(...args),
-            convertToGeminiContents: (...args) => coreServices.promptService.convertToGeminiContents(...args),
-            applyMessageChain: (...args) => coreServices.promptService.applyMessageChain(...args),
-        },
-        worldbookDeps: {
-            getIncrementalMode: () => AppState.processing.incrementalMode,
-            saveHistory: (...args) => MemoryHistoryDB.saveHistory(...args),
-            debugLog,
-            _getWorldbook: () => AppState.worldbook.generated,
-        },
-        tokenMetricsDeps: {
-            tokenCacheGet: (text) => TokenCache.get(text),
-        },
-        exportFormatDeps: {
-            AppState,
-            naturalSortEntryNames,
-            getCategoryLightState,
-            getCategoryAutoIncrement,
-            getCategoryBaseOrder,
-            getEntryConfig,
-        },
-        processingDeps: ({ apiService, parserService }) => ({
-            commitMemoryResult: (...args) => chunkCommitService.commit(...args),
-            AppState,
-            MemoryHistoryDB,
-            Semaphore,
-            updateMemoryQueueUI,
-            updateProgress,
-            updateStreamContent,
-            debugLog,
-            callAPI: apiService.callAPI,
-            isTokenLimitError,
-            parseAIResponse: parserService.parseAIResponse,
-            postProcessResultWithChapterIndex,
-            mergeWorldbookDataWithHistory,
-            getChapterForcePrompt,
-            getLanguagePrefix,
-            buildSystemPrompt,
-            getPreviousMemoryContext,
-            getEnabledCategories,
-            splitMemoryIntoTwo,
-            handleStartNewVolume,
-            showProgressSection,
-            updateStopButtonVisibility,
-            updateVolumeIndicator,
-            updateStartButtonState,
-            showResultSection,
-            updateWorldbookPreview: () => worldbookView.updateWorldbookPreview(),
-            applyDefaultWorldbookEntries,
-            ErrorHandler,
-            handleRepairMemoryWithSplit,
-            setProcessingStatus,
-            getProcessingStatus,
-            buildWorldbookSummary,
-            estimateTokenCount,
-            setupAutoSave: () => taskStateService.setupAutoSave(),
-            clearAutoSave: () => taskStateService.clearAutoSave(),
-            quickDuplicateScan: (wb) => mergeWorkflowService.quickDuplicateScan(wb),
-        }),
-        rerollDeps: ({ apiService, parserService }) => ({
-            commitMemoryResult: (...args) => chunkCommitService.commit(...args),
-            AppState,
-            MemoryHistoryDB,
-            updateStopButtonVisibility,
-            updateStreamContent,
-            updateMemoryQueueUI,
-            processMemoryChunkIndependent,
-            mergeWorldbookDataWithHistory,
-            updateWorldbookPreview: () => worldbookView.updateWorldbookPreview(),
-            setProcessingStatus,
-            getProcessingStatus,
-            callAPI: apiService.callAPI,
-            parseAIResponse: parserService.parseAIResponse,
-            getChapterForcePrompt,
-            getLanguagePrefix,
-            getPreviousMemoryContext,
-            Semaphore,
-            updateProgress,
-            showProgressSection,
-        }),
-        rerollModalsDeps: ({ parserService }) => ({
-            AppState,
-            ModalFactory,
-            MemoryHistoryDB,
-            ListRenderer,
-            Logger,
-            ErrorHandler,
-            confirmAction,
-            parseAIResponse: parserService.parseAIResponse,
-            rebuildWorldbookFromMemories: (...args) => rebuildWorldbookFromMemories(...args),
-            updateMemoryQueueUI: (...args) => updateMemoryQueueUI(...args),
-            findEntrySourceMemories: (...args) => findEntrySourceMemories(...args),
-            handleRerollMemory: (...args) => handleRerollMemory(...args),
-            handleRerollSingleEntry: (...args) => handleRerollSingleEntry(...args),
-            handleStopProcessing: (...args) => handleStopProcessing(...args),
-            setProcessingStatus: (...args) => setProcessingStatus(...args),
-            getProcessingStatus: (...args) => getProcessingStatus(...args),
-            saveCurrentSettings: (...args) => saveCurrentSettings(...args),
-            getEntryTotalTokens: (...args) => getEntryTotalTokens(...args),
-            updateWorldbookPreview: () => worldbookView.updateWorldbookPreview(),
-        }),
-    });
-    const {
-        promptService,
-        parserService,
-        apiService,
-        worldbookService,
-        tokenMetricsService,
-        exportFormatService,
-        getProcessingService,
-        getRerollService,
-        getRerollModals,
-    } = coreServices;
-    const { buildSystemPrompt, getPreviousMemoryContext, getChapterForcePrompt, getLanguagePrefix } = promptService;
-    const { filterResponseContent, parseAIResponse } = parserService;
-    const { callSillyTavernAPI, callCustomAPI, handleFetchModelList, handleQuickTestModel, callAPI } = apiService;
-    const { mergeWorldbookDataIncremental, mergeWorldbookDataWithHistory, saveWorldbookSnapshot } = worldbookService;
-    const chunkCommitService = createChunkCommitService({ AppState, MemoryHistoryDB, worldbookService });
-    const { convertToSillyTavernFormat } = exportFormatService;
-    getEntryTotalTokens = (entry) => tokenMetricsService.getEntryTotalTokens(entry);
-
-    const worldbookRuntimeService = createWorldbookRuntimeService({
+    const core = createWorldbookCore({
         AppState,
+        MemoryHistoryDB,
         Logger,
+        ErrorHandler,
+        ModalFactory,
+        ListRenderer,
+        defaultWorldbookPrompt,
+        defaultPlotPrompt,
+        defaultStylePrompt,
+        getEnabledCategories,
+        generateDynamicJsonTemplate,
+        getEnabledCategoryNames,
+        debugLog,
         updateStreamContent,
-        mergeWorldbookDataIncremental,
+        getCategoryLightState,
+        getCategoryAutoIncrement,
+        getCategoryBaseOrder,
+        getEntryConfig,
         setEntryConfig,
-        renderVolumeIndicator: ({ currentVolumeIndex, volumeCount }) => {
-            const indicator = document.getElementById('ttw-volume-indicator');
-            if (!indicator) return;
-            indicator.textContent = `当前: 第${currentVolumeIndex + 1}卷 | 已完成: ${volumeCount}卷`;
-            indicator.style.display = 'block';
-        },
+        confirmAction,
+        saveCurrentSettings: (...args) => saveCurrentSettings(...args),
+        updateMemoryQueueUI,
+        updateStopButtonVisibility,
+        updateStartButtonState,
+        updateProgress: (...args) => updateProgress(...args),
+        showProgressSection: (...args) => showProgressSection(...args),
+        showResultSection: (...args) => showResultSection(...args),
+        setProcessingStatus,
+        getProcessingStatus,
+        getWorldbookView: () => worldbookView,
+        getTaskStateService: () => taskStateService,
+        getMergeWorkflowService: () => mergeWorkflowService,
     });
+    getEntryTotalTokens = core.getEntryTotalTokens;
     const {
-        postProcessResultWithChapterIndex,
+        buildSystemPrompt,
+        getChapterForcePrompt,
+        getLanguagePrefix,
+        filterResponseContent,
+        parseAIResponse,
+        callSillyTavernAPI,
+        callCustomAPI,
+        handleFetchModelList,
+        handleQuickTestModel,
+        callAPI,
+        saveWorldbookSnapshot,
+        chunkCommitService,
+        convertToSillyTavernFormat,
         updateVolumeIndicator,
-        handleStartNewVolume,
         getAllVolumesWorldbook,
         rebuildWorldbookFromMemories,
         applyDefaultWorldbookEntries,
-    } = worldbookRuntimeService;
-    const repairService = createRepairService({
-        commitMemoryResult: (...args) => chunkCommitService.commit(...args),
-        AppState,
-        MemoryHistoryDB,
-        updateProgress: (...args) => updateProgress(...args),
-        updateMemoryQueueUI: (...args) => updateMemoryQueueUI(...args),
-        isTokenLimitError,
-        getChapterForcePrompt,
-        getLanguagePrefix,
-        generateDynamicJsonTemplate,
-        getPreviousMemoryContext,
-        callAPI,
-        parseAIResponse,
-        postProcessResultWithChapterIndex,
-        mergeWorldbookDataWithHistory,
-        handleStartNewVolume,
-        splitMemoryIntoTwo: (...args) => splitMemoryIntoTwo(...args),
-        buildWorldbookSummary,
-        estimateTokenCount,
-    });
-    const { handleRepairMemoryWithSplit } = repairService;
-    const memoryQueueActionsService = createMemoryQueueActionsService({
-        AppState,
-        ErrorHandler,
-        confirmAction,
-        updateMemoryQueueUI,
-        updateStartButtonState,
-    });
-    const { splitMemoryIntoTwo, deleteMemoryAt, deleteSelectedMemories } = memoryQueueActionsService;
-
-    // ========== 并行处理 ==========
-    /**
-     * 处理单个记忆块（独立模式，用于并行处理和重Roll）
-     * @param {Object} options - 处理选项
-     * @param {number} options.index - 记忆索引
-     * @param {number} [options.retryCount=0] - 重试次数
-     * @param {string} [options.customPromptSuffix=''] - 自定义提示词后缀
-     * @returns {Promise<Object>} 处理结果
-     */
-    async function processMemoryChunkIndependent(options) {
-        return getProcessingService().processMemoryChunkIndependent(options);
-    }
-
-    function handleStopProcessing() {
-        return getProcessingService().handleStopProcessing();
-    }
-
-    // ========== 主处理流程 ==========
-    async function handleStartProcessing() {
-        return getProcessingService().handleStartProcessing();
-    }
-
-    /**
-     * 修复失败的章节
-     * @returns {Promise<any>}
-     */
-    async function handleRepairFailedMemories() {
-        return getProcessingService().handleRepairFailedMemories();
-    }
-
-    const handleRerollMemory = (index, customPrompt = '') => getRerollService().handleRerollMemory(index, customPrompt);
-    const findEntrySourceMemories = (category, entryName) =>
-        getRerollService().findEntrySourceMemories(category, entryName);
-    const handleRerollSingleEntry = (options) => getRerollService().handleRerollSingleEntry(options);
-    const showRerollEntryModal = (category, entryName, callback) =>
-        getRerollModals().showRerollEntryModal(category, entryName, callback);
-    const showBatchRerollModal = (callback) => getRerollModals().showBatchRerollModal(callback);
-    const showRollHistorySelector = (index) => getRerollModals().showRollHistorySelector(index);
+        deleteMemoryAt,
+        deleteSelectedMemories,
+        handleStopProcessing,
+        handleStartProcessing,
+        handleRepairFailedMemories,
+        handleRerollMemory,
+        findEntrySourceMemories,
+        handleRerollSingleEntry,
+        showRerollEntryModal,
+        showBatchRerollModal,
+        showRollHistorySelector,
+        getProcessingService,
+        getRerollService,
+    } = core;
 
     // ========== 导入JSON合并世界书 ==========
     async function importAndMergeWorldbook() {
