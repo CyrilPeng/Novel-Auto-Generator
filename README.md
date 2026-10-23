@@ -222,7 +222,7 @@ novel-auto-generator/
 # 安装依赖
 npm ci
 
-# 执行完整检查（lint、格式、类型、边界、版本、362 项测试）
+# 执行完整检查（lint、格式、类型、边界、版本、363 项测试）
 npm run verify
 
 # 监听模式（开发时使用）
