@@ -193,8 +193,8 @@ novel-auto-generator/
 ├── txtToWorldbook/
 │   ├── app/ / main.js         # 应用装配与兼容 API
 │   ├── core/ / infra/         # 状态、请求基础设施与数据库
-│   ├── services/              # UI 适配与兼容服务
-│   └── ui/ / styles/          # 视图与独立弹窗样式
+│   ├── services/              # DOM-free 业务服务与兼容入口
+│   └── ui/ / styles/          # UI 适配、视图与独立弹窗样式
 ├── scripts/                   # 边界检查、真实宿主验收、压力测试
 ├── tests/                     # Vitest 单元与集成回归
 └── docs/                      # 方案、验收、发布与回退
@@ -222,11 +222,14 @@ novel-auto-generator/
 # 安装依赖
 npm ci
 
-# 执行完整检查（lint、格式、类型、边界、348 项测试）
+# 执行完整检查（lint、格式、类型、边界、版本、361 项测试）
 npm run verify
 
 # 监听模式（开发时使用）
 npm run test:watch
+
+# 核心存储/命令/生命周期覆盖率门槛
+npm run test:coverage
 
 # 合成数据性能基线（Node + fake-indexeddb）
 npm run benchmark:commit

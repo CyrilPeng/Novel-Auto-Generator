@@ -396,43 +396,38 @@ txtToWorldbook/
 │   └── runtime.js                   # 运行时信号量等
 ├── infra/                           # 基础设施层
 │   ├── apiCaller.js                 # API 调用封装（重试、限流、超时）
-│   ├── memoryHistoryDB.js           # IndexedDB 持久化
+│   ├── memoryHistoryDB.js           # IndexedDB 仓储 facade
+│   ├── worldbookDatabase.js         # 数据库版本与建表迁移
 │   ├── modalFactory.js              # 模态框创建/销毁
 │   └── eventDelegate.js             # 事件委托
-├── services/                        # 业务逻辑层
+├── services/                        # DOM-free 业务逻辑层
 │   ├── apiService.js                # API 调用（酒馆/自定义）
-│   ├── processingService.js         # 核心处理流程（串行/并行）
-│   ├── worldbookService.js          # 世界书数据操作、快照
 │   ├── mergeService.js              # 条目合并、去重扫描
-│   ├── mergeWorkflowService.js      # 合并/整理工作流
+│   ├── mergeWorkflowService.js      # 合并/整理的 AI 编排与事务
 │   ├── promptService.js             # prompt 组装
 │   ├── parserService.js             # AI 响应解析
-│   ├── importExportService.js       # 导入导出（含增量导出）
-│   ├── taskStateService.js          # 任务状态、自动保存
-│   ├── settingsPersistenceService.js# 设置持久化
-│   ├── fileImportService.js         # 文件导入处理
-│   ├── rerollService.js             # 重 Roll 逻辑
-│   ├── repairService.js             # 修复失败记忆
+│   ├── processingStateService.js    # 任务状态派生
 │   ├── tokenMetricsService.js       # Token 计数
-│   └── ...                          # 其他服务
-├── ui/                              # UI 层
+│   └── ...                          # 分类、条目配置等兼容服务
+├── ui/                              # UI 层与 DOM 适配器
 │   ├── settingsPanel.js             # 设置面板 HTML 构建
 │   ├── eventBindings.js             # DOM 事件绑定
-│   ├── modalEventBinder.js          # 模态框事件分发
+│   ├── mergeConsolidateView.js      # 整理条目视图
+│   ├── mergeManualView.js           # 手动合并视图
+│   ├── mergeAliasView.js            # 别名合并视图
+│   ├── fileImportService.js         # 文件导入与渲染适配
+│   ├── taskStateService.js          # 任务恢复与自动保存适配
+│   ├── importExportService.js       # 导入导出下载适配
+│   ├── settingsPersistenceService.js# 设置持久化适配
 │   ├── worldbookView.js             # 世界书浏览器
-│   ├── helpModal.js                 # 帮助弹窗
-│   ├── promptPreviewModal.js        # prompt 预览/编辑
-│   ├── replaceModal.js              # 查找替换
-│   ├── searchModal.js               # 搜索
-│   ├── historyView.js               # 修改历史
 │   └── ...                          # 其他 UI 组件
 └── app/                             # 应用组装层
-    ├── createApp.js                 # 应用创建入口
+    ├── createApp.js                 # AppState 与存储上下文
+    ├── createWorldbookApp.js        # 组合根：核心、功能、Shell 与公开 API
     ├── createCoreServices.js        # 核心服务工厂
-    ├── createFeatureServices.js     # 功能服务工厂
+    ├── createFeatureServices.js     # 功能服务与视图组合
     ├── createShellRuntime.js        # Shell 运行时
     ├── createShellRuntimeConfig.js  # Shell 运行时配置
-    ├── createRuntimeBridges.js      # 运行时桥接
     └── ...                          # 其他组装文件
 ```
 
@@ -441,8 +436,8 @@ txtToWorldbook/
 模块采用**依赖注入（DI）+ 工厂函数**模式：
 
 - 每个服务/UI 组件是一个工厂函数，接收 `deps` 对象
-- `main.js` 是中央组装点，创建所有实例并注入依赖
-- `app/` 目录负责分层组装：核心服务 → 功能服务 → 运行时桥接 → Shell 运行时
+- `main.js` 只负责加载、创建一次应用和挂载公开 API
+- `app/createWorldbookApp.js` 是唯一组合根：核心服务 → 功能服务 → Shell 运行时 → 公开 API
 - 无外部依赖，纯浏览器 JavaScript
 
 ### 数据持久化
