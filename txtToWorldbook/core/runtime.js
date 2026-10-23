@@ -21,7 +21,6 @@ export function isTokenLimitError(errorMsg) {
         /token limit/i,
         /maximum.*tokens/i,
         /20015.*limit/i,
-        /INVALID_ARGUMENT/i,
         /request too large/i,
         /payload too large/i,
         /content.?length.?limit/i,
@@ -31,6 +30,9 @@ export function isTokenLimitError(errorMsg) {
         /too.?(?:long|large).?(?:for|to)/i,
         /string_above_max_length/i,
         /over.?(?:the|token).?limit/i,
+        /input token count/i,
+        /INVALID_ARGUMENT.*(?:token|context|too (?:long|large)|maximum|limit)/i,
+        /上下文.{0,10}(?:超出|超过|上限)/,
     ];
     return patterns.some((pattern) => pattern.test(checkStr));
 }
