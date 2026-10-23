@@ -1,5 +1,6 @@
 import { runConfiguration } from '../../../txtToWorldbook/core/runContext.js';
 import { captureRun, guardAwait, executeRun } from '../../../txtToWorldbook/core/runContext.js';
+import { applyProcessingStatus } from '../../shared/tasks/lifecycle.js';
 export function createRerollService(deps = {}) {
     const {
         AppState,
@@ -28,12 +29,7 @@ export function createRerollService(deps = {}) {
             setProcessingStatus(status);
             return;
         }
-        const next = status || 'idle';
-        AppState.processing.status = next;
-        AppState.processing.isStopped = next === 'stopped';
-        AppState.processing.isRerolling = next === 'rerolling';
-        AppState.processing.isRepairing = next === 'repairing';
-        AppState.processing.isRunning = next === 'running' || next === 'rerolling' || next === 'repairing';
+        applyProcessingStatus(AppState.processing, status);
     };
 
     const currentStatus = () => {

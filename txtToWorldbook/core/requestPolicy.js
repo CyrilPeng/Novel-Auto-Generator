@@ -1,6 +1,8 @@
+// @ts-check
 import { AbortedError, FatalError } from './errors.js';
 
 /** One budget per logical operation, shared across transport and content retries. */
+/** @param {number} [maxAttempts] */
 export function createRequestBudget(maxAttempts = 4) {
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1)
         throw new RangeError('maxAttempts must be a positive integer');
@@ -20,10 +22,12 @@ export function createRequestBudget(maxAttempts = 4) {
     };
 }
 
+/** @param {AbortSignal} [signal] @returns {void} */
 export function throwIfAborted(signal) {
     if (signal?.aborted) throw new AbortedError();
 }
 
+/** @param {number} ms @param {AbortSignal} [signal] @returns {Promise<void>} */
 export function abortableDelay(ms, signal) {
     throwIfAborted(signal);
     return new Promise((resolve, reject) => {
@@ -43,9 +47,10 @@ export function abortableDelay(ms, signal) {
     });
 }
 
+/** @param {string|number|null|undefined} value @param {number} [now] @returns {number|undefined} */
 export function parseRetryAfter(value, now = Date.now()) {
     if (value == null || String(value).trim() === '') return undefined;
     const seconds = Number(value);
-    const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - now;
+    const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(String(value)) - now;
     return Number.isFinite(ms) ? Math.min(30000, Math.max(0, ms)) : undefined;
 }

@@ -2,6 +2,8 @@ import { captureTaskState } from '../../src/storage/taskSchema.js';
 import { FatalError } from '../core/errors.js';
 import { executeRun } from '../core/runContext.js';
 import { newIdentity, ensureChunkIdentities } from '../core/chunkIdentity.js';
+import { clearProcessingStop } from '../../src/shared/tasks/lifecycle.js';
+import { WORLDBOOK_DB_NAME, WORLDBOOK_STORE_NAMES, openWorldbookDatabase } from './worldbookDatabase.js';
 export function createMemoryHistoryDB(AppState, _Logger) {
     // ========== 写操作并发队列 ==========
     // 保护 saveHistory 等复合读-改-写操作的原子性
@@ -21,13 +23,13 @@ export function createMemoryHistoryDB(AppState, _Logger) {
     }
 
     const MemoryHistoryDB = {
-        dbName: 'TxtToWorldbookDB',
-        storeName: 'history',
-        metaStoreName: 'meta',
-        stateStoreName: 'state',
-        rollStoreName: 'rolls',
-        categoriesStoreName: 'categories',
-        entryRollStoreName: 'entryRolls', // 新增：条目级别Roll历史
+        dbName: WORLDBOOK_DB_NAME,
+        storeName: WORLDBOOK_STORE_NAMES.history,
+        metaStoreName: WORLDBOOK_STORE_NAMES.meta,
+        stateStoreName: WORLDBOOK_STORE_NAMES.state,
+        rollStoreName: WORLDBOOK_STORE_NAMES.rolls,
+        categoriesStoreName: WORLDBOOK_STORE_NAMES.categories,
+        entryRollStoreName: WORLDBOOK_STORE_NAMES.entryRolls,
         db: null,
 
         /**
@@ -37,57 +39,8 @@ export function createMemoryHistoryDB(AppState, _Logger) {
          */
         async openDB() {
             if (this.db) return this.db;
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(this.dbName, 7); // 升级版本号
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    let historyStore;
-                    if (!db.objectStoreNames.contains(this.storeName)) {
-                        historyStore = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
-                    } else {
-                        historyStore = request.transaction.objectStore(this.storeName);
-                    }
-                    if (!historyStore.indexNames.contains('timestamp')) {
-                        historyStore.createIndex('timestamp', 'timestamp', { unique: false });
-                    }
-                    if (!historyStore.indexNames.contains('memoryIndex')) {
-                        historyStore.createIndex('memoryIndex', 'memoryIndex', { unique: false });
-                    }
-                    if (!historyStore.indexNames.contains('memoryTitleFileHash')) {
-                        historyStore.createIndex('memoryTitleFileHash', ['memoryTitle', 'fileHash'], { unique: false });
-                    }
-                    if (!db.objectStoreNames.contains(this.metaStoreName)) {
-                        db.createObjectStore(this.metaStoreName, { keyPath: 'key' });
-                    }
-                    if (!db.objectStoreNames.contains(this.stateStoreName)) {
-                        db.createObjectStore(this.stateStoreName, { keyPath: 'key' });
-                    }
-                    if (!db.objectStoreNames.contains(this.rollStoreName)) {
-                        const rollStore = db.createObjectStore(this.rollStoreName, {
-                            keyPath: 'id',
-                            autoIncrement: true,
-                        });
-                        rollStore.createIndex('memoryIndex', 'memoryIndex', { unique: false });
-                    }
-                    if (!db.objectStoreNames.contains(this.categoriesStoreName)) {
-                        db.createObjectStore(this.categoriesStoreName, { keyPath: 'key' });
-                    }
-                    // 新增：条目级别Roll历史存储
-                    if (!db.objectStoreNames.contains(this.entryRollStoreName)) {
-                        const entryRollStore = db.createObjectStore(this.entryRollStoreName, {
-                            keyPath: 'id',
-                            autoIncrement: true,
-                        });
-                        entryRollStore.createIndex('entryKey', 'entryKey', { unique: false }); // category:entryName
-                        entryRollStore.createIndex('timestamp', 'timestamp', { unique: false });
-                    }
-                };
-                request.onsuccess = (event) => {
-                    this.db = event.target.result;
-                    resolve(this.db);
-                };
-                request.onerror = (event) => reject(event.target.error);
-            });
+            this.db = await openWorldbookDatabase(this.dbName);
+            return this.db;
         },
 
         /**
@@ -677,7 +630,7 @@ export function createMemoryHistoryDB(AppState, _Logger) {
          */
         async rollbackToHistory(historyId) {
             return executeRun(AppState.processing, 'rollback', async (guard) => {
-                AppState.processing.isStopped = false;
+                clearProcessingStop(AppState.processing);
                 const history = await this.getHistoryById(historyId);
                 if (!history) throw new Error('找不到指定的历史记录');
                 const state = captureTaskState(AppState, Math.max(0, history.memoryIndex));

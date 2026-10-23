@@ -11,6 +11,7 @@ import {
 } from '../../../txtToWorldbook/core/runContext.js';
 import { isRetryable, isAborted, RetryableError } from '../../../txtToWorldbook/core/errors.js';
 import { createRequestBudget, abortableDelay, throwIfAborted } from '../../../txtToWorldbook/core/requestPolicy.js';
+import { applyProcessingStatus } from '../../shared/tasks/lifecycle.js';
 
 export function createProcessingService(deps = {}) {
     const {
@@ -57,12 +58,7 @@ export function createProcessingService(deps = {}) {
             setProcessingStatus(status);
             return;
         }
-        const next = status || 'idle';
-        AppState.processing.status = next;
-        AppState.processing.isStopped = next === 'stopped';
-        AppState.processing.isRerolling = next === 'rerolling';
-        AppState.processing.isRepairing = next === 'repairing';
-        AppState.processing.isRunning = next === 'running' || next === 'rerolling' || next === 'repairing';
+        applyProcessingStatus(AppState.processing, status);
     };
 
     const currentStatus = () => {

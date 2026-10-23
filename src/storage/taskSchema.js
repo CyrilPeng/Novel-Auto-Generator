@@ -1,7 +1,9 @@
+// @ts-check
 import { runConfiguration } from '../../txtToWorldbook/core/runContext.js';
 import { ensureChunkIdentities, newIdentity } from '../../txtToWorldbook/core/chunkIdentity.js';
 import { UserError } from '../../txtToWorldbook/core/errors.js';
 
+/** @param {any} value */
 function validateTree(value) {
     if (!value || typeof value !== 'object') return;
     for (const key of Object.keys(value)) {
@@ -10,6 +12,7 @@ function validateTree(value) {
     }
 }
 
+/** @param {Record<string, any>} [settings] @returns {Record<string, any>} */
 export function withoutCredentials(settings = {}) {
     const copy = structuredClone(settings);
     for (const key of Object.keys(copy))
@@ -19,7 +22,10 @@ export function withoutCredentials(settings = {}) {
             const url = new URL(copy.customApiEndpoint);
             url.username = '';
             url.password = '';
-            for (const key of [...url.searchParams.keys()])
+            /** @type {string[]} */
+            const queryKeys = [];
+            url.searchParams.forEach((_value, key) => queryKeys.push(key));
+            for (const key of queryKeys)
                 if (/^(key|api_key|apikey|token|access_token|secret)$/i.test(key)) url.searchParams.delete(key);
             copy.customApiEndpoint = url.toString();
         } catch {
@@ -30,7 +36,7 @@ export function withoutCredentials(settings = {}) {
 }
 
 /**
- * @param {object} state
+ * @param {any} state
  * @param {number} processedIndex
  * @param {{clone?: boolean, memoryQueue?: object[], generatedWorldbook?: object, entryOverrides?: object}} [snapshot]
  * `clone: false` reuses the provided detached objects; callers must persist them before mutating again.
@@ -70,6 +76,7 @@ export function captureTaskState(state, processedIndex, snapshot = {}) {
     return snapshot.clone === false ? captured : structuredClone(captured);
 }
 
+/** @param {any} input @param {{fork?: boolean}} [options] @returns {any} */
 export function migrateTaskState(input, { fork = false } = {}) {
     if (!input || typeof input !== 'object' || !Array.isArray(input.memoryQueue))
         throw new UserError('无效的任务状态文件');

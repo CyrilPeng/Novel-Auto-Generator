@@ -1,4 +1,7 @@
+// @ts-check
 let sequence = 0;
+
+/** @param {string} [prefix] @returns {string} */
 export function newIdentity(prefix = 'chunk') {
     return (
         prefix +
@@ -8,6 +11,7 @@ export function newIdentity(prefix = 'chunk') {
     );
 }
 
+/** @param {any[]} queue @returns {any[]} */
 export function ensureChunkIdentities(queue) {
     const seen = new Set();
     for (const chunk of queue) {
@@ -18,6 +22,7 @@ export function ensureChunkIdentities(queue) {
     return queue;
 }
 
+/** @param {any} parent @param {any} first @param {any} second @returns {void} */
 export function assignSplitIdentities(parent, first, second) {
     ensureChunkIdentities([parent]);
     const middle = parent.source.start + first.content.length;

@@ -12,8 +12,14 @@
   },
   "files": [
     "src/novel/recoveryStore.js",
+    "src/shared/tasks/contracts.js",
+    "src/shared/tasks/lifecycle.js",
+    "src/storage/taskSchema.js",
     "src/storage/writerLock.js",
+    "src/worldbook/commands/edit.js",
     "src/worldbook/entries/overrides.js",
-    "src/worldbook/processing/splitText.js"
+    "src/worldbook/processing/splitText.js",
+    "txtToWorldbook/core/chunkIdentity.js",
+    "txtToWorldbook/core/requestPolicy.js"
   ]
 }
