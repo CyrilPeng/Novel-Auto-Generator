@@ -222,16 +222,20 @@ novel-auto-generator/
 # 安装依赖
 npm ci
 
-# 执行完整检查（lint、格式、类型、边界、338 项测试）
+# 执行完整检查（lint、格式、类型、边界、348 项测试）
 npm run verify
 
 # 监听模式（开发时使用）
 npm run test:watch
+
+# 合成数据性能基线（Node + fake-indexeddb）
+npm run benchmark:commit
+npm run benchmark:text
 ```
 
 ### 测试覆盖范围
 
-自动化测试覆盖工具、错误、国际化、差异、响应解析、世界书合并、任务处理、API URL、IndexedDB 和公开 API 契约。实际文件数与用例数以 `npm test` 输出为准。
+自动化测试覆盖工具、错误、国际化、差异、响应解析、世界书合并、任务处理、API URL、IndexedDB、设置面板 DOM 装配与持久化，以及公开 API 契约。实际文件数与用例数以 `npm test` 输出为准。
 
 工程与兼容测试基线见 [B00 基线记录](docs/baseline.md)。自动化测试不能替代真实酒馆、浏览器和恢复流程的手动回归。
 
