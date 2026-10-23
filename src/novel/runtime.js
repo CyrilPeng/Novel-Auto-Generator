@@ -1,16 +1,19 @@
 import { createNovelRecoveryStore } from './recoveryStore.js';
 import { createNovelRunner } from './generation.js';
-import { parseTagInput, extractTagContents, removeTagContents, applyTagFilters } from './tagFilters.js';
+import { parseTagInput, applyTagFilters } from './tagFilters.js';
+import { disposeHelp, showHelp } from './helpModal.js';
 import { defaultSettings } from './defaultSettings.js';
-import { getHelpContent } from './helpContent.js';
 import { createPanelHtml } from './panelTemplate.js';
+import { createNovelPreview } from './preview.js';
+import { createNovelExport } from './export.js';
+import { createNovelUiState } from './uiState.js';
+import { t } from '../../txtToWorldbook/core/i18n.js';
 
 let instance = null;
 export function initNovelUI(host) {
     if (instance) return instance;
     let refreshTimer;
     let disposed = false;
-    let cleanupHelp = null;
     const extensionName = 'novel-auto-generator';
 
     let settings = {};
@@ -23,20 +26,6 @@ export function initNovelUI(host) {
     function log(msg, type = 'info') {
         const p = { info: '📘', success: '✅', warning: '⚠️', error: '❌', debug: '🔍' }[type] || 'ℹ️';
         console.log(`[NovelGen] ${p} ${msg}`);
-    }
-
-    function formatDuration(ms) {
-        if (!ms || ms < 0) return '--:--:--';
-        const s = Math.floor(ms / 1000) % 60,
-            m = Math.floor(ms / 60000) % 60,
-            h = Math.floor(ms / 3600000);
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML.replace(/\n/g, '<br>');
     }
 
     // ============================================
@@ -153,244 +142,15 @@ export function initNovelUI(host) {
     // 帮助弹窗
     // ============================================
 
-    function showHelp(topic) {
-        const helpData = getHelpContent(topic);
-
-        cleanupHelp?.();
-        // 移除已存在的弹窗
-        const existingModal = document.getElementById('nag-help-modal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-
-        // 创建弹窗容器
-        const modalContainer = document.createElement('div');
-        modalContainer.className = 'nag-modal-container';
-        modalContainer.id = 'nag-help-modal';
-        modalContainer.innerHTML = `
-        <div class="nag-modal">
-            <div class="nag-modal-header">
-                <span class="nag-modal-title">${helpData.title}</span>
-                <button class="nag-modal-close" type="button">✕</button>
-            </div>
-            <div class="nag-modal-body">${helpData.content}</div>
-        </div>
-    `;
-
-        // 关闭弹窗函数
-        const closeModal = (e) => {
-            if (e) {
-                e.stopPropagation();
-                e.preventDefault();
-            }
-            modalContainer.remove();
-            document.removeEventListener('keydown', escHandler, true);
-        };
-
-        // ESC 关闭 - 使用捕获阶段，优先处理
-        const escHandler = (e) => {
-            if (e.key === 'Escape') {
-                e.stopPropagation();
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                closeModal();
-            }
-        };
-        cleanupHelp = () => closeModal();
-        document.addEventListener('keydown', escHandler, true);
-
-        // 关闭按钮点击
-        modalContainer.querySelector('.nag-modal-close').addEventListener(
-            'click',
-            (e) => {
-                closeModal(e);
-            },
-            false,
-        );
-
-        // 阻止弹窗内部点击冒泡
-        modalContainer.querySelector('.nag-modal').addEventListener(
-            'click',
-            (e) => {
-                e.stopPropagation();
-            },
-            false,
-        );
-
-        modalContainer.querySelector('.nag-modal').addEventListener(
-            'mousedown',
-            (e) => {
-                e.stopPropagation();
-            },
-            false,
-        );
-
-        modalContainer.querySelector('.nag-modal').addEventListener(
-            'touchstart',
-            (e) => {
-                e.stopPropagation();
-            },
-            { passive: true },
-        );
-
-        // 点击容器背景关闭
-        modalContainer.addEventListener(
-            'click',
-            (e) => {
-                if (e.target === modalContainer) {
-                    closeModal(e);
-                }
-            },
-            false,
-        );
-
-        modalContainer.addEventListener(
-            'mousedown',
-            (e) => {
-                if (e.target === modalContainer) {
-                    e.stopPropagation();
-                }
-            },
-            false,
-        );
-
-        modalContainer.addEventListener(
-            'touchstart',
-            (e) => {
-                e.stopPropagation();
-            },
-            { passive: true },
-        );
-
-        // 添加到 body 最后，确保在最顶层
-        document.body.appendChild(modalContainer);
-
-        // 强制重新计算位置（修复某些浏览器的渲染问题）
-        requestAnimationFrame(() => {
-            modalContainer.style.opacity = '1';
-        });
-    }
-
     // ============================================
     // 预览
     // ============================================
 
-    function refreshPreview() {
-        const stChat = getSTChat();
-        const extractTags = parseTagInput(settings.extractTags);
-        const excludeTags = parseTagInput(settings.excludeTags);
-        const useTagExtract = settings.extractMode === 'tags' && extractTags.length > 0;
-        const useTagExclude = excludeTags.length > 0;
-
-        if (!stChat || stChat.length === 0) {
-            $('#nag-preview-content').html(`<div class="nag-preview-warning"><b>⚠️ 无法获取聊天数据</b></div>`);
-            return;
-        }
-
-        let rawContent = '',
-            floor = -1;
-        for (let i = stChat.length - 1; i >= 0; i--) {
-            const msg = stChat[i];
-            if (msg && !msg.is_user && !msg.is_human && msg.mes) {
-                rawContent = msg.mes;
-                floor = i;
-                break;
-            }
-        }
-
-        if (!rawContent) {
-            $('#nag-preview-content').html('<i style="opacity:0.6">没有 AI 消息</i>');
-            return;
-        }
-
-        const rawPreview = rawContent.substring(0, 200).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        let html = `
-        <div class="nag-preview-source">楼层 ${floor} | 长度 ${rawContent.length} 字</div>
-        <div class="nag-preview-raw">${rawPreview}${rawContent.length > 200 ? '...' : ''}</div>
-    `;
-
-        if (useTagExtract || useTagExclude) {
-            let previewText = rawContent;
-            if (useTagExtract) {
-                previewText = extractTagContents(rawContent, extractTags, settings.tagSeparator);
-                if (!previewText) {
-                    html += `<div class="nag-preview-warning"><b>⚠️ 未找到标签</b> [${extractTags.join(', ')}]</div>`;
-                    $('#nag-preview-content').html(html);
-                    return;
-                }
-            }
-
-            if (useTagExclude) {
-                previewText = removeTagContents(previewText, excludeTags);
-            } else {
-                previewText = previewText.trim();
-            }
-
-            if (previewText) {
-                const actions = [];
-                if (useTagExtract) actions.push(`提取标签 [${extractTags.join(', ')}]`);
-                if (useTagExclude) actions.push(`移除标签 [${excludeTags.join(', ')}]`);
-                html += `<div class="nag-preview-success"><b>✅ ${actions.join(' + ')}</b> (${previewText.length} 字)<div class="nag-preview-text">${escapeHtml(previewText.slice(0, 400))}</div></div>`;
-            } else {
-                html += `<div class="nag-preview-warning"><b>⚠️ 移除标签后没有可预览内容</b></div>`;
-            }
-        } else {
-            html += `<div class="nag-preview-info"><b>📄 全部内容模式</b></div>`;
-        }
-
-        $('#nag-preview-content').html(html);
-    }
-
-    function debugRawContent(floorIndex) {
-        const stChat = getSTChat();
-        if (!stChat) {
-            console.log('❌ 无法获取 chat');
-            return;
-        }
-
-        console.log(`✅ chat 获取成功，共 ${stChat.length} 条`);
-
-        if (floorIndex === undefined) {
-            for (let i = stChat.length - 1; i >= 0; i--) {
-                if (stChat[i] && !stChat[i].is_user) {
-                    floorIndex = i;
-                    break;
-                }
-            }
-        }
-
-        const msg = stChat[floorIndex];
-        if (!msg) {
-            console.log(`楼层 ${floorIndex} 不存在`);
-            return;
-        }
-
-        console.log(`\n----- 楼层 ${floorIndex} -----`);
-        console.log('mes:', msg.mes?.substring(0, 500));
-
-        const extractTags = parseTagInput(settings.extractTags);
-        const excludeTags = parseTagInput(settings.excludeTags);
-        if (extractTags.length > 0 || excludeTags.length > 0) {
-            console.log(`\n----- 标签处理 -----`);
-            if (extractTags.length > 0) {
-                console.log(`提取标签: [${extractTags.join(', ')}]`);
-                console.log('提取结果:', extractTagContents(msg.mes, extractTags, '\n---\n') || '(无匹配)');
-            }
-            if (excludeTags.length > 0) {
-                console.log(`移除标签: [${excludeTags.join(', ')}]`);
-                console.log('移除结果:', removeTagContents(msg.mes, excludeTags) || '(移除后为空)');
-            }
-            console.log(
-                '最终结果:',
-                applyTagFilters(msg.mes, {
-                    extractTags,
-                    excludeTags,
-                    extractMode: settings.extractMode,
-                    separator: settings.tagSeparator,
-                }) || '(无结果)',
-            );
-        }
-    }
+    const { refreshPreview, debugRawContent } = createNovelPreview({
+        getSTChat,
+        getSettings: () => settings,
+        $,
+    });
 
     window.nagDebug = debugRawContent;
 
@@ -419,20 +179,20 @@ export function initNovelUI(host) {
     }
     function pauseGeneration() {
         novelRunner.pause();
-        toastr.info('当前章节结束后暂停');
+        toastr.info(t('novel.pauseNotice'));
     }
     function resumeGeneration() {
         novelRunner.resume();
-        toastr.info('已恢复');
+        toastr.info(t('novel.resumeNotice'));
     }
     function stopGeneration() {
         novelRunner.stop();
-        toastr.warning('已停止自动续写；酒馆正在生成的回复可能仍会完成');
+        toastr.warning(t('novel.stopNotice'));
     }
 
     function resetProgress() {
         if (settings.isRunning) {
-            toastr.warning('请先停止');
+            toastr.warning(t('novel.resetBlocked'));
             return;
         }
         novelRunner.resetPending();
@@ -440,53 +200,17 @@ export function initNovelUI(host) {
         generationStats = { startTime: null, chaptersGenerated: 0, totalCharacters: 0, errors: [] };
         saveSettings();
         updateUI();
-        toastr.info('已重置');
+        toastr.info(t('novel.resetNotice'));
     }
 
     // ============================================
     // 导出
     // ============================================
 
-    function downloadFile(content, filename, type = 'text/plain') {
-        const blob = new Blob([content], { type: `${type};charset=utf-8` });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    }
-
-    async function exportNovel(silent = false) {
-        const chapters = getAllChapters();
-        if (!chapters.length) {
-            if (!silent) toastr.warning('没有内容');
-            return;
-        }
-
-        const totalChars = chapters.reduce((s, c) => s + c.content.length, 0);
-        let text = `导出时间: ${new Date().toLocaleString()}\n总章节: ${chapters.length}\n总字数: ${totalChars}\n${'═'.repeat(40)}\n\n`;
-        chapters.forEach((ch) => {
-            text += `══ [${ch.floor}楼] ${ch.isUser ? '用户' : 'AI'} ══\n\n${ch.content}\n\n`;
-        });
-
-        downloadFile(text, `novel_${chapters.length}ch_${Date.now()}.txt`);
-        if (!silent) toastr.success(`已导出 ${chapters.length} 条`);
-    }
-
-    async function exportAsJSON(silent = false) {
-        const chapters = getAllChapters();
-        if (!chapters.length) {
-            if (!silent) toastr.warning('没有内容');
-            return;
-        }
-        downloadFile(
-            JSON.stringify({ time: new Date().toISOString(), chapters }, null, 2),
-            `novel_${Date.now()}.json`,
-            'application/json',
-        );
-        if (!silent) toastr.success('已导出 JSON');
-    }
+    const { exportNovel, exportAsJSON } = createNovelExport({
+        getAllChapters,
+        notify: (type, message) => toastr[type](message),
+    });
 
     // ============================================
     // 设置 & UI
@@ -503,69 +227,12 @@ export function initNovelUI(host) {
         host.writeSettings(extensionName, settings);
     }
 
-    function updateUI() {
-        const pct =
-            settings.totalChapters > 0 ? ((settings.currentChapter / settings.totalChapters) * 100).toFixed(1) : 0;
-        $('#nag-progress-fill').css('width', `${pct}%`);
-        $('#nag-progress-text').text(`${settings.currentChapter} / ${settings.totalChapters} (${pct}%)`);
-
-        const [txt, cls] = settings.isRunning
-            ? settings.isPaused
-                ? ['⏸️ 已暂停', 'paused']
-                : ['▶️ 运行中', 'running']
-            : ['⏹️ 已停止', 'stopped'];
-        $('#nag-status').text(txt).removeClass('stopped paused running').addClass(cls);
-
-        $('#nag-btn-start').prop('disabled', settings.isRunning);
-        $('#nag-btn-pause').prop('disabled', !settings.isRunning || settings.isPaused);
-        $('#nag-btn-resume').prop('disabled', !settings.isPaused);
-        $('#nag-btn-stop').prop('disabled', !settings.isRunning);
-        $('#nag-btn-reset').prop('disabled', settings.isRunning);
-
-        if (settings.isRunning && generationStats.startTime && generationStats.chaptersGenerated > 0) {
-            const elapsed = Date.now() - generationStats.startTime;
-            const avg = elapsed / generationStats.chaptersGenerated;
-            $('#nag-time-elapsed').text(formatDuration(elapsed));
-            $('#nag-time-remaining').text(formatDuration(avg * (settings.totalChapters - settings.currentChapter)));
-        }
-        $('#nag-stat-errors').text(generationStats.errors.length);
-
-        $('#nag-set-start-floor, #nag-set-end-floor').prop('disabled', settings.exportAll);
-        $('#nag-floor-inputs').toggleClass('disabled', settings.exportAll);
-
-        // 发送阶段弹窗设置
-        $('#nag-send-toast-settings').toggleClass('disabled', !settings.enableSendToastDetection);
-        $('#nag-set-send-toast-timeout, #nag-set-send-post-toast-wait').prop(
-            'disabled',
-            !settings.enableSendToastDetection,
-        );
-
-        // 回复阶段弹窗设置
-        $('#nag-reply-toast-settings').toggleClass('disabled', !settings.enableReplyToastDetection);
-        $('#nag-set-reply-toast-timeout, #nag-set-reply-post-toast-wait').prop(
-            'disabled',
-            !settings.enableReplyToastDetection,
-        );
-    }
-
-    function toggleTagSettings() {
-        $('#nag-tags-container, #nag-separator-container').toggle(settings.extractMode === 'tags');
-    }
-
-    function togglePanel(panelId) {
-        const panel = $(`#nag-panel-${panelId}`);
-        const isCollapsed = panel.hasClass('collapsed');
-
-        if (isCollapsed) {
-            panel.removeClass('collapsed');
-            settings.panelCollapsed[panelId] = false;
-        } else {
-            panel.addClass('collapsed');
-            settings.panelCollapsed[panelId] = true;
-        }
-
-        saveSettings();
-    }
+    const { updateUI, toggleTagSettings, togglePanel, syncUI } = createNovelUiState({
+        getSettings: () => settings,
+        getStats: () => generationStats,
+        saveSettings,
+        $,
+    });
 
     function createUI() {
         $('#extensions_settings').append(createPanelHtml(getTotalFloors()));
@@ -769,51 +436,6 @@ export function initNovelUI(host) {
         });
     }
 
-    function syncUI() {
-        // 生成设置
-        $('#nag-set-total').val(settings.totalChapters);
-        $('#nag-set-prompt').val(settings.prompt);
-
-        // 导出设置
-        $('#nag-set-export-all').prop('checked', settings.exportAll);
-        $('#nag-set-start-floor').val(settings.exportStartFloor);
-        $('#nag-set-end-floor').val(settings.exportEndFloor);
-        $('#nag-set-include-user').prop('checked', settings.exportIncludeUser);
-        $('#nag-set-include-ai').prop('checked', settings.exportIncludeAI);
-        $('#nag-set-use-raw').prop('checked', settings.useRawContent);
-
-        // 标签提取
-        $('#nag-set-extract-mode').val(settings.extractMode);
-        $('#nag-set-tags').val(settings.extractTags);
-        $('#nag-set-exclude-tags').val(settings.excludeTags);
-        $('#nag-set-separator').val(settings.tagSeparator.replace(/\n/g, '\\n'));
-
-        // 发送阶段弹窗检测
-        $('#nag-set-send-toast-detection').prop('checked', settings.enableSendToastDetection);
-        $('#nag-set-send-toast-timeout').val(settings.sendToastWaitTimeout);
-        $('#nag-set-send-post-toast-wait').val(settings.sendPostToastWaitTime);
-
-        // 回复阶段设置
-        $('#nag-set-reply-wait').val(settings.replyWaitTime);
-        $('#nag-set-stability-interval').val(settings.stabilityCheckInterval);
-        $('#nag-set-stability-count').val(settings.stabilityRequiredCount);
-        $('#nag-set-reply-toast-detection').prop('checked', settings.enableReplyToastDetection);
-        $('#nag-set-reply-toast-timeout').val(settings.replyToastWaitTimeout);
-        $('#nag-set-reply-post-toast-wait').val(settings.replyPostToastWaitTime);
-
-        // 生成控制
-        $('#nag-set-autosave').val(settings.autoSaveInterval);
-        $('#nag-set-retries').val(settings.maxRetries);
-        $('#nag-set-minlen').val(settings.minChapterLength);
-
-        toggleTagSettings();
-        updateUI();
-    }
-
-    // ============================================
-    // 初始化
-    // ============================================
-
     jQuery(async () => {
         if (disposed) return;
         loadSettings();
@@ -830,7 +452,7 @@ export function initNovelUI(host) {
             novelRunner.stop();
             clearInterval(refreshTimer);
             disposed = true;
-            cleanupHelp?.();
+            disposeHelp();
             $('#nag-container').remove();
             if (window.nagDebug === debugRawContent) delete window.nagDebug;
             instance = null;

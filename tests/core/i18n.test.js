@@ -78,6 +78,16 @@ describe('i18n', () => {
         });
     });
 
+    describe('自动续写面板', () => {
+        it('提供中英文主控件文案', () => {
+            expect(t('novel.title')).toBe('📚 小说自动生成器');
+            expect(t('novel.floors', { count: 3 })).toBe('共 3 条');
+            setLocale('en-US');
+            expect(t('novel.title')).toBe('📚 Novel Auto Generator');
+            expect(t('novel.floors', { count: 3 })).toBe('3 messages');
+        });
+    });
+
     describe('特殊场景', () => {
         it('空参数对象', () => {
             expect(t('common.confirm', {})).toBe('确认');

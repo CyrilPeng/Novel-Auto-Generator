@@ -1,9 +1,11 @@
+import { t } from '../../txtToWorldbook/core/i18n.js';
+
 export function createPanelHtml(totalFloors) {
     return `
     <div id="nag-container">
         <div class="inline-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
-                <b>📚 小说自动生成器</b>
+                <b>${t('novel.title')}</b>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content">
@@ -23,61 +25,61 @@ export function createPanelHtml(totalFloors) {
                 
                 <div class="nag-section nag-controls">
                     <div class="nag-btn-row">
-                        <button id="nag-btn-start" class="menu_button">▶️ 开始</button>
-                        <button id="nag-btn-pause" class="menu_button" disabled>⏸️ 暂停</button>
-                        <button id="nag-btn-resume" class="menu_button" disabled>⏯️ 恢复</button>
-                        <button id="nag-btn-stop" class="menu_button" disabled>⏹️ 停止</button>
+                        <button id="nag-btn-start" class="menu_button">${t('novel.start')}</button>
+                        <button id="nag-btn-pause" class="menu_button" disabled>${t('novel.pause')}</button>
+                        <button id="nag-btn-resume" class="menu_button" disabled>${t('novel.resume')}</button>
+                        <button id="nag-btn-stop" class="menu_button" disabled>${t('novel.stop')}</button>
                     </div>
-                    <div class="nag-btn-row"><button id="nag-btn-reset" class="menu_button">🔄 重置</button></div>
+                    <div class="nag-btn-row"><button id="nag-btn-reset" class="menu_button">${t('novel.reset')}</button></div>
                 </div>
 
-                <!-- 📝 生成设置模块 -->
+                <!-- ${t('novel.generateSettings')}模块 -->
                 <div id="nag-panel-generate" class="nag-section nag-settings nag-collapsible">
                     <div class="nag-panel-header" data-panel="generate">
-                        <span class="nag-panel-title">📝 生成设置</span>
+                        <span class="nag-panel-title">${t('novel.generateSettings')}</span>
                         <div class="nag-panel-actions">
                             <span class="nag-help-btn" data-help="generate" title="帮助">❓</span>
                             <span class="nag-collapse-icon">▼</span>
                         </div>
                     </div>
                     <div class="nag-panel-content">
-                        <div class="nag-setting-item"><label>目标章节</label><input type="number" id="nag-set-total" min="1"></div>
-                        <div class="nag-setting-item"><label>提示词</label><textarea id="nag-set-prompt" rows="2"></textarea></div>
+                        <div class="nag-setting-item"><label>${t('novel.targetChapters')}</label><input type="number" id="nag-set-total" min="1"></div>
+                        <div class="nag-setting-item"><label>${t('novel.prompt')}</label><textarea id="nag-set-prompt" rows="2"></textarea></div>
                     </div>
                 </div>
 
-                <!-- 📤 导出设置模块 -->
+                <!-- ${t('novel.exportSettings')}模块 -->
                 <div id="nag-panel-export" class="nag-section nag-settings nag-collapsible">
                     <div class="nag-panel-header" data-panel="export">
-                        <span class="nag-panel-title">📤 导出设置</span>
+                        <span class="nag-panel-title">${t('novel.exportSettings')}</span>
                         <div class="nag-panel-actions">
                             <span class="nag-help-btn" data-help="export" title="帮助">❓</span>
                             <span class="nag-collapse-icon">▼</span>
                         </div>
                     </div>
                     <div class="nag-panel-content">
-                        <div class="nag-floor-info">共 <span id="nag-total-floors">${totalFloors}</span> 条 <button id="nag-btn-refresh-floors" class="menu_button_icon">🔄</button></div>
-                        <div class="nag-checkbox-group"><label class="nag-checkbox-label"><input type="checkbox" id="nag-set-export-all"><span>📑 导出全部</span></label></div>
+                        <div class="nag-floor-info">${t('novel.floors', { count: `<span id="nag-total-floors">${totalFloors}</span>` })} <button id="nag-btn-refresh-floors" class="menu_button_icon">🔄</button></div>
+                        <div class="nag-checkbox-group"><label class="nag-checkbox-label"><input type="checkbox" id="nag-set-export-all"><span>${t('novel.exportAll')}</span></label></div>
                         <div id="nag-floor-inputs" class="nag-setting-row">
-                            <div class="nag-setting-item"><label>起始楼层</label><input type="number" id="nag-set-start-floor" min="0"></div>
-                            <div class="nag-setting-item"><label>结束楼层</label><input type="number" id="nag-set-end-floor" min="0"></div>
+                            <div class="nag-setting-item"><label>${t('novel.startFloor')}</label><input type="number" id="nag-set-start-floor" min="0"></div>
+                            <div class="nag-setting-item"><label>${t('novel.endFloor')}</label><input type="number" id="nag-set-end-floor" min="0"></div>
                         </div>
                         <div class="nag-checkbox-group">
-                            <label class="nag-checkbox-label"><input type="checkbox" id="nag-set-include-user"><span>👤 用户消息</span></label>
-                            <label class="nag-checkbox-label"><input type="checkbox" id="nag-set-include-ai"><span>🤖 AI 回复</span></label>
-                            <label class="nag-checkbox-label"><input type="checkbox" id="nag-set-use-raw"><span>📄 原始 (chat.mes)</span></label>
+                            <label class="nag-checkbox-label"><input type="checkbox" id="nag-set-include-user"><span>${t('novel.includeUser')}</span></label>
+                            <label class="nag-checkbox-label"><input type="checkbox" id="nag-set-include-ai"><span>${t('novel.includeAI')}</span></label>
+                            <label class="nag-checkbox-label"><input type="checkbox" id="nag-set-use-raw"><span>${t('novel.useRaw')}</span></label>
                         </div>
                         <div class="nag-btn-row">
-                            <button id="nag-btn-export-txt" class="menu_button">📄 TXT</button>
-                            <button id="nag-btn-export-json" class="menu_button">📦 JSON</button>
+                            <button id="nag-btn-export-txt" class="menu_button">${t('novel.exportTxt')}</button>
+                            <button id="nag-btn-export-json" class="menu_button">${t('novel.exportJson')}</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- 🏷️ 标签提取模块 -->
+                <!-- ${t('novel.tagSettings')}模块 -->
                 <div id="nag-panel-extract" class="nag-section nag-settings nag-collapsible">
                     <div class="nag-panel-header" data-panel="extract">
-                        <span class="nag-panel-title">🏷️ 标签提取</span>
+                        <span class="nag-panel-title">${t('novel.tagSettings')}</span>
                         <div class="nag-panel-actions">
                             <span class="nag-help-btn" data-help="extract" title="帮助">❓</span>
                             <span class="nag-collapse-icon">▼</span>
@@ -117,10 +119,10 @@ export function createPanelHtml(totalFloors) {
                     </div>
                 </div>
 
-                <!-- ⚙️ 高级设置模块 -->
+                <!-- ${t('novel.advancedSettings')}模块 -->
                 <div id="nag-panel-advanced" class="nag-section nag-settings nag-collapsible">
                     <div class="nag-panel-header" data-panel="advanced">
-                        <span class="nag-panel-title">⚙️ 高级设置</span>
+                        <span class="nag-panel-title">${t('novel.advancedSettings')}</span>
                         <div class="nag-panel-actions">
                             <span class="nag-help-btn" data-help="advanced" title="帮助">❓</span>
                             <span class="nag-collapse-icon">▼</span>
@@ -210,16 +212,16 @@ export function createPanelHtml(totalFloors) {
                                 <div class="nag-module-desc">控制自动生成的行为参数</div>
                                 <div class="nag-setting-row">
                                     <div class="nag-setting-item">
-                                        <label>自动保存间隔</label>
+                                        <label>${t('novel.autoSave')}</label>
                                         <input type="number" id="nag-set-autosave" min="1">
                                     </div>
                                     <div class="nag-setting-item">
-                                        <label>最大重试</label>
+                                        <label>${t('novel.maxRetries')}</label>
                                         <input type="number" id="nag-set-retries" min="1">
                                     </div>
                                 </div>
                                 <div class="nag-setting-item">
-                                    <label>最小章节长度</label>
+                                    <label>${t('novel.minLength')}</label>
                                     <input type="number" id="nag-set-minlen" min="0" style="width: 100px;">
                                 </div>
                             </div>
@@ -229,11 +231,11 @@ export function createPanelHtml(totalFloors) {
                     </div>
                 </div>
 
-                <!-- 📚 TXT转世界书模块 -->
+                <!-- ${t('novel.txtToWorldbook')}模块 -->
                 <div class="nag-section">
                     <div class="nag-btn-row">
                         <button id="nag-btn-txt-to-worldbook" class="menu_button" style="background: linear-gradient(135deg, #e67e22, #d35400);">
-                            📚 TXT转世界书
+                            ${t('novel.txtToWorldbook')}
                         </button>
                     </div>
                 </div>
