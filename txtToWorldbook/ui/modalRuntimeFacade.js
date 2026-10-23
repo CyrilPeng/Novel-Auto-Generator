@@ -8,7 +8,7 @@ export function createModalRuntimeFacade(deps = {}) {
 
     function restoreModalData() {
         if (!modalLifecycle) return;
-        modalLifecycle.restoreModalData();
+        return modalLifecycle.restoreModalData();
     }
 
     function bindModalEvents() {
@@ -28,12 +28,12 @@ export function createModalRuntimeFacade(deps = {}) {
 
     function closeModal() {
         if (!modalController) return;
-        modalController.closeModal();
+        return modalController.closeModal();
     }
 
     function open() {
         if (!modalController) return;
-        modalController.open();
+        return modalController.open();
     }
 
     return {
