@@ -340,5 +340,102 @@ export default {
         exportChars: 'Characters',
         exportUser: 'User',
         exportAi: 'AI',
+        tagMode: 'Extraction mode',
+        tagAll: 'All content',
+        tagOnly: 'Only selected tags',
+        tagNames: 'Tag names',
+        tagHint: '(space or comma separated)',
+        separator: 'Separator',
+        separatorBlank: 'Blank line',
+        separatorNewline: 'New line',
+        separatorNone: 'None',
+        excludeTags: 'Remove tags',
+        excludeHint: '(optional, space or comma separated)',
+        preview: '📋 Preview',
+        clickRefresh: 'Click refresh',
+        sendPhase: 'Send phase',
+        sendDesc: 'Wait for plot or other extensions to finish after sending',
+        enableToast: '💬 Enable popup detection',
+        waitTimeout: 'Wait timeout (ms)',
+        extraWait: 'Extra wait (ms)',
+        replyPhase: 'Reply phase',
+        replyDesc: 'Wait for summary and other extensions after the reply',
+        waitAfterReply: 'Wait after reply (ms)',
+        stabilityInterval: 'Stability check interval (ms)',
+        stabilityCount: 'Stability checks',
+        controlPhase: 'Generation control',
+        controlDesc: 'Parameters that control automatic generation',
+        debugHint: 'Console debug',
+        help: {
+            generateTitle: '📝 Generation settings',
+            generateContent: `
+<h4>📌 Target chapters</h4>
+<p>Total number of chapters to generate.</p>
+<h4>📌 Prompt</h4>
+<p>The message sent to the AI for each chapter.</p>
+            `,
+            exportTitle: '📤 Export settings',
+            exportContent: `
+<h4>📌 Floor range</h4>
+<p>Floors start at <b>0</b>.</p>
+<h4>📌 Raw (chat.mes)</h4>
+<ul>
+    <li><b>✅ Checked</b>: read the raw message</li>
+    <li><b>❌ Unchecked</b>: read the displayed text after regex processing</li>
+</ul>
+            `,
+            extractTitle: '🏷️ Tag extraction',
+            extractContent: `
+<h4>📌 What is tag extraction?</h4>
+<p>Keep only the text inside selected XML tags from the raw AI reply.</p>
+<h4>📌 When to use it</h4>
+<p>When regex formatting leaves the raw reply with tags such as:</p>
+<pre>&lt;thinking&gt;reasoning...&lt;/thinking&gt;
+&lt;content&gt;story text...&lt;/content&gt;</pre>
+<p>Tag extraction can export only the text inside &lt;content&gt;.</p>
+<h4>📌 How to use it</h4>
+<ol>
+    <li>✅ Enable raw (chat.mes)</li>
+    <li>For a whitelist, select tag mode and enter the tags to keep</li>
+    <li>To remove noise, keep all-content mode and enter the tags to remove</li>
+    <li>Whitelist extraction and blacklist removal can be combined</li>
+</ol>
+<h4>📌 Multiple tags</h4>
+<p>Separate tags with spaces or commas: <code>content detail body</code></p>
+<h4>📌 Blacklist removal</h4>
+<p>Removing a tag deletes the tag and its content. Raw mode is recommended; it can be combined with whitelist extraction.</p>
+<pre>&lt;thinking&gt;reasoning...&lt;/thinking&gt;
+&lt;content&gt;story text&lt;/content&gt;</pre>
+<p>After removing <code>thinking</code>, previews and exports keep the remaining text.</p>
+<h4>📌 Debug</h4>
+<p>Run <code>nagDebug()</code> in the browser console.</p>
+            `,
+            advancedTitle: '⚙️ Advanced settings',
+            advancedContent: `
+<h4>📤 Send phase</h4>
+<p>Other extensions, such as plot advancement, may process the message after it is sent.</p>
+<ul>
+    <li><b>Popup detection</b>: wait for popups to disappear before continuing</li>
+    <li><b>Wait timeout</b>: maximum time to wait for popups</li>
+    <li><b>Extra wait</b>: additional delay after popups disappear</li>
+</ul>
+
+<h4>📥 Reply phase</h4>
+<p>Summary or other extensions may process the reply after generation completes.</p>
+<ul>
+    <li><b>Wait after reply</b>: delay after the reply becomes stable</li>
+    <li><b>Stability interval</b>: how often to check for changes</li>
+    <li><b>Stability checks</b>: consecutive unchanged checks required</li>
+    <li><b>Popup detection</b>: wait for summary popups to finish</li>
+</ul>
+
+<h4>🔧 Generation control</h4>
+<ul>
+    <li><b>Auto-save interval</b>: export a backup every N chapters</li>
+    <li><b>Max retries</b>: retries for a failed chapter</li>
+    <li><b>Minimum length</b>: shorter replies are treated as failures</li>
+</ul>
+            `,
+        },
     },
 };

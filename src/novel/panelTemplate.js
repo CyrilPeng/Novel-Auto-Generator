@@ -87,34 +87,34 @@ export function createPanelHtml(totalFloors) {
                     </div>
                     <div class="nag-panel-content">
                         <div class="nag-setting-item">
-                            <label>提取模式</label>
+                            <label>${t('novel.tagMode')}</label>
                             <select id="nag-set-extract-mode">
-                                <option value="all">全部内容</option>
-                                <option value="tags">只提取指定标签</option>
+                                <option value="all">${t('novel.tagAll')}</option>
+                                <option value="tags">${t('novel.tagOnly')}</option>
                             </select>
                         </div>
                         <div class="nag-setting-item" id="nag-tags-container">
-                            <label>标签名称 <span class="nag-hint">(空格/逗号分隔)</span></label>
+                            <label>${t('novel.tagNames')} <span class="nag-hint">${t('novel.tagHint')}</span></label>
                             <textarea id="nag-set-tags" rows="1" placeholder="content detail 正文"></textarea>
                         </div>
                         <div class="nag-setting-item" id="nag-separator-container">
-                            <label>分隔符</label>
+                            <label>${t('novel.separator')}</label>
                             <select id="nag-set-separator">
-                                <option value="\\n\\n">空行</option>
-                                <option value="\\n">换行</option>
-                                <option value="">无</option>
+                                <option value="\\n\\n">${t('novel.separatorBlank')}</option>
+                                <option value="\\n">${t('novel.separatorNewline')}</option>
+                                <option value="">${t('novel.separatorNone')}</option>
                             </select>
                         </div>
                         <div class="nag-setting-item">
-                            <label>移除标签 <span class="nag-hint">(可选，空格/逗号分隔)</span></label>
+                            <label>${t('novel.excludeTags')} <span class="nag-hint">${t('novel.excludeHint')}</span></label>
                             <textarea id="nag-set-exclude-tags" rows="1" placeholder="thinking summary note"></textarea>
                         </div>
                         <div class="nag-extract-preview">
                             <div class="nag-preview-header">
-                                <span>📋 预览</span>
+                                <span>${t('novel.preview')}</span>
                                 <button id="nag-btn-refresh-preview" class="menu_button_icon">🔄</button>
                             </div>
-                            <div id="nag-preview-content" class="nag-preview-box"><i>点击刷新</i></div>
+                            <div id="nag-preview-content" class="nag-preview-box"><i>${t('novel.clickRefresh')}</i></div>
                         </div>
                     </div>
                 </div>
@@ -134,24 +134,24 @@ export function createPanelHtml(totalFloors) {
                         <div class="nag-module nag-module-send">
                             <div class="nag-module-header">
                                 <span class="nag-module-icon">📤</span>
-                                <span class="nag-module-title">发送阶段</span>
+                                <span class="nag-module-title">${t('novel.sendPhase')}</span>
                             </div>
                             <div class="nag-module-body">
-                                <div class="nag-module-desc">消息发送后，等待剧情推进等插件处理完成</div>
+                                <div class="nag-module-desc">${t('novel.sendDesc')}</div>
                                 <div class="nag-checkbox-group">
                                     <label class="nag-checkbox-label">
                                         <input type="checkbox" id="nag-set-send-toast-detection">
-                                        <span>💬 启用弹窗检测</span>
+                                        <span>${t('novel.enableToast')}</span>
                                     </label>
                                 </div>
                                 <div id="nag-send-toast-settings">
                                     <div class="nag-setting-row">
                                         <div class="nag-setting-item">
-                                            <label>等待超时 (ms)</label>
+                                            <label>${t('novel.waitTimeout')}</label>
                                             <input type="number" id="nag-set-send-toast-timeout" min="5000" step="5000">
                                         </div>
                                         <div class="nag-setting-item">
-                                            <label>额外等待 (ms)</label>
+                                            <label>${t('novel.extraWait')}</label>
                                             <input type="number" id="nag-set-send-post-toast-wait" min="0" step="500">
                                         </div>
                                     </div>
@@ -163,38 +163,38 @@ export function createPanelHtml(totalFloors) {
                         <div class="nag-module nag-module-reply">
                             <div class="nag-module-header">
                                 <span class="nag-module-icon">📥</span>
-                                <span class="nag-module-title">回复阶段</span>
+                                <span class="nag-module-title">${t('novel.replyPhase')}</span>
                             </div>
                             <div class="nag-module-body">
-                                <div class="nag-module-desc">AI回复完成后，等待总结等插件处理完成</div>
+                                <div class="nag-module-desc">${t('novel.replyDesc')}</div>
                                 <div class="nag-setting-row">
                                     <div class="nag-setting-item">
-                                        <label>回复后等待 (ms)</label>
+                                        <label>${t('novel.waitAfterReply')}</label>
                                         <input type="number" id="nag-set-reply-wait" min="0" step="1000">
                                     </div>
                                     <div class="nag-setting-item">
-                                        <label>稳定检查间隔 (ms)</label>
+                                        <label>${t('novel.stabilityInterval')}</label>
                                         <input type="number" id="nag-set-stability-interval" min="500" step="500">
                                     </div>
                                 </div>
                                 <div class="nag-setting-item">
-                                    <label>稳定次数</label>
+                                    <label>${t('novel.stabilityCount')}</label>
                                     <input type="number" id="nag-set-stability-count" min="1" style="width: 100px;">
                                 </div>
                                 <div class="nag-checkbox-group">
                                     <label class="nag-checkbox-label">
                                         <input type="checkbox" id="nag-set-reply-toast-detection">
-                                        <span>💬 启用弹窗检测</span>
+                                        <span>${t('novel.enableToast')}</span>
                                     </label>
                                 </div>
                                 <div id="nag-reply-toast-settings">
                                     <div class="nag-setting-row">
                                         <div class="nag-setting-item">
-                                            <label>等待超时 (ms)</label>
+                                            <label>${t('novel.waitTimeout')}</label>
                                             <input type="number" id="nag-set-reply-toast-timeout" min="10000" step="10000">
                                         </div>
                                         <div class="nag-setting-item">
-                                            <label>额外等待 (ms)</label>
+                                            <label>${t('novel.extraWait')}</label>
                                             <input type="number" id="nag-set-reply-post-toast-wait" min="0" step="500">
                                         </div>
                                     </div>
@@ -206,10 +206,10 @@ export function createPanelHtml(totalFloors) {
                         <div class="nag-module nag-module-control">
                             <div class="nag-module-header">
                                 <span class="nag-module-icon">🔧</span>
-                                <span class="nag-module-title">生成控制</span>
+                                <span class="nag-module-title">${t('novel.controlPhase')}</span>
                             </div>
                             <div class="nag-module-body">
-                                <div class="nag-module-desc">控制自动生成的行为参数</div>
+                                <div class="nag-module-desc">${t('novel.controlDesc')}</div>
                                 <div class="nag-setting-row">
                                     <div class="nag-setting-item">
                                         <label>${t('novel.autoSave')}</label>
@@ -227,7 +227,7 @@ export function createPanelHtml(totalFloors) {
                             </div>
                         </div>
                         
-                        <div class="nag-debug-hint">控制台调试: <code>nagDebug()</code></div>
+                        <div class="nag-debug-hint">${t('novel.debugHint')}: <code>nagDebug()</code></div>
                     </div>
                 </div>
 

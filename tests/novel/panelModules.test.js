@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createPanelHtml } from '../../src/novel/panelTemplate.js';
 import { getHelpContent } from '../../src/novel/helpContent.js';
 import { defaultSettings } from '../../src/novel/defaultSettings.js';
+import { setLocale } from '../../txtToWorldbook/core/i18n.js';
+
+afterEach(() => setLocale('zh-CN'));
 
 describe('续写面板静态模块', () => {
     it('模板保留关键控件并注入楼层数', () => {
@@ -17,6 +20,13 @@ describe('续写面板静态模块', () => {
             expect(getHelpContent(topic).content).toContain('<h4>');
         }
         expect(getHelpContent('missing').title).toBe('帮助');
+    });
+
+    it('英文面板与帮助不遗留未翻译的 key', () => {
+        setLocale('en-US');
+        const html = createPanelHtml(2);
+        expect(html).not.toMatch(/novel\.[a-zA-Z]/);
+        expect(getHelpContent('advanced').title).toBe('⚙️ Advanced settings');
     });
 
     it('默认设置覆盖运行和导出字段', () => {

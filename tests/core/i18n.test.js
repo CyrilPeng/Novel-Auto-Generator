@@ -82,9 +82,11 @@ describe('i18n', () => {
         it('提供中英文主控件文案', () => {
             expect(t('novel.title')).toBe('📚 小说自动生成器');
             expect(t('novel.floors', { count: 3 })).toBe('共 3 条');
+            expect(t('novel.help.generateTitle')).toBe('📝 生成设置说明');
             setLocale('en-US');
             expect(t('novel.title')).toBe('📚 Novel Auto Generator');
             expect(t('novel.floors', { count: 3 })).toBe('3 messages');
+            expect(t('novel.help.generateTitle')).toBe('📝 Generation settings');
         });
     });
 
