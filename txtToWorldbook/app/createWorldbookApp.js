@@ -1,69 +1,4 @@
 import { createChunkCommitService } from '../../src/storage/chunkCommitService.js';
-/**
- * TXT转世界书模块
- *
- * @file txtToWorldbook/main.js
- * @version 1.5.0
- * @author Novel-Auto-Generator
- * @license MIT
- *
- * @description
- * 将TXT小说文件转换为SillyTavern世界书格式
- *
- * @features
- * - 多API支持（酒馆/Gemini/DeepSeek/OpenAI兼容）
- * - 并行处理（独立模式/分批模式）
- * - 断点续传
- * - 历史回滚（Roll历史选择器）
- * - 条目合并与别名合并
- * - 自定义分类配置
- * - 默认世界书条目
- * - 条目配置（位置/深度/顺序/递归）
- * - Token计数缓存优化
- * - 事件委托性能优化
- *
- * @structure
- * - 第一区：配置与常量 (~200行)
- * - 第二区：应用状态 (~100行)
- * - 第三区：工具函数 (~500行) - 含PerfUtils/TokenCache/EventDelegate/Logger/ErrorHandler
- * - 第四区：数据持久层 (~400行)
- * - 第五区：API通信层 (~400行)
- * - 第六区：核心业务逻辑 (~1500行)
- * - 第七区：UI组件层 (~4000行)
- * - 第八区：初始化与导出 (~200行)
- *
- * @example
- * // 基本使用
- * window.TxtToWorldbook.open();
- *
- * // 获取世界书数据
- * const worldbook = window.TxtToWorldbook.getWorldbook();
- *
- * @typedef {Object} MemoryItem
- * @property {string} title - 记忆标题
- * @property {string} content - 记忆内容
- * @property {boolean} processed - 是否已处理
- * @property {boolean} failed - 是否失败
- * @property {boolean} processing - 是否正在处理
- * @property {string} [failedError] - 失败原因
- * @property {Object} [result] - 处理结果
- *
- * @typedef {Object} WorldbookEntry
- * @property {string[]} 关键词 - 关键词数组
- * @property {string} 内容 - 条目内容
- * @property {string} [comment] - 备注信息
- * @property {boolean} [enabled] - 是否启用
- * @property {number} [position] - 位置
- * @property {number} [depth] - 深度
- * @property {boolean} [recursive] - 是否递归
- *
- * @typedef {Object} CategoryConfig
- * @property {string} name - 分类名称
- * @property {string} description - 分类描述
- * @property {string} prompt - 分类提示词
- * @property {boolean} enabled - 是否启用
- * @property {string} color - 显示颜色
- */
 import {
     DEFAULT_CHAPTER_REGEX,
     DEFAULT_CATEGORY_LIGHT,
@@ -125,8 +60,6 @@ import { createWorldbookViewRuntime } from '../ui/createWorldbookViewRuntime.js'
 import { ensureModalStyles } from '../ui/modalStyles.js';
 
 export function createWorldbookApp() {
-    'use strict';
-
     // ========== AppState 统一状态对象 ==========
     const { AppState, MemoryHistoryDB } = createAppContext({
         defaultCategoryLight: DEFAULT_CATEGORY_LIGHT,

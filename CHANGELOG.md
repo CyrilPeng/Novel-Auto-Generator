@@ -19,7 +19,7 @@
 ### 维护
 
 - 优化世界书章节提交路径：队列只复制被提交的章节，差异只比较本次 patch 涉及的条目，提交状态复用最终事务快照，不再为每章重复全量深拷贝；历史记录不再保存与当前检查点重复的 `newWorldbook`，旧记录仍可读取，回退继续使用 `previousWorldbook` 与 `changedEntries`。2000 条目 / 30 章合成基线由 1.96 秒降至约 1.23–1.36 秒，平均单章 65.4 ms 降至 41–45 ms，采样 RSS 由 231 MB 降至约 191 MB（Node 22 + fake-indexeddb，非浏览器实机数据）。
-- 收束 TXT 转世界书装配：新增 `app/createWorldbookApp.js` 组合根，`main.js` 降至 35 行；删除 `createMainBindings`、`createRuntimeBridges` 占位与纯转发层，补齐 45 项公开 API 的应用装配测试；流/调试、分类灯和条目配置辅助函数进一步移入 `createWorldbookHelpers.js`，组合根由 936 行降至 820 行。
+- 收束 TXT 转世界书装配：新增 `app/createWorldbookApp.js` 组合根，`main.js` 降至 35 行；删除 `createMainBindings`、`createRuntimeBridges` 占位与纯转发层，补齐 45 项公开 API 的应用装配测试；流/调试、分类灯和条目配置辅助函数进一步移入 `createWorldbookHelpers.js`，组合根由 936 行降至 753 行。
 - 拆分合并工作流：`mergeWorkflowService.js` 降至 179 行且不再访问 DOM，整理/手动/别名交互分别迁入三个视图模块；继续使用草稿合并、运行锁和原子提交，现有合并与整理回归通过。
 - 拆分续写面板：默认设置、帮助、预览、导出、面板模板和 UI 状态分别移入独立模块，`src/novel/runtime.js` 由 1205 行降至 462 行；主按钮、状态、标签提取、高级设置和帮助正文均接入中英文 locale。
 - 统一任务状态：新增 `src/shared/tasks/lifecycle.js`，`isRunning / isStopped / isRepairing / isRerolling` 统一由状态函数派生，转换、修复、重 Roll、编辑、合并和回退不再各自拼装布尔值；新增生命周期回归和 JSDoc 数据契约。
@@ -35,7 +35,7 @@
 - 空回自动重试依赖宿主能报告生成结束状态；无法判断生成状态时仍按原逻辑等待或停止，不会为避免停摆而盲目重复发送。
 - 附加系统提示词不会继承 SillyTavern 主预设，酒馆 API 模式仍受宿主提示词后处理影响；本轮未在真实 SillyTavern 内手工点击验证新增设置项，发布前仍需按回归清单补验。
 - 提交性能数据来自 Node + fake-indexeddb 合成负载，不代表浏览器 IndexedDB、DOM 或真实模型耗时；长篇任务仍建议用浏览器性能面板复测。
-- `createWorldbookApp.js` 仍是较大的组合根（820 行）；后续可按 core/feature/shell 能力上下文继续拆分，但需要先补真实宿主 UI 回归。
+- `createWorldbookApp.js` 仍是较大的组合根（753 行）；后续可按 core/feature/shell 能力上下文继续拆分，但需要先补真实宿主 UI 回归。
 - 续写面板主流程已完成中英文覆盖；世界书侧仍存在未迁移的历史 UI 文案，英文模式可能出现中英混排。
 - 新增的覆盖率门槛只针对 storage、commands 和 lifecycle，不代表全局 UI 覆盖率；真实 SillyTavern 交互、Playwright smoke 和移动端仍需发布前补验，扩展后的 smoke 脚本尚未在当前环境实际运行。
 
