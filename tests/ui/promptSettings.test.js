@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildModalHtml, hydrateSettingsFromState } from '../../txtToWorldbook/ui/settingsPanel.js';
 import { bindPromptEvents } from '../../txtToWorldbook/ui/eventBindings.js';
-import { createSettingsPersistenceService } from '../../txtToWorldbook/services/settingsPersistenceService.js';
+import { createSettingsPersistenceService } from '../../txtToWorldbook/ui/settingsPersistenceService.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
 import { defaultSettings } from '../../txtToWorldbook/core/constants.js';
 

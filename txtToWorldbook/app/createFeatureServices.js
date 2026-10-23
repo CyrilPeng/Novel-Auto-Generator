@@ -3,11 +3,12 @@ import { createHistoryView } from '../ui/historyView.js';
 import { createSearchModal } from '../ui/searchModal.js';
 import { createReplaceModal } from '../ui/replaceModal.js';
 import { createHelpModal } from '../ui/helpModal.js';
-import { createReplaceAndCleanService } from '../services/replaceAndCleanService.js';
-import { createImportMergeService } from '../services/importMergeService.js';
-import { createTaskStateService } from '../services/taskStateService.js';
-import { createImportExportService } from '../services/importExportService.js';
+import { createReplaceAndCleanService } from '../ui/replaceAndCleanService.js';
+import { createImportMergeService } from '../ui/importMergeService.js';
+import { createTaskStateService } from '../ui/taskStateService.js';
+import { createImportExportService } from '../ui/importExportService.js';
 import { createMergeWorkflowService } from '../services/mergeWorkflowService.js';
+import { createMergeWorkflowView } from '../ui/mergeWorkflowView.js';
 import { createRuntimeActionsFacade } from './runtimeActionsFacade.js';
 
 export function createFeatureServices(deps = {}) {
@@ -228,6 +229,30 @@ export function createFeatureServices(deps = {}) {
         setManualMergeHighlight,
         saveWorldbookSnapshot,
     });
+    const mergeWorkflowView = createMergeWorkflowView({
+        AppState,
+        ErrorHandler,
+        ModalFactory,
+        getEntryTotalTokens,
+        naturalSortEntryNames,
+        EventDelegate,
+        PerfUtils,
+        estimateTokenCount,
+        defaultConsolidatePrompt,
+        saveCurrentSettings,
+        promptAction: deps.promptAction,
+        confirmAction,
+        updateStreamContent,
+        updateWorldbookPreview,
+        escapeHtml: ListRenderer.escapeHtml,
+        buildAliasCategorySelectModal,
+        buildAliasGroupsListHtml,
+        buildAliasPairResultsHtml,
+        buildAliasMergePlanHtml,
+        handleStopProcessing,
+        saveWorldbookSnapshot,
+        workflow: mergeWorkflowService,
+    });
 
     return {
         entryConfigModals,
@@ -240,6 +265,6 @@ export function createFeatureServices(deps = {}) {
         helpModal,
         taskStateService,
         importExportService,
-        mergeWorkflowService,
+        mergeWorkflowService: { ...mergeWorkflowService, ...mergeWorkflowView },
     };
 }

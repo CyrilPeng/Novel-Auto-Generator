@@ -1,6 +1,6 @@
 import { createFileUtils } from '../core/fileUtils.js';
-import { createFileImportService } from '../services/fileImportService.js';
-import { createSettingsPersistenceService } from '../services/settingsPersistenceService.js';
+import { createFileImportService } from '../ui/fileImportService.js';
+import { createSettingsPersistenceService } from '../ui/settingsPersistenceService.js';
 import { createCategoryLightService } from '../services/categoryLightService.js';
 import { createEntryConfigService } from '../services/entryConfigService.js';
 import { createModalLifecycle } from '../ui/modalLifecycle.js';
