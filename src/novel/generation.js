@@ -41,8 +41,10 @@ export function createNovelRunner(deps) {
         const deadline = Date.now() + (config.replyTimeoutMs || 600000);
         const startDeadline = Date.now() + (config.replyStartTimeoutMs || 120000);
         const interval = Math.max(10, config.stabilityCheckInterval || 1000);
+        const emptyChecksRequired = Math.max(1, config.stabilityRequiredCount || 3);
         let lastText = null;
         let stable = 0;
+        let emptyChecks = 0;
         let readyAt = null;
         while (Date.now() < deadline) {
             assertRun(run);
@@ -55,7 +57,15 @@ export function createNovelRunner(deps) {
             if (!reply && Date.now() >= startDeadline)
                 throw new UserError('等待 AI 开始回复超时；再次开始将继续等待，不会重复发送');
             const text = reply?.text || '';
-            if (text && text === lastText && state.generating !== true) stable++;
+            const hasContent = text.trim().length > 0;
+            if (!hasContent) {
+                emptyChecks = reply && state.generating === false ? emptyChecks + 1 : 0;
+                if (emptyChecks >= emptyChecksRequired)
+                    throw new UserError('AI 返回空内容（可能由假流式或截断导致），将自动重试当前提示词', {
+                        code: 'EMPTY_REPLY',
+                    });
+            } else emptyChecks = 0;
+            if (hasContent && text === lastText && state.generating !== true) stable++;
             else {
                 stable = 0;
                 readyAt = null;
@@ -83,7 +93,7 @@ export function createNovelRunner(deps) {
                     const current = final.messages
                         .slice(attempt.floor)
                         .find((message) => !message.isUser && !message.isSystem);
-                    if (current?.text === text && final.generating !== true) return text.length;
+                    if (current?.text === text && final.generating !== true) return text.trim().length;
                     stable = 0;
                     readyAt = null;
                 }
@@ -137,41 +147,66 @@ export function createNovelRunner(deps) {
             for (let chapter = settings.currentChapter; chapter < run.config.totalChapters; chapter++) {
                 while (run.paused) await wait(run, 100);
                 assertRun(run);
-                if (!pending) {
-                    const before = snapshot();
-                    if (before.generating === true) throw new UserError('酒馆仍在生成，请等待完成后再开始');
-                    pending = { identity: run.identity, floor: before.messages.length, prompt: run.config.prompt };
-                    if (recovery && typeof run.identity !== 'string')
-                        throw new UserError('无法可靠识别当前聊天，暂不能安全保存续写进度');
-                    persist(run.identity, chapter);
-                    // Record uncertainty before sending: a thrown error may occur after dispatch.
-                    for (let retry = 0; ; retry++) {
-                        try {
-                            await send(run.config.prompt, {
-                                signal: run.controller.signal,
-                                assertCurrent: () => assertRun(run),
-                            });
-                            break;
-                        } catch (error) {
-                            assertRun(run);
-                            if (error.dispatched !== false) throw error;
-                            if (retry + 1 >= Math.max(1, run.config.maxRetries || 3)) {
-                                pending = null;
-                                persist(run.identity, chapter);
-                                throw error;
+                let length;
+                let emptyReplyRetries = 0;
+                for (;;) {
+                    assertRun(run);
+                    if (!pending) {
+                        const before = snapshot();
+                        if (before.generating === true) throw new UserError('酒馆仍在生成，请等待完成后再开始');
+                        pending = { identity: run.identity, floor: before.messages.length, prompt: run.config.prompt };
+                        if (recovery && typeof run.identity !== 'string')
+                            throw new UserError('无法可靠识别当前聊天，暂不能安全保存续写进度');
+                        persist(run.identity, chapter);
+                        // Record uncertainty before sending: a thrown error may occur after dispatch.
+                        for (let retry = 0; ; retry++) {
+                            try {
+                                await send(run.config.prompt, {
+                                    signal: run.controller.signal,
+                                    assertCurrent: () => assertRun(run),
+                                });
+                                break;
+                            } catch (error) {
+                                assertRun(run);
+                                if (error.dispatched !== false) throw error;
+                                if (retry + 1 >= Math.max(1, run.config.maxRetries || 3)) {
+                                    pending = null;
+                                    persist(run.identity, chapter);
+                                    throw error;
+                                }
+                                await wait(run, 1000);
                             }
-                            await wait(run, 1000);
+                        }
+                        assertRun(run);
+                        if (run.config.enableSendToastDetection) {
+                            await wait(run, 500);
+                            const deadline = Date.now() + (run.config.sendToastWaitTimeout || 60000);
+                            while (snapshot().toast && Date.now() < deadline) await wait(run, 100);
+                            await wait(run, Math.max(0, run.config.sendPostToastWaitTime || 0));
                         }
                     }
-                    assertRun(run);
-                    if (run.config.enableSendToastDetection) {
-                        await wait(run, 500);
-                        const deadline = Date.now() + (run.config.sendToastWaitTimeout || 60000);
-                        while (snapshot().toast && Date.now() < deadline) await wait(run, 100);
-                        await wait(run, Math.max(0, run.config.sendPostToastWaitTime || 0));
+                    try {
+                        length = await waitForReply(run, pending);
+                        break;
+                    } catch (error) {
+                        assertRun(run);
+                        if (error.code !== 'EMPTY_REPLY') throw error;
+                        const retryLimit = Math.max(1, run.config.maxRetries || 3);
+                        if (emptyReplyRetries >= retryLimit) {
+                            pending = null;
+                            persist(run.identity, chapter);
+                            throw new UserError(
+                                `AI 连续 ${retryLimit + 1} 次返回空内容，已停止自动续写；请检查模型或酒馆生成设置后重新开始`,
+                                { code: 'EMPTY_REPLY_LIMIT' },
+                            );
+                        }
+                        emptyReplyRetries++;
+                        pending = null;
+                        persist(run.identity, chapter);
+                        notify('warning', `AI 返回空内容，正在重试当前章节（${emptyReplyRetries}/${retryLimit}）`);
+                        await wait(run, Math.min(3000, emptyReplyRetries * 1000));
                     }
                 }
-                const length = await waitForReply(run, pending);
                 assertRun(run);
                 if (length < run.config.minChapterLength) {
                     completePending(run.identity, chapter);

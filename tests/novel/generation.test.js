@@ -58,6 +58,39 @@ it('bounds empty and continuously generating replies without resending', async (
     expect(notify).toHaveBeenCalledWith('warning', expect.stringContaining('超时'));
 });
 
+it('retries a completed empty reply instead of waiting for the full timeout', async () => {
+    vi.useFakeTimers();
+    const { state, settings, runner, send, notify, exportNovel } = setup();
+    settings.maxRetries = 1;
+    send.mockImplementation(async (text) => {
+        state.messages.push({ isUser: true, text });
+        if (send.mock.calls.length === 2) state.messages.push({ isUser: false, text: '完整正文' });
+    });
+    const task = runner.start();
+    state.messages.push({ isUser: false, text: '' });
+    await vi.runAllTimersAsync();
+    await task;
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(settings.currentChapter).toBe(1);
+    expect(notify).toHaveBeenCalledWith('warning', expect.stringContaining('空内容'));
+    expect(exportNovel).toHaveBeenCalledWith(false);
+});
+
+it('stops after empty reply retries are exhausted', async () => {
+    vi.useFakeTimers();
+    const { state, settings, runner, send, notify } = setup();
+    settings.maxRetries = 1;
+    send.mockImplementation(async (text) => {
+        state.messages.push({ isUser: true, text }, { isUser: false, text: '' });
+    });
+    const task = runner.start();
+    await vi.runAllTimersAsync();
+    await task;
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(settings.currentChapter).toBe(0);
+    expect(notify).toHaveBeenLastCalledWith('warning', expect.stringContaining('连续 2 次返回空内容'));
+});
+
 it('waits for the original uncertain reply on restart instead of dispatching again', async () => {
     vi.useFakeTimers();
     const { runner, send, state, settings } = setup();
