@@ -28,8 +28,8 @@ export function createModalController(deps) {
 
         initializeModalState();
         if (!AppState.processing.run?.pending) {
-            restoreModalData();
-            restoreExistingState().catch(onRestoreStateError);
+            await restoreModalData();
+            await restoreExistingState().catch(onRestoreStateError);
         }
     }
 

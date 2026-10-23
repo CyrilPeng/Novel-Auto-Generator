@@ -18,11 +18,12 @@ export function createModalLifecycle(deps) {
     }
 
     function restoreModalData() {
-        loadCustomCategories().then(() => {
+        const categoriesReady = loadCustomCategories().then(() => {
             renderCategoriesList();
             renderDefaultWorldbookEntriesUI();
         });
         checkAndRestoreState();
+        return categoriesReady;
     }
 
     return {
