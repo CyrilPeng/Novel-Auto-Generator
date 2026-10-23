@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 export function createEntryConfigModals(deps = {}) {
     const {
         AppState,
@@ -19,38 +20,38 @@ export function createEntryConfigModals(deps = {}) {
 
         const bodyHtml = `
 		<div style="margin-bottom:16px;padding:12px;background:rgba(52,152,219,0.15);border-radius:8px;">
-			<div style="font-size:12px;color:#ccc;">配置此条目在导出为SillyTavern格式时的位置、深度和顺序</div>
+			<div style="font-size:12px;color:#ccc;">${t('configView.entryConfig.desc')}</div>
 		</div>
 
 		<div class="ttw-form-group">
-			<label>位置 (Position)</label>
+			<label>${t('configView.entryConfig.positionLabel')}</label>
 			<select id="ttw-entry-position" class="ttw-select">
-				<option value="0" ${config.position === 0 ? 'selected' : ''}>在角色定义之前</option>
-				<option value="1" ${config.position === 1 ? 'selected' : ''}>在角色定义之后</option>
-				<option value="2" ${config.position === 2 ? 'selected' : ''}>在作者注释之前</option>
-				<option value="3" ${config.position === 3 ? 'selected' : ''}>在作者注释之后</option>
-				<option value="4" ${config.position === 4 ? 'selected' : ''}>自定义深度</option>
+				<option value="0" ${config.position === 0 ? 'selected' : ''}>${t('configView.categoryEditor.beforeChar')}</option>
+				<option value="1" ${config.position === 1 ? 'selected' : ''}>${t('configView.categoryEditor.afterChar')}</option>
+				<option value="2" ${config.position === 2 ? 'selected' : ''}>${t('configView.categoryEditor.beforeAuthor')}</option>
+				<option value="3" ${config.position === 3 ? 'selected' : ''}>${t('configView.categoryEditor.afterAuthor')}</option>
+				<option value="4" ${config.position === 4 ? 'selected' : ''}>${t('configView.categoryEditor.customDepth')}</option>
 			</select>
 		</div>
 
 		<div class="ttw-form-group">
-			<label>深度 (Depth) - 仅Position=4时有效</label>
+			<label>${t('configView.entryConfig.depthLabel')}</label>
 			<input type="number" id="ttw-entry-depth" class="ttw-input" value="${config.depth}" min="0" max="999">
 		</div>
 
 		<div class="ttw-form-group">
-			<label>顺序 (Order) - 数字越小越靠前</label>
+			<label>${t('configView.entryConfig.orderLabel')}</label>
 			<input type="number" id="ttw-entry-order" class="ttw-input" value="${config.order}" min="0" max="9999">
 		</div>
 	`;
         const footerHtml = `
-		<button class="ttw-btn" id="ttw-cancel-entry-config">取消</button>
-		<button class="ttw-btn ttw-btn-primary" id="ttw-save-entry-config">💾 保存</button>
+		<button class="ttw-btn" id="ttw-cancel-entry-config">${t('configView.entryConfig.cancel')}</button>
+		<button class="ttw-btn ttw-btn-primary" id="ttw-save-entry-config">${t('configView.entryConfig.save')}</button>
 	`;
 
         const modal = ModalFactory.create({
             id: 'ttw-entry-config-modal',
-            title: `⚙️ 条目配置: ${entryName}`,
+            title: t('configView.entryConfig.title', { name: entryName }),
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '500px',
@@ -65,7 +66,7 @@ export function createEntryConfigModals(deps = {}) {
 
             setEntryConfig(category, entryName, { position, depth, order });
             ModalFactory.close(modal);
-            ErrorHandler.showUserSuccess('配置已保存');
+            ErrorHandler.showUserSuccess(t('configView.entryConfig.saved'));
         });
     }
 
@@ -77,27 +78,27 @@ export function createEntryConfigModals(deps = {}) {
 
         const bodyHtml = `
 		<div style="margin-bottom:16px;padding:12px;background:rgba(155,89,182,0.15);border-radius:8px;">
-			<div style="font-size:12px;color:#ccc;">设置"剧情大纲"分类在导出为SillyTavern格式时的默认位置/深度/顺序。此配置会随"导出配置"一起保存。</div>
+			<div style="font-size:12px;color:#ccc;">${t('configView.plotConfig.desc')}</div>
 		</div>
 
 		<div class="ttw-form-group">
-			<label>默认位置 (Position)</label>
+			<label>${t('configView.plotConfig.positionLabel')}</label>
 			<select id="ttw-plot-config-position" class="ttw-select">
-				<option value="0" ${(config.position || 0) === 0 ? 'selected' : ''}>在角色定义之前</option>
-				<option value="1" ${config.position === 1 ? 'selected' : ''}>在角色定义之后</option>
-				<option value="2" ${config.position === 2 ? 'selected' : ''}>在作者注释之前</option>
-				<option value="3" ${config.position === 3 ? 'selected' : ''}>在作者注释之后</option>
-				<option value="4" ${config.position === 4 ? 'selected' : ''}>自定义深度</option>
+				<option value="0" ${(config.position || 0) === 0 ? 'selected' : ''}>${t('configView.categoryEditor.beforeChar')}</option>
+				<option value="1" ${config.position === 1 ? 'selected' : ''}>${t('configView.categoryEditor.afterChar')}</option>
+				<option value="2" ${config.position === 2 ? 'selected' : ''}>${t('configView.categoryEditor.beforeAuthor')}</option>
+				<option value="3" ${config.position === 3 ? 'selected' : ''}>${t('configView.categoryEditor.afterAuthor')}</option>
+				<option value="4" ${config.position === 4 ? 'selected' : ''}>${t('configView.categoryEditor.customDepth')}</option>
 			</select>
 		</div>
 
 		<div class="ttw-form-group">
-			<label>默认深度 (Depth) - 仅Position=4时有效</label>
+			<label>${t('configView.plotConfig.depthLabel')}</label>
 			<input type="number" id="ttw-plot-config-depth" class="ttw-input" value="${config.depth || 4}" min="0" max="999">
 		</div>
 
 		<div class="ttw-form-group">
-			<label>默认起始顺序 (Order)</label>
+			<label>${t('configView.plotConfig.orderLabel')}</label>
 			<input type="number" id="ttw-plot-config-order" class="ttw-input" value="${config.order || 100}" min="0" max="9999">
 		</div>
 
@@ -105,20 +106,20 @@ export function createEntryConfigModals(deps = {}) {
 			<label class="ttw-checkbox-label" style="padding:10px;background:rgba(39,174,96,0.15);border-radius:6px;">
 				<input type="checkbox" id="ttw-plot-config-auto-increment" ${config.autoIncrementOrder ? 'checked' : ''}>
 				<div>
-					<span style="color:#27ae60;font-weight:bold;">📈 顺序自动递增</span>
-					<div class="ttw-setting-hint">勾选后剧情大纲下的条目顺序会从起始值开始递增（100,101,102...）</div>
+					<span style="color:#27ae60;font-weight:bold;">${t('configView.plotConfig.autoIncrement')}</span>
+					<div class="ttw-setting-hint">${t('configView.plotConfig.autoIncrementHint')}</div>
 				</div>
 			</label>
 		</div>
 	`;
         const footerHtml = `
-		<button class="ttw-btn" id="ttw-cancel-plot-config">取消</button>
-		<button class="ttw-btn ttw-btn-primary" id="ttw-save-plot-config">💾 保存</button>
+		<button class="ttw-btn" id="ttw-cancel-plot-config">${t('configView.entryConfig.cancel')}</button>
+		<button class="ttw-btn ttw-btn-primary" id="ttw-save-plot-config">${t('configView.entryConfig.save')}</button>
 	`;
 
         const modal = ModalFactory.create({
             id: 'ttw-plot-config-modal',
-            title: '⚙️ 剧情大纲 - 导出时的默认配置',
+            title: t('configView.plotConfig.title'),
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '500px',
@@ -137,7 +138,7 @@ export function createEntryConfigModals(deps = {}) {
             setCategoryDefaultConfig('剧情大纲', AppState.config.plotOutline);
             saveCurrentSettings();
             ModalFactory.close(modal);
-            ErrorHandler.showUserSuccess('剧情大纲导出配置已保存！');
+            ErrorHandler.showUserSuccess(t('configView.plotConfig.saved'));
         });
     }
 
@@ -162,27 +163,27 @@ export function createEntryConfigModals(deps = {}) {
 
         const bodyHtml = `
 		<div style="margin-bottom:16px;padding:12px;background:rgba(155,89,182,0.15);border-radius:8px;">
-			<div style="font-size:12px;color:#ccc;">设置此分类下所有条目的默认位置/深度/顺序。单个条目的配置会覆盖分类默认配置。</div>
+			<div style="font-size:12px;color:#ccc;">${t('configView.categoryConfig.desc')}</div>
 		</div>
 
 		<div class="ttw-form-group">
-			<label>默认位置 (Position)</label>
+			<label>${t('configView.plotConfig.positionLabel')}</label>
 			<select id="ttw-cat-position" class="ttw-select">
-				<option value="0" ${(config.position || 0) === 0 ? 'selected' : ''}>在角色定义之前</option>
-				<option value="1" ${config.position === 1 ? 'selected' : ''}>在角色定义之后</option>
-				<option value="2" ${config.position === 2 ? 'selected' : ''}>在作者注释之前</option>
-				<option value="3" ${config.position === 3 ? 'selected' : ''}>在作者注释之后</option>
-				<option value="4" ${config.position === 4 ? 'selected' : ''}>自定义深度</option>
+				<option value="0" ${(config.position || 0) === 0 ? 'selected' : ''}>${t('configView.categoryEditor.beforeChar')}</option>
+				<option value="1" ${config.position === 1 ? 'selected' : ''}>${t('configView.categoryEditor.afterChar')}</option>
+				<option value="2" ${config.position === 2 ? 'selected' : ''}>${t('configView.categoryEditor.beforeAuthor')}</option>
+				<option value="3" ${config.position === 3 ? 'selected' : ''}>${t('configView.categoryEditor.afterAuthor')}</option>
+				<option value="4" ${config.position === 4 ? 'selected' : ''}>${t('configView.categoryEditor.customDepth')}</option>
 			</select>
 		</div>
 
 		<div class="ttw-form-group">
-			<label>默认深度 (Depth)</label>
+			<label>${t('configView.categoryConfig.depthLabel')}</label>
 			<input type="number" id="ttw-cat-depth" class="ttw-input" value="${config.depth || 4}" min="0" max="999">
 		</div>
 
 		<div class="ttw-form-group">
-			<label>默认起始顺序 (Order)</label>
+			<label>${t('configView.plotConfig.orderLabel')}</label>
 			<input type="number" id="ttw-cat-order" class="ttw-input" value="${config.order || 100}" min="0" max="9999">
 		</div>
 
@@ -190,8 +191,8 @@ export function createEntryConfigModals(deps = {}) {
 			<label class="ttw-checkbox-label" style="padding:10px;background:rgba(39,174,96,0.15);border-radius:6px;">
 				<input type="checkbox" id="ttw-cat-auto-increment" ${config.autoIncrementOrder ? 'checked' : ''}>
 				<div>
-					<span style="color:#27ae60;font-weight:bold;">📈 顺序自动递增</span>
-					<div class="ttw-setting-hint">勾选后同分类下的条目顺序会从起始值开始递增（100,101,102...）</div>
+					<span style="color:#27ae60;font-weight:bold;">${t('configView.plotConfig.autoIncrement')}</span>
+					<div class="ttw-setting-hint">${t('configView.categoryConfig.autoIncrementHint')}</div>
 				</div>
 			</label>
 		</div>
@@ -199,18 +200,18 @@ export function createEntryConfigModals(deps = {}) {
 		<div style="margin-top:16px;padding:12px;background:rgba(230,126,34,0.1);border-radius:6px;">
 			<label class="ttw-checkbox-label">
 				<input type="checkbox" id="ttw-apply-to-existing">
-				<span>同时应用到该分类下已有的所有条目</span>
+				<span>${t('configView.categoryConfig.applyToExisting')}</span>
 			</label>
 		</div>
 	`;
         const footerHtml = `
-		<button class="ttw-btn" id="ttw-cancel-cat-config">取消</button>
-		<button class="ttw-btn ttw-btn-primary" id="ttw-save-cat-config">💾 保存</button>
+		<button class="ttw-btn" id="ttw-cancel-cat-config">${t('configView.entryConfig.cancel')}</button>
+		<button class="ttw-btn ttw-btn-primary" id="ttw-save-cat-config">${t('configView.entryConfig.save')}</button>
 	`;
 
         const modal = ModalFactory.create({
             id: 'ttw-category-config-modal',
-            title: `⚙️ 分类默认配置: ${category}`,
+            title: t('configView.categoryConfig.title', { category }),
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '500px',
@@ -244,7 +245,7 @@ export function createEntryConfigModals(deps = {}) {
 
             ModalFactory.close(modal);
             if (typeof updateWorldbookPreview === 'function') updateWorldbookPreview();
-            ErrorHandler.showUserSuccess('配置已保存');
+            ErrorHandler.showUserSuccess(t('configView.entryConfig.saved'));
         });
     }
 
