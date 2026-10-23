@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildModalHtml, hydrateSettingsFromState } from '../../txtToWorldbook/ui/settingsPanel.js';
+import { setLocale } from '../../txtToWorldbook/core/i18n.js';
 import { bindPromptEvents } from '../../txtToWorldbook/ui/eventBindings.js';
 import { createSettingsPersistenceService } from '../../txtToWorldbook/ui/settingsPersistenceService.js';
 import { createInitialAppState } from '../../txtToWorldbook/core/state.js';
@@ -25,6 +26,8 @@ beforeEach(() => {
     document.body.innerHTML = '';
 });
 
+afterEach(() => setLocale('zh-CN'));
+
 describe('TXT 转世界书设置面板', () => {
     it('装配并回填附加系统提示词', () => {
         const { AppState } = setup();
@@ -46,6 +49,14 @@ describe('TXT 转世界书设置面板', () => {
         expect(AppState.settings.extraSystemPrompt).toBe('仅输出 JSON');
         const stored = JSON.parse(localStorage.getItem('txtToWorldbookSettings'));
         expect(stored.extraSystemPrompt).toBe('仅输出 JSON');
+    });
+
+    it('英文主界面不遗留未翻译 key', () => {
+        setLocale('en-US');
+        const html = buildModalHtml();
+        expect(html).not.toMatch(/worldbook\.[a-zA-Z]/);
+        expect(html).toContain('Start Conversion');
+        expect(html).toContain('View Worldbook');
     });
 
     it('输入时触发设置保存', () => {
