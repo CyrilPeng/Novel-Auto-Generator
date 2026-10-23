@@ -25,6 +25,7 @@ export function createSettingsPersistenceService(deps) {
         AppState.settings.categoryDefaultConfig = AppState.config.categoryDefault;
         AppState.settings.entryPositionConfig = AppState.config.entryPosition;
         AppState.settings.customSuffixPrompt = document.getElementById('ttw-suffix-prompt')?.value || '';
+        AppState.settings.extraSystemPrompt = document.getElementById('ttw-extra-system-prompt')?.value || '';
         AppState.settings.customApiProvider = document.getElementById('ttw-api-provider')?.value || 'openai-compatible';
         AppState.settings.customApiKey = document.getElementById('ttw-api-key')?.value || '';
         AppState.settings.customApiEndpoint = document.getElementById('ttw-api-endpoint')?.value || '';

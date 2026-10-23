@@ -277,6 +277,10 @@ function buildMessageChainSectionHtml() {
         </div>
         <div id="ttw-suffix-content" class="ttw-prompt-content">
             <div style="margin-bottom:12px;padding:10px;background:rgba(230,126,34,0.1);border-radius:6px;">
+                <label style="font-size:12px;color:#e67e22;font-weight:bold;">📌 附加系统提示词（作为独立 system 消息加入每次请求）</label>
+                <textarea id="ttw-extra-system-prompt" rows="3" placeholder="留空则不添加。内容由你自行填写；酒馆 API 模式仍可能被酒馆的提示词后处理影响。" class="ttw-textarea-small" style="margin-top:6px;"></textarea>
+            </div>
+            <div style="margin-bottom:12px;padding:10px;background:rgba(230,126,34,0.1);border-radius:6px;">
                 <label style="font-size:12px;color:#e67e22;font-weight:bold;">📌 后缀提示词（追加到提示词末尾，在消息链转换之前生效）</label>
                 <textarea id="ttw-suffix-prompt" rows="2" placeholder="例如：请特别注意提取XX信息，修复乱码内容，注意区分同名角色..." class="ttw-textarea-small" style="margin-top:6px;"></textarea>
             </div>
@@ -556,6 +560,9 @@ export function hydrateSettingsFromState(deps = {}) {
 
     const suffixPromptEl = document.getElementById('ttw-suffix-prompt');
     if (suffixPromptEl) suffixPromptEl.value = AppState.settings.customSuffixPrompt || '';
+
+    const extraSystemPromptEl = document.getElementById('ttw-extra-system-prompt');
+    if (extraSystemPromptEl) extraSystemPromptEl.value = AppState.settings.extraSystemPrompt || '';
 
     if (typeof renderMessageChainUI === 'function') {
         renderMessageChainUI();

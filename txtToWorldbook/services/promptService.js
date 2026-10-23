@@ -26,20 +26,23 @@ export function createPromptService(deps = {}) {
     }
 
     function applyMessageChain(prompt) {
-        const chain = runConfiguration(AppState).settings.promptMessageChain;
-        if (!Array.isArray(chain) || chain.length === 0) {
-            return [{ role: 'user', content: prompt }];
-        }
-        const enabledMessages = chain.filter((m) => m.enabled !== false);
-        if (enabledMessages.length === 0) {
-            return [{ role: 'user', content: prompt }];
-        }
-        return enabledMessages
-            .map((msg) => ({
-                role: msg.role || 'user',
-                content: (msg.content || '').replace(/\{PROMPT\}/g, prompt),
-            }))
-            .filter((m) => m.content.trim().length > 0);
+        const settings = runConfiguration(AppState).settings;
+        const chain = settings.promptMessageChain;
+        const enabledMessages = Array.isArray(chain) ? chain.filter((m) => m && m.enabled !== false) : [];
+        const messages =
+            enabledMessages.length === 0
+                ? [{ role: 'user', content: prompt }]
+                : enabledMessages
+                      .map((msg) => ({
+                          role: msg.role || 'user',
+                          content: String(msg.content || '').replace(/\{PROMPT\}/g, prompt),
+                      }))
+                      .filter((m) => m.content.trim().length > 0);
+        if (messages.length === 0) messages.push({ role: 'user', content: prompt });
+        const extraSystemPrompt =
+            typeof settings.extraSystemPrompt === 'string' ? settings.extraSystemPrompt.trim() : '';
+        if (extraSystemPrompt) messages.unshift({ role: 'system', content: extraSystemPrompt });
+        return messages;
     }
 
     function convertToGeminiContents(messages) {

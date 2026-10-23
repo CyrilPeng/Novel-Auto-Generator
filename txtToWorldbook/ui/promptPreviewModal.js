@@ -27,12 +27,19 @@ export function createPromptPreviewModal(deps = {}) {
                 ? AppState.settings.promptMessageChain
                 : [{ role: 'user', content: '{PROMPT}', enabled: true }];
             const enabledChain = chain.filter((m) => m && m.enabled !== false);
-            const chainInfo = enabledChain
+            const extraSystemPrompt =
+                typeof AppState.settings.extraSystemPrompt === 'string'
+                    ? AppState.settings.extraSystemPrompt.trim()
+                    : '';
+            const previewChain = extraSystemPrompt
+                ? [{ role: 'system', content: extraSystemPrompt, extra: true }, ...enabledChain]
+                : enabledChain;
+            const chainInfo = previewChain
                 .map((m, i) => {
                     const roleLabel = m.role === 'system' ? '🔷系统' : m.role === 'assistant' ? '🟡AI助手' : '🟢用户';
                     const contentStr = typeof m.content === 'string' ? m.content : m.content ? String(m.content) : '';
                     const preview = contentStr.length > 60 ? `${contentStr.substring(0, 60)}...` : contentStr;
-                    return `  ${i + 1}. [${roleLabel}] ${preview}`;
+                    return `  ${i + 1}. [${roleLabel}${m.extra ? '·附加' : ''}] ${preview}`;
                 })
                 .join('\n');
 
@@ -40,7 +47,7 @@ export function createPromptPreviewModal(deps = {}) {
             const parallelMode =
                 (AppState.config && AppState.config.parallel && AppState.config.parallel.mode) || '关闭';
 
-            const previewContent = `当前提示词预览:\n\nAPI模式: ${apiMode}\n并行模式: ${isParallelEnabled ? parallelMode : '关闭'}\n强制章节标记: ${AppState.settings.forceChapterMarker ? '开启' : '关闭'}\n启用分类: ${enabledCats}\n\n【消息链 (${enabledChain.length}条消息)】\n${chainInfo}\n\n【章节强制标记示例】\n${chapterForce}\n\n【系统提示词】\n${prompt}`;
+            const previewContent = `当前提示词预览:\n\nAPI模式: ${apiMode}\n并行模式: ${isParallelEnabled ? parallelMode : '关闭'}\n强制章节标记: ${AppState.settings.forceChapterMarker ? '开启' : '关闭'}\n启用分类: ${enabledCats}\n\n【消息链 (${previewChain.length}条消息)】\n${chainInfo}\n\n【章节强制标记示例】\n${chapterForce}\n\n【系统提示词】\n${prompt}`;
 
             const currentWorldbookPrompt = AppState.settings.customWorldbookPrompt || defaultWorldbookPrompt || '';
             const currentPlotPrompt = AppState.settings.customPlotPrompt || defaultPlotPrompt || '';

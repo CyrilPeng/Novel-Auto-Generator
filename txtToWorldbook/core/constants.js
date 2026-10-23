@@ -223,6 +223,7 @@ export const defaultSettings = {
     categoryDefaultConfig: {},
     entryPositionConfig: {},
     customSuffixPrompt: '',
+    extraSystemPrompt: '',
     promptMessageChain: [{ role: 'user', content: '{PROMPT}', enabled: true }],
     allowRecursion: false,
     filterResponseTags: 'thinking,/think',
