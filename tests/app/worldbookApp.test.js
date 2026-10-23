@@ -22,6 +22,7 @@ it('组装完整世界书应用并暴露稳定的公开 API', async () => {
     expect(app.shellRuntime.modalEventBinder).toBeTruthy();
 
     await app.api.open();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.getElementById('txt-to-worldbook-modal')).toBeTruthy();
     app.api.close();
     expect(document.getElementById('txt-to-worldbook-modal')).toBeNull();

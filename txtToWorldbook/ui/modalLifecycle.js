@@ -22,8 +22,7 @@ export function createModalLifecycle(deps) {
             renderCategoriesList();
             renderDefaultWorldbookEntriesUI();
         });
-        checkAndRestoreState();
-        return categoriesReady;
+        return Promise.all([categoriesReady, checkAndRestoreState()]);
     }
 
     return {
