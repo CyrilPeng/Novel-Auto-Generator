@@ -29,21 +29,27 @@ export function withoutCredentials(settings = {}) {
     return copy;
 }
 
-export function captureTaskState(state, processedIndex) {
+/**
+ * @param {object} state
+ * @param {number} processedIndex
+ * @param {{clone?: boolean, memoryQueue?: object[], generatedWorldbook?: object, entryOverrides?: object}} [snapshot]
+ * `clone: false` reuses the provided detached objects; callers must persist them before mutating again.
+ */
+export function captureTaskState(state, processedIndex, snapshot = {}) {
     ensureChunkIdentities(state.memory.queue);
     if (!state.task || state.task.fileHash !== state.file.hash)
         state.task = { id: newIdentity('task'), revision: 0, fileHash: state.file.hash };
     const configuration = runConfiguration(state);
-    return structuredClone({
+    const captured = {
         schemaVersion: 1,
         version: '2.9.0',
         key: 'currentState',
         processedIndex,
         task: state.task,
-        memoryQueue: state.memory.queue,
-        generatedWorldbook: state.worldbook.generated,
+        memoryQueue: snapshot.memoryQueue || state.memory.queue,
+        generatedWorldbook: snapshot.generatedWorldbook || state.worldbook.generated,
         worldbookVolumes: state.worldbook.volumes,
-        entryOverrides: state.worldbook.overrides || {},
+        entryOverrides: snapshot.entryOverrides || state.worldbook.overrides || {},
         currentVolumeIndex: state.worldbook.currentVolumeIndex,
         fileHash: state.file.hash,
         novelName: state.file.novelName || '',
@@ -60,7 +66,8 @@ export function captureTaskState(state, processedIndex) {
         defaultWorldbookEntriesUI: configuration.persistent?.defaultEntries,
         categoryDefaultConfig: configuration.config?.categoryDefault,
         entryPositionConfig: configuration.config?.entryPosition,
-    });
+    };
+    return snapshot.clone === false ? captured : structuredClone(captured);
 }
 
 export function migrateTaskState(input, { fork = false } = {}) {

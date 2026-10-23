@@ -108,7 +108,7 @@ export function createChunkRepository(database) {
                                         previousMemoryQueue: data.previousMemoryQueue,
                                         previousOverrides: data.previousOverrides,
                                         previousEntryPosition: data.previousEntryPosition,
-                                        newWorldbook: state.generatedWorldbook,
+                                        // The new worldbook is already stored in currentState; rollback only needs the previous snapshot.
                                         changedEntries: data.changedEntries,
                                         volumeIndex: state.currentVolumeIndex,
                                         timestamp: Date.now(),

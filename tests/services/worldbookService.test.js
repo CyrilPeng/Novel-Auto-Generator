@@ -201,6 +201,46 @@ describe('findChangedEntries', () => {
 });
 
 // ============================================================
+// findChangedEntriesForPatch
+// ============================================================
+describe('findChangedEntriesForPatch', () => {
+    it('只比较 patch 涉及的条目并区分 add/modify', () => {
+        const { service } = createTestService();
+        const previous = {
+            角色: { 张三: { 内容: '旧' }, 未变: { 内容: '保持' } },
+            地点: { 京城: { 内容: '京城' } },
+        };
+        const next = structuredClone(previous);
+        next.角色.张三 = { 内容: '新' };
+        next.角色.王五 = { 内容: '新增' };
+        next.地点.京城 = { 内容: '不应被本函数报告' };
+        const changes = service.findChangedEntriesForPatch(previous, next, {
+            角色: { 张三: { 内容: '新' }, 王五: { 内容: '新增' } },
+        });
+        expect(changes).toEqual([
+            expect.objectContaining({ type: 'modify', category: '角色', entryName: '张三' }),
+            expect.objectContaining({ type: 'add', category: '角色', entryName: '王五' }),
+        ]);
+    });
+
+    it('patch 内条目消失时报告 delete', () => {
+        const { service } = createTestService();
+        const changes = service.findChangedEntriesForPatch(
+            { 角色: { 张三: { 内容: '旧' } } },
+            { 角色: {} },
+            { 角色: { 张三: null } },
+        );
+        expect(changes).toEqual([expect.objectContaining({ type: 'delete', category: '角色', entryName: '张三' })]);
+    });
+
+    it('空 patch 或无效分类返回空数组', () => {
+        const { service } = createTestService();
+        expect(service.findChangedEntriesForPatch({}, {}, null)).toEqual([]);
+        expect(service.findChangedEntriesForPatch({}, {}, { 角色: [] })).toEqual([]);
+    });
+});
+
+// ============================================================
 // mergeWorldbookDataWithHistory
 // ============================================================
 describe('mergeWorldbookDataWithHistory', () => {

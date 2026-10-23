@@ -40,6 +40,31 @@ describe('task schema migration', () => {
         expect(() => migrateTaskState(input)).toThrow('不安全');
         expect({}.polluted).toBeUndefined();
     });
+    it('reuses provided detached snapshots only when cloning is disabled', () => {
+        const state = {
+            file: { hash: 'f' },
+            memory: { queue: [] },
+            worldbook: { generated: {}, volumes: [], overrides: {} },
+            settings: {},
+            config: { parallel: { mode: 'batch' } },
+        };
+        const queue = [{ id: 'chunk', title: '章', content: '正文' }];
+        const worldbook = { 角色: { 人: { 内容: '正文' } } };
+        const overrides = { 0: { 角色: { 人: { 内容: '人工' } } } };
+        const snapshot = captureTaskState(state, 1, {
+            clone: false,
+            memoryQueue: queue,
+            generatedWorldbook: worldbook,
+            entryOverrides: overrides,
+        });
+        expect(snapshot.memoryQueue).toBe(queue);
+        expect(snapshot.generatedWorldbook).toBe(worldbook);
+        expect(snapshot.entryOverrides).toBe(overrides);
+        const cloned = captureTaskState(state, 1);
+        expect(cloned.memoryQueue).not.toBe(state.memory.queue);
+        expect(cloned.generatedWorldbook).not.toBe(state.worldbook.generated);
+    });
+
     it('removes credentials from normal task snapshots and endpoint URLs', () => {
         expect(
             withoutCredentials({

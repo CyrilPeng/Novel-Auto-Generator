@@ -33,7 +33,10 @@ it('atomically stores result/history/checkpoint and replays without duplicate hi
     expect(AppState.worldbook.generated).toEqual(snapshot);
     expect(AppState.memory.queue[0].processed).toBe(true);
     expect((await db.loadState()).task.revision).toBe(1);
-    expect(await db.getAllHistory()).toHaveLength(1);
+    const history = await db.getAllHistory();
+    expect(history).toHaveLength(1);
+    expect(history[0].previousWorldbook).toEqual({});
+    expect(history[0].newWorldbook).toBeUndefined();
     expect(await db.getRollResults(0)).toHaveLength(1);
 });
 

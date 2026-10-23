@@ -27,7 +27,7 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
             }
             if (!AppState.task || AppState.task.fileHash !== AppState.file.hash)
                 AppState.task = { id: newIdentity('task'), revision: 0, fileHash: AppState.file.hash };
-            const previous = structuredClone(AppState.worldbook.generated),
+            const previous = AppState.worldbook.generated,
                 next = structuredClone(previous);
             if (options.replaceEntries) {
                 for (const [category, entries] of Object.entries(patch)) {
@@ -46,20 +46,21 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
                 }
             }
             applyEntryOverrides(next, entryOverrides[AppState.worldbook.currentVolumeIndex]);
-            const queue = structuredClone(AppState.memory.queue);
-            Object.assign(queue[index], {
+            const queue = AppState.memory.queue.slice();
+            queue[index] = {
+                ...queue[index],
                 result: source,
                 processed: true,
                 failed: false,
                 failedError: null,
                 processing: false,
-            });
-            const state = {
-                ...captureTaskState(AppState, index + 1),
+            };
+            const state = captureTaskState(AppState, index + 1, {
+                clone: false,
                 memoryQueue: queue,
                 generatedWorldbook: next,
                 entryOverrides,
-            };
+            });
             const saved = await repository.commit({
                 taskId: AppState.task.id,
                 expectedRevision: AppState.task.revision,
@@ -70,7 +71,7 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
                 memoryTitle: chunk.title,
                 result: source,
                 previousWorldbook: previous,
-                changedEntries: worldbookService.findChangedEntries(previous, next),
+                changedEntries: worldbookService.findChangedEntriesForPatch(previous, next, patch),
                 state,
                 signal: guard.signal,
             });
@@ -92,15 +93,18 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
         const next = structuredClone(nextWorldbook);
         const execute = async () => {
             guard.assert();
-            const previous = structuredClone(AppState.worldbook.generated);
-            const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length);
-            state.generatedWorldbook = next;
+            const previous = AppState.worldbook.generated;
+            const entryOverrides = structuredClone(AppState.worldbook.overrides || {});
+            const state = captureTaskState(AppState, AppState.memory.queue.filter((m) => m.processed).length, {
+                clone: false,
+                generatedWorldbook: next,
+                entryOverrides,
+                ...(options.memoryQueue ? { memoryQueue: structuredClone(options.memoryQueue) } : {}),
+            });
             if (options.volumes) state.worldbookVolumes = structuredClone(options.volumes);
-            if (options.memoryQueue) state.memoryQueue = structuredClone(options.memoryQueue);
             if (options.entryPosition) state.entryPositionConfig = structuredClone(options.entryPosition);
             const changes = worldbookService.findChangedEntries(previous, next);
-            state.entryOverrides ??= {};
-            const overrides = (state.entryOverrides[AppState.worldbook.currentVolumeIndex] ??= {});
+            const overrides = (entryOverrides[AppState.worldbook.currentVolumeIndex] ??= {});
             for (const change of changes) {
                 overrides[change.category] ??= {};
                 overrides[change.category][change.entryName] =
@@ -112,14 +116,14 @@ export function createChunkCommitService({ AppState, MemoryHistoryDB, worldbookS
                 commitId: newIdentity('edit'),
                 worldbookEdit: true,
                 memoryIndex: -1,
-                previousVolumes: structuredClone(AppState.worldbook.volumes),
-                previousMemoryQueue: options.memoryQueue ? structuredClone(AppState.memory.queue) : undefined,
-                previousEntryPosition: structuredClone(AppState.config.entryPosition || {}),
-                previousOverrides: structuredClone(AppState.worldbook.overrides || {}),
+                previousVolumes: AppState.worldbook.volumes,
+                previousMemoryQueue: options.memoryQueue ? AppState.memory.queue : undefined,
+                previousEntryPosition: AppState.config.entryPosition || {},
+                previousOverrides: AppState.worldbook.overrides || {},
                 memoryTitle: title,
                 chunkId: 'worldbook',
                 previousWorldbook: previous,
-                changedEntries: worldbookService.findChangedEntries(previous, next),
+                changedEntries: changes,
                 state,
                 signal: guard.signal,
             });

@@ -112,6 +112,32 @@
         return changes;
     }
 
+    function findChangedEntriesForPatch(previous, next, patch) {
+        const changes = [];
+        for (const [category, entries] of Object.entries(patch || {})) {
+            if (!entries || typeof entries !== 'object' || Array.isArray(entries)) continue;
+            for (const entryName of Object.keys(entries)) {
+                const oldEntry = previous?.[category]?.[entryName];
+                const newEntry = next?.[category]?.[entryName];
+                if (newEntry === undefined) {
+                    if (oldEntry !== undefined)
+                        changes.push({
+                            type: 'delete',
+                            category,
+                            entryName,
+                            oldValue: oldEntry,
+                            newValue: null,
+                        });
+                } else if (oldEntry === undefined) {
+                    changes.push({ type: 'add', category, entryName, oldValue: null, newValue: newEntry });
+                } else if (JSON.stringify(oldEntry) !== JSON.stringify(newEntry)) {
+                    changes.push({ type: 'modify', category, entryName, oldValue: oldEntry, newValue: newEntry });
+                }
+            }
+        }
+        return changes;
+    }
+
     async function mergeWorldbookDataWithHistory(options) {
         const { target, source, memoryIndex, memoryTitle } = options;
         debugLog(`合并世界书[${memoryTitle}] 开始, 深拷贝快照...`);
@@ -146,6 +172,7 @@
         mergeWorldbookData,
         mergeWorldbookDataIncremental,
         findChangedEntries,
+        findChangedEntriesForPatch,
         mergeWorldbookDataWithHistory,
         saveWorldbookSnapshot,
     };
