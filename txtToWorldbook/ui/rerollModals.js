@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 import { beginRun, captureRun, finishRun, stopRun } from '../core/runContext.js';
 export function createRerollModals(deps = {}) {
     const {
@@ -24,16 +25,16 @@ export function createRerollModals(deps = {}) {
 
     function buildRerollSourcesHtml(sources) {
         if (sources.length === 0) {
-            return '<div style="color:#e74c3c;font-size:12px;">⚠️ 未找到该条目的来源章节（可能是默认条目或导入条目）</div>';
+            return `<div style="color:#e74c3c;font-size:12px;">${t('rerollView.noSource')}</div>`;
         }
-        let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">该条目来自以下章节（可多选）：</div>';
+        let html = `<div style="font-size:12px;color:#888;margin-bottom:8px;">${t('rerollView.sourcesHint')}</div>`;
         sources.forEach((source) => {
             html += `
         <label class="ttw-checkbox-label" style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(39,174,96,0.1);border-radius:6px;margin-bottom:6px;cursor:pointer;">
             <input type="checkbox" name="ttw-reroll-source" value="${source.memoryIndex}" ${sources.length === 1 ? 'checked' : ''}>
             <div style="flex:1;">
-                <div style="font-weight:bold;color:#27ae60;">第${source.memoryIndex + 1}章 - ${source.memory.title}</div>
-                <div style="font-size:11px;color:#888;">${(source.memory.content.length / 1000).toFixed(1)}k字</div>
+                <div style="font-weight:bold;color:#27ae60;">${t('rerollView.chapter', { index: source.memoryIndex + 1, title: source.memory.title })}</div>
+                <div style="font-size:11px;color:#888;">${t('rerollView.chars', { chars: (source.memory.content.length / 1000).toFixed(1) })}</div>
             </div>
         </label>`;
         });
@@ -42,7 +43,7 @@ export function createRerollModals(deps = {}) {
 
     function buildRerollHistoryHtml(rollHistory) {
         if (rollHistory.length === 0) {
-            return '<div style="text-align:center;color:#666;padding:15px;font-size:11px;">暂无Roll历史</div>';
+            return `<div style="text-align:center;color:#666;padding:15px;font-size:11px;">${t('rerollView.noHistory')}</div>`;
         }
         let html = '<div style="max-height:150px;overflow-y:auto;">';
         rollHistory.forEach((roll, idx) => {
@@ -61,7 +62,7 @@ export function createRerollModals(deps = {}) {
                 <div style="font-size:12px;color:#9b59b6;font-weight:bold;">#${idx + 1} - ${time}</div>
                 <div style="font-size:11px;color:#888;">第${roll.memoryIndex + 1}章 ${promptPreview}</div>
             </div>
-            <button class="ttw-use-roll-btn" data-roll-id="${roll.id}" style="background:rgba(39,174,96,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;color:#fff;">✅ 使用</button>
+            <button class="ttw-use-roll-btn" data-roll-id="${roll.id}" style="background:rgba(39,174,96,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;color:#fff;">${t('rerollView.use')}</button>
         </div>`;
         });
         html += '</div>';
@@ -73,49 +74,49 @@ export function createRerollModals(deps = {}) {
         return `
         <div style="margin-bottom:16px;padding:12px;background:rgba(230,126,34,0.15);border-radius:8px;">
             <div style="font-weight:bold;color:#e67e22;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-                <span>📝 当前条目内容（可编辑）</span>
-                <button id="ttw-save-entry-edit" class="ttw-btn ttw-btn-small" style="background:rgba(39,174,96,0.5);">💾 保存编辑</button>
+                <span>${t('rerollView.currentEntry')}</span>
+                <button id="ttw-save-entry-edit" class="ttw-btn ttw-btn-small" style="background:rgba(39,174,96,0.5);">${t('rerollView.saveEdit')}</button>
             </div>
             <div style="margin-bottom:8px;">
-                <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">🔑 关键词（逗号分隔）</label>
+                <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">${t('rerollView.keywordsLabel')}</label>
                 <input type="text" id="ttw-entry-keywords-edit" value="${currentKeywords.replace(/"/g, '&quot;')}" style="width:100%;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
             </div>
             <div>
-                <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">📄 内容</label>
+                <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">${t('rerollView.contentLabel')}</label>
                 <textarea id="ttw-entry-content-edit" rows="5" style="width:100%;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;resize:vertical;box-sizing:border-box;">${currentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
             </div>
         </div>
         <div style="margin-bottom:16px;padding:12px;background:rgba(155,89,182,0.1);border-radius:8px;">
             <div style="font-weight:bold;color:#9b59b6;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-                <span>📜 Roll历史 (${rollHistoryCount}条)</span>
-                ${rollHistoryCount > 0 ? '<button id="ttw-clear-entry-history" class="ttw-btn ttw-btn-small ttw-btn-warning" style="font-size:10px;">🗑️ 清空</button>' : ''}
+                <span>${t('rerollView.rollHistory', { count: rollHistoryCount })}</span>
+                ${rollHistoryCount > 0 ? `<button id="ttw-clear-entry-history" class="ttw-btn ttw-btn-small ttw-btn-warning" style="font-size:10px;">${t('rerollView.clear')}</button>` : ''}
             </div>
             <div id="ttw-entry-roll-history">${historyHtml}</div>
         </div>
         <div style="margin-bottom:16px;padding:12px;background:rgba(39,174,96,0.1);border-radius:8px;">
             <label style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:bold;font-size:13px;">
-                <span>📍 选择来源章节重Roll</span>
-                ${sourcesCount > 1 ? '<button id="ttw-select-all-sources" class="ttw-btn ttw-btn-small" style="font-size:10px;">全选/取消</button>' : ''}
+                <span>${t('rerollView.sourcesTitle')}</span>
+                ${sourcesCount > 1 ? `<button id="ttw-select-all-sources" class="ttw-btn ttw-btn-small" style="font-size:10px;">${t('rerollView.selectAllToggle')}</button>` : ''}
             </label>
             <div id="ttw-reroll-sources">${sourcesHtml}</div>
         </div>
         <div style="margin-bottom:16px;">
-            <label style="display:block;margin-bottom:8px;font-weight:bold;font-size:13px;">📝 额外提示词（可选）</label>
-            <textarea id="ttw-reroll-entry-prompt" rows="3" placeholder="例如：请更详细地描述该角色的性格特点、请补充该角色的外貌描写..." class="ttw-textarea" style="width:100%;padding:10px;box-sizing:border-box;"></textarea>
+            <label style="display:block;margin-bottom:8px;font-weight:bold;font-size:13px;">${t('rerollView.extraPrompt')}</label>
+            <textarea id="ttw-reroll-entry-prompt" rows="3" placeholder="${t('rerollView.extraPromptPlaceholder')}" class="ttw-textarea" style="width:100%;padding:10px;box-sizing:border-box;"></textarea>
         </div>
         <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(52,152,219,0.1);border-radius:6px;">
-            <label style="font-size:12px;color:#3498db;">⚡ 并发数:</label>
+            <label style="font-size:12px;color:#3498db;">${t('rerollView.concurrency')}</label>
             <input type="number" id="ttw-reroll-concurrency" value="${AppState.config.parallel.concurrency}" min="1" max="10" style="width:60px;padding:4px;border:1px solid #555;border-radius:4px;background:rgba(0,0,0,0.3);color:#fff;text-align:center;">
-            <span style="font-size:11px;color:#888;">（多选时同时处理的数量）</span>
+            <span style="font-size:11px;color:#888;">${t('rerollView.concurrencyHint')}</span>
         </div>`;
     }
 
     function buildRerollEntryModalFooterHtml(sourcesCount) {
         return `
         <div id="ttw-reroll-progress" style="flex:1;font-size:12px;color:#888;display:none;"></div>
-        <button class="ttw-btn" id="ttw-cancel-reroll-entry">取消</button>
-        <button class="ttw-btn ttw-btn-secondary" id="ttw-stop-reroll-entry" style="display:none;">⏸️ 停止</button>
-        <button class="ttw-btn ttw-btn-primary" id="ttw-confirm-reroll-entry" ${sourcesCount === 0 ? 'disabled style="opacity:0.5;"' : ''}>🎯 开始重Roll</button>`;
+        <button class="ttw-btn" id="ttw-cancel-reroll-entry">${t('rerollView.cancel')}</button>
+        <button class="ttw-btn ttw-btn-secondary" id="ttw-stop-reroll-entry" style="display:none;">${t('rerollView.stop')}</button>
+        <button class="ttw-btn ttw-btn-primary" id="ttw-confirm-reroll-entry" ${sourcesCount === 0 ? 'disabled style="opacity:0.5;"' : ''}>${t('rerollView.startReroll')}</button>`;
     }
 
     async function handleRerollEntryConfirm(modal, category, entryName, callback, progressDiv, confirmBtn, stopBtn) {
@@ -316,7 +317,7 @@ export function createRerollModals(deps = {}) {
                         id: 'ttw-roll-info-modal',
                         title: `🎲 Roll #${rollId} 信息`,
                         body: `<div style="white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow-y: auto; padding: 10px; background: rgba(0,0,0,0.3); color: #ccc; border-radius: 4px; border: 1px solid #555;">【Roll #${rollId}】\n\n关键词:\n${keywords}\n\n内容:\n${roll.result['内容'] || '(无)'}\n\n提示词:\n${roll.customPrompt || '(无)'}</div>`,
-                        footer: '<button class="ttw-btn ttw-btn-primary" id="ttw-close-roll-info">关闭</button>',
+                        footer: `<button class="ttw-btn ttw-btn-primary" id="ttw-close-roll-info">${t('rerollView.close')}</button>`,
                     });
                     infoModal
                         .querySelector('#ttw-close-roll-info')
@@ -394,7 +395,7 @@ export function createRerollModals(deps = {}) {
         }
 
         if (allEntries.length === 0) {
-            ErrorHandler.showUserError('没有可重Roll的条目（没有找到来源章节）');
+            ErrorHandler.showUserError(t('rerollView.noRerollEntries'));
             return;
         }
 
@@ -406,37 +407,37 @@ export function createRerollModals(deps = {}) {
 <input type="checkbox" name="ttw-batch-entry" data-category="${entry.category}" data-entry="${entry.entryName}">
 <span style="font-size:12px;flex:1;"><span style="color:#e67e22;">[${ListRenderer.escapeHtml(entry.category)}]</span> ${ListRenderer.escapeHtml(entry.entryName)}</span>
 <span style="font-size:10px;${tokenStyle}">${entry.tokenCount}tk</span>
-<span style="font-size:10px;color:#888;">${entry.sources.length}章</span>
+<span style="font-size:10px;color:#888;">${t('rerollView.sourcesCount', { count: entry.sources.length })}</span>
 </label>
 `;
         });
 
         const bodyHtml = `
 <div style="margin-bottom:12px;display:flex;gap:8px;">
-<button id="ttw-select-all-entries" class="ttw-btn ttw-btn-small">全选</button>
-<button id="ttw-deselect-all-entries" class="ttw-btn ttw-btn-small">取消全选</button>
+<button id="ttw-select-all-entries" class="ttw-btn ttw-btn-small">${t('rerollView.selectAll')}</button>
+<button id="ttw-deselect-all-entries" class="ttw-btn ttw-btn-small">${t('rerollView.deselectAll')}</button>
 </div>
 <div id="ttw-batch-entries" style="max-height:300px;overflow-y:auto;">${entriesHtml}</div>
 <div style="margin-top:12px;">
-<label style="display:block;margin-bottom:8px;font-weight:bold;font-size:13px;">📝 统一提示词</label>
-<textarea id="ttw-batch-prompt" rows="3" placeholder="对所有选中条目使用相同的提示词..." style="width:100%;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">${ListRenderer.escapeHtml(AppState.settings.customBatchRerollPrompt || '')}</textarea>
+<label style="display:block;margin-bottom:8px;font-weight:bold;font-size:13px;">${t('rerollView.batchPrompt')}</label>
+<textarea id="ttw-batch-prompt" rows="3" placeholder="${t('rerollView.batchPromptPlaceholder')}" style="width:100%;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">${ListRenderer.escapeHtml(AppState.settings.customBatchRerollPrompt || '')}</textarea>
 </div>
 <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
-<label style="font-size:12px;color:#3498db;">⚡ 并发数:</label>
+<label style="font-size:12px;color:#3498db;">${t('rerollView.concurrency')}</label>
 <input type="number" id="ttw-batch-concurrency" value="${AppState.config.parallel.concurrency}" min="1" max="10" style="width:60px;padding:4px;border:1px solid #555;border-radius:4px;background:rgba(0,0,0,0.3);color:#fff;text-align:center;">
 </div>
 `;
 
         const footerHtml = `
 <div id="ttw-batch-progress" style="flex:1;font-size:12px;color:#888;"></div>
-<button class="ttw-btn" id="ttw-cancel-batch">取消</button>
-<button class="ttw-btn ttw-btn-secondary" id="ttw-stop-batch" style="display:none;">⏸️ 停止</button>
+<button class="ttw-btn" id="ttw-cancel-batch">${t('rerollView.cancel')}</button>
+<button class="ttw-btn ttw-btn-secondary" id="ttw-stop-batch" style="display:none;">${t('rerollView.stop')}</button>
 <button class="ttw-btn ttw-btn-primary" id="ttw-confirm-batch">🎲 开始批量重Roll</button>
 `;
 
         const modal = ModalFactory.create({
             id: 'ttw-batch-reroll-modal',
-            title: '🎲 批量重Roll条目',
+            title: t('rerollView.batchTitle'),
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '600px',
@@ -465,7 +466,7 @@ export function createRerollModals(deps = {}) {
             });
 
             if (selectedEntries.length === 0) {
-                ErrorHandler.showUserError('请至少选择一个条目');
+                ErrorHandler.showUserError(t('rerollView.selectEntry'));
                 return;
             }
 
@@ -584,19 +585,19 @@ export function createRerollModals(deps = {}) {
         const currentResultJson = memory.result ? JSON.stringify(memory.result, null, 2) : '{}';
         return `
     <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #444;">
-        <h4 style="color:#27ae60;margin:0 0 6px;font-size:14px;">📝 当前处理结果（第${index + 1}章）</h4>
-        <div style="font-size:11px;color:#888;">可直接编辑下方JSON，编辑后点击"保存并应用"</div>
+        <h4 style="color:#27ae60;margin:0 0 6px;font-size:14px;">${t('rerollView.currentResult', { index: index + 1 })}</h4>
+        <div style="font-size:11px;color:#888;">${t('rerollView.currentResultHint')}</div>
     </div>
     <textarea id="ttw-current-result-editor" style="width:100%;min-height:200px;max-height:300px;padding:10px;background:rgba(0,0,0,0.3);border:1px solid #555;border-radius:6px;color:#fff;font-size:11px;font-family:monospace;line-height:1.5;resize:vertical;box-sizing:border-box;">${currentResultJson}</textarea>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-        <button class="ttw-btn ttw-btn-primary ttw-btn-small" id="ttw-save-current-result">💾 保存并应用</button>
-        <button class="ttw-btn ttw-btn-small" id="ttw-copy-current-result">📋 复制</button>
+        <button class="ttw-btn ttw-btn-primary ttw-btn-small" id="ttw-save-current-result">${t('rerollView.saveApply')}</button>
+        <button class="ttw-btn ttw-btn-small" id="ttw-copy-current-result">${t('rerollView.copy')}</button>
     </div>
     <div style="margin-top:12px;padding:10px;background:rgba(155,89,182,0.15);border:1px solid rgba(155,89,182,0.3);border-radius:6px;">
-        <div style="font-weight:bold;color:#9b59b6;margin-bottom:6px;font-size:12px;">📋 粘贴JSON导入</div>
+        <div style="font-weight:bold;color:#9b59b6;margin-bottom:6px;font-size:12px;">${t('rerollView.pasteJson')}</div>
         <div style="font-size:11px;color:#888;margin-bottom:6px;">支持标准JSON、带\`\`\`json代码块的、甚至不完整的JSON</div>
-        <textarea id="ttw-paste-json-area" rows="4" placeholder="在此粘贴JSON..." style="width:100%;padding:8px;background:rgba(0,0,0,0.3);border:1px solid #555;border-radius:6px;color:#fff;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
-        <button class="ttw-btn ttw-btn-small" id="ttw-parse-and-apply" style="margin-top:8px;background:rgba(155,89,182,0.5);">📋 解析并填入上方</button>
+        <textarea id="ttw-paste-json-area" rows="4" placeholder="${t('rerollView.pastePlaceholder')}" style="width:100%;padding:8px;background:rgba(0,0,0,0.3);border:1px solid #555;border-radius:6px;color:#fff;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
+        <button class="ttw-btn ttw-btn-small" id="ttw-parse-and-apply" style="margin-top:8px;background:rgba(155,89,182,0.5);">${t('rerollView.parseFill')}</button>
     </div>`;
     }
 
@@ -607,16 +608,16 @@ export function createRerollModals(deps = {}) {
         <h4>Roll #${rollIndex + 1}</h4>
         <div class="ttw-roll-detail-time">${time}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-            <button class="ttw-btn ttw-btn-primary ttw-btn-small" id="ttw-use-this-roll">✅ 使用此结果</button>
-            <button class="ttw-btn ttw-btn-small" id="ttw-save-edited-roll" style="background:rgba(39,174,96,0.5);">💾 保存编辑</button>
+            <button class="ttw-btn ttw-btn-primary ttw-btn-small" id="ttw-use-this-roll">${t('rerollView.useThis')}</button>
+            <button class="ttw-btn ttw-btn-small" id="ttw-save-edited-roll" style="background:rgba(39,174,96,0.5);">${t('rerollView.saveEdit')}</button>
         </div>
     </div>
     <textarea id="ttw-roll-edit-area" style="width:100%;min-height:280px;max-height:400px;padding:10px;background:rgba(0,0,0,0.3);border:1px solid #555;border-radius:6px;color:#fff;font-size:11px;font-family:monospace;line-height:1.5;resize:vertical;box-sizing:border-box;">${JSON.stringify(roll.result, null, 2)}</textarea>
     <div style="margin-top:10px;padding:10px;background:rgba(155,89,182,0.15);border:1px solid rgba(155,89,182,0.3);border-radius:6px;">
-        <div style="font-weight:bold;color:#9b59b6;margin-bottom:8px;font-size:12px;">📋 粘贴JSON导入</div>
+        <div style="font-weight:bold;color:#9b59b6;margin-bottom:8px;font-size:12px;">${t('rerollView.pasteJson')}</div>
         <div style="font-size:11px;color:#888;margin-bottom:8px;">将JSON粘贴到上方编辑框后点击"保存编辑"，或粘贴到下方后点击"解析并替换"</div>
-        <textarea id="ttw-roll-paste-area" rows="4" placeholder="在此粘贴JSON格式的世界书数据..." style="width:100%;padding:8px;background:rgba(0,0,0,0.3);border:1px solid #555;border-radius:6px;color:#fff;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
-        <button class="ttw-btn ttw-btn-small" id="ttw-parse-paste-json" style="margin-top:8px;background:rgba(155,89,182,0.5);">📋 解析并替换到上方</button>
+        <textarea id="ttw-roll-paste-area" rows="4" placeholder="${t('rerollView.pastePlaceholder')}" style="width:100%;padding:8px;background:rgba(0,0,0,0.3);border:1px solid #555;border-radius:6px;color:#fff;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
+        <button class="ttw-btn ttw-btn-small" id="ttw-parse-paste-json" style="margin-top:8px;background:rgba(155,89,182,0.5);">${t('rerollView.parseReplace')}</button>
     </div>`;
     }
 
@@ -794,26 +795,26 @@ export function createRerollModals(deps = {}) {
         const bodyHtml = `
 <div class="ttw-roll-history-container">
 <div class="ttw-roll-history-left">
-<button id="ttw-do-reroll" class="ttw-btn ttw-btn-primary ttw-roll-reroll-btn">🎲 重Roll</button>
+<button id="ttw-do-reroll" class="ttw-btn ttw-btn-primary ttw-roll-reroll-btn">${t('rerollView.reroll')}</button>
 <div class="ttw-roll-list">${listHtml}</div>
 </div>
 <div id="ttw-roll-detail" class="ttw-roll-history-right"></div>
 </div>
 <div class="ttw-reroll-prompt-section" style="margin-top:12px;padding:12px;background:rgba(155,89,182,0.15);border-radius:8px;">
-<div style="font-weight:bold;color:#9b59b6;margin-bottom:8px;font-size:13px;">📝 重Roll自定义提示词</div>
-<textarea id="ttw-reroll-custom-prompt" rows="3" placeholder="可在此添加额外要求，如：重点提取XX角色的信息、更详细地描述XX事件..." style="width:100%;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;resize:vertical;">${AppState.settings.customRerollPrompt || ''}</textarea>
+<div style="font-weight:bold;color:#9b59b6;margin-bottom:8px;font-size:13px;">${t('rerollView.customPrompt')}</div>
+<textarea id="ttw-reroll-custom-prompt" rows="3" placeholder="${t('rerollView.customPromptPlaceholder')}" style="width:100%;padding:8px;border:1px solid #555;border-radius:6px;background:rgba(0,0,0,0.3);color:#fff;font-size:12px;resize:vertical;">${AppState.settings.customRerollPrompt || ''}</textarea>
 </div>
 `;
 
         const footerHtml = `
-<button class="ttw-btn ttw-btn-secondary" id="ttw-stop-reroll" style="display:none;">⏸️ 停止</button>
-<button class="ttw-btn ttw-btn-warning" id="ttw-clear-rolls">🗑️ 清空</button>
-<button class="ttw-btn" id="ttw-close-roll-history">关闭</button>
+<button class="ttw-btn ttw-btn-secondary" id="ttw-stop-reroll" style="display:none;">${t('rerollView.stop')}</button>
+<button class="ttw-btn ttw-btn-warning" id="ttw-clear-rolls">${t('rerollView.clear')}</button>
+<button class="ttw-btn" id="ttw-close-roll-history">${t('rerollView.close')}</button>
 `;
 
         const modal = ModalFactory.create({
             id: 'ttw-roll-history-modal',
-            title: `🎲 ${memory.title} (第${index + 1}章) - Roll历史`,
+            title: t('rerollView.rollHistoryTitle', { title: memory.title, index: index + 1 }),
             body: bodyHtml,
             footer: footerHtml,
             maxWidth: '900px',
