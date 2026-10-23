@@ -19,6 +19,8 @@ export function createModalLifecycle(deps) {
 
     function restoreModalData() {
         const categoriesReady = loadCustomCategories().then(() => {
+            // The page or test environment may be torn down while IndexedDB is still loading.
+            if (typeof document === 'undefined') return;
             renderCategoriesList();
             renderDefaultWorldbookEntriesUI();
         });

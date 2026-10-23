@@ -25,7 +25,7 @@
 - 统一任务状态：新增 `src/shared/tasks/lifecycle.js`，`isRunning / isStopped / isRepairing / isRerolling` 统一由状态函数派生，转换、修复、重 Roll、编辑、合并和回退不再各自拼装布尔值；新增生命周期回归和 JSDoc 数据契约。
 - 扩大类型与存储边界：`checkJs` 从 4 个模块扩展到 10 个，覆盖任务 schema、切块身份、编辑命令、请求预算、生命周期和契约；IndexedDB 版本与建表迁移抽入 `worldbookDatabase.js`，历史/状态/Roll/元数据仓储拆成四个 mixin，`memoryHistoryDB` facade 只保留连接与写入队列，旧库与旧检查点仍可读取。
 - 收口 services/UI 边界：文件导入、任务状态、导入导出、合并导入、替换清理、设置持久化和导出命名 7 个 DOM 适配器迁入 `ui/`，`txtToWorldbook/services` 的 DOM 例外清零并由边界检查强制。
-- 增加设置面板 DOM 回归：引入仅在测试环境使用的 jsdom，覆盖附加系统提示词装配、输入事件和本地设置持久化；真实宿主 smoke 增加附加系统提示词请求体断言；新增提交路径基准脚本 `benchmark:commit` 与文本切块基准入口 `benchmark:text`。世界书主界面标题、区块、主操作按钮、核心设置标签、章节队列、修改历史、条目浏览器、查找/替换弹窗、重 Roll 弹窗主标签、章节正则检测、提示词预览、默认条目、分类编辑和条目/分类默认配置接入中英文 locale，并增加英文无残留 key 回归；主弹窗打开时等待设置与分类恢复完成，避免关闭或测试 teardown 后继续访问 DOM。完整测试为 40 个文件、363 项，lint、类型检查和 132 个运行模块边界检查通过。
+- 增加设置面板 DOM 回归：引入仅在测试环境使用的 jsdom，覆盖附加系统提示词装配、输入事件和本地设置持久化；真实宿主 smoke 增加附加系统提示词请求体断言；新增提交路径基准脚本 `benchmark:commit` 与文本切块基准入口 `benchmark:text`。世界书主界面标题、区块、主操作按钮、核心设置标签、章节队列、修改历史、条目浏览器、查找/替换弹窗、重 Roll 弹窗主标签、章节正则检测、提示词预览、默认条目、分类编辑和条目/分类默认配置接入中英文 locale，并增加英文无残留 key 回归；主弹窗打开时等待设置与分类恢复完成，并在页面或测试环境销毁时跳过异步归类渲染，避免关闭后继续访问 DOM。完整测试为 40 个文件、363 项，lint、类型检查和 132 个运行模块边界检查通过。
 - 更新 CI 为 `actions/checkout@v7`、`actions/setup-node@v7` 和 `ubuntu-24.04`，增加只读仓库权限、版本一致性检查和 Node 22 核心覆盖率门槛，保留 Node 20/22 测试矩阵。
 - 删除无引用的 `txtToWorldbook/adapters/tavernApiAdapter.js` 占位文件；实际酒馆生成实现仍位于 `src/host/generation.js`，并同步更新 TXT 转世界书目录说明。
 - README 补充空回重试行为、设置面板测试覆盖和性能基线命令；TXT 转世界书文档补充附加系统提示词的使用边界、酒馆 API 模式限制和新组合根结构。
